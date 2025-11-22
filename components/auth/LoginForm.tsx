@@ -49,27 +49,8 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008"
-        }/api/v1/auth/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Login failed");
-      }
+      // Use API client login method
+      const data = await apiClient.login({ email, password });
 
       // Store API key from login response
       if (data.api_key) {

@@ -62,28 +62,12 @@ export default function SignUpForm() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008"
-        }/api/v1/auth/signup`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            email,
-            password,
-            plan: "free",
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Sign up failed");
-      }
+      // Use API client signup method
+      const data = await apiClient.signup({
+        email,
+        password,
+        plan: "free",
+      });
 
       if (data.api_key) {
         apiClient.setApiKey(data.api_key);

@@ -5,34 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { useDashboardStore } from "@/lib/store";
-
-interface API {
-  id: string;
-  name: string;
-  target_url: string;
-  rate_limit_per_second: number;
-  burst_size: number;
-  enabled: boolean;
-  created_at: string;
-}
-
-interface APIListResponse {
-  apis: API[];
-}
-
-interface DashboardStats {
-  total_requests: number;
-  apis_configured: number;
-  success_rate: number;
-  avg_response_time_ms: number;
-}
+import { apiClient, DashboardStats, APIConfig } from "@/lib/api";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { isAuthenticated, apiKey, logout } = useDashboardStore();
+  const { isAuthenticated, clearAuth } = useDashboardStore();
 
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [apiList, setApiList] = useState<APIListResponse>({ apis: [] });
+  const [apiList, setApiList] = useState<APIConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,54 +23,21 @@ export default function DashboardPage() {
     }
 
     fetchDashboardData();
-  }, [isAuthenticated, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch stats
-      const statsResponse = await fetch(
-        "http://localhost:8008/api/v1/dashboard/stats",
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-          },
-        }
-      );
-
-      if (!statsResponse.ok) {
-        throw new Error("Failed to fetch stats");
-      }
-
-      const statsData = await statsResponse.json();
+      // Fetch stats using API client
+      const statsData = await apiClient.getDashboardStats();
       setStats(statsData);
 
-      // Fetch API list
-      const apisResponse = await fetch("http://localhost:8008/api/v1/apis", {
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-      });
-
-      if (!apisResponse.ok) {
-        throw new Error("Failed to fetch APIs");
-      }
-
-      const apisData = await apisResponse.json();
-
-      // ✅ FIX: Handle both response formats
-      if (Array.isArray(apisData)) {
-        // If API returns array directly
-        setApiList({ apis: apisData });
-      } else if (apisData.apis && Array.isArray(apisData.apis)) {
-        // If API returns { apis: [...] }
-        setApiList(apisData);
-      } else {
-        // Fallback
-        setApiList({ apis: [] });
-      }
+      // Fetch API list using API client
+      const apisData = await apiClient.listAPIConfigs();
+      setApiList(apisData);
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -99,9 +46,14 @@ export default function DashboardPage() {
     }
   };
 
-  // ✅ FIX: Safe filtering with default empty array
-  const activeApis = (apiList?.apis || []).filter((api) => api.enabled);
-  const inactiveApis = (apiList?.apis || []).filter((api) => !api.enabled);
+  const handleLogout = () => {
+    apiClient.clearApiKey();
+    clearAuth();
+    router.push("/login");
+  };
+
+  // Safe filtering with default empty array
+  const activeApis = apiList.filter((api) => api.enabled);
 
   if (loading) {
     return (
@@ -138,7 +90,7 @@ export default function DashboardPage() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold text-white">Dashboard</h1>
           <Button
-            onClick={logout}
+            onClick={handleLogout}
             variant="outline"
             className="border-slate-700 text-slate-300 hover:bg-slate-800"
           >
@@ -164,12 +116,12 @@ export default function DashboardPage() {
           <Card className="bg-slate-900 border-slate-800">
             <CardHeader>
               <CardTitle className="text-slate-400 text-sm">
-                APIs Configured
+                Active APIs
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-3xl font-bold text-white">
-                {stats?.apis_configured || apiList.apis.length || "0"}
+                {stats?.active_apis || apiList.length || "0"}
               </p>
             </CardContent>
           </Card>
@@ -215,7 +167,7 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {apiList.apis.length === 0 ? (
+            {apiList.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-slate-400 mb-4">No APIs configured yet</p>
                 <Button
