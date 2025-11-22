@@ -31,6 +31,10 @@ export interface APIConfig {
   proxy_url?: string; // Computed by backend
   rate_limit_per_second: number;
   burst_size: number;
+  rate_limit_per_hour: number; // NEW: Hourly rate limit (0 = unlimited)
+  rate_limit_per_day: number; // NEW: Daily rate limit (0 = unlimited)
+  rate_limit_per_month: number; // NEW: Monthly rate limit (0 = unlimited)
+  allowed_origins: string[]; // NEW: CORS whitelisted origins
   enabled: boolean;
   auth_type: "none" | "bearer" | "api_key" | "basic";
   auth_credentials?: Record<string, string>;

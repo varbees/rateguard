@@ -105,11 +105,35 @@ export default function APIsPage() {
                       {api.target_url}
                     </TableCell>
                     <TableCell className="text-slate-300">
-                      <div className="flex flex-col">
-                        <span>{api.rate_limit_per_second} req/s</span>
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium">
+                          {api.rate_limit_per_second} req/s
+                        </span>
                         <span className="text-xs text-slate-500">
                           Burst: {api.burst_size}
                         </span>
+                        {(api.rate_limit_per_hour > 0 ||
+                          api.rate_limit_per_day > 0 ||
+                          api.rate_limit_per_month > 0) && (
+                          <div className="text-xs text-blue-400 mt-1">
+                            {api.rate_limit_per_hour > 0 && (
+                              <div>
+                                Hour: {api.rate_limit_per_hour.toLocaleString()}
+                              </div>
+                            )}
+                            {api.rate_limit_per_day > 0 && (
+                              <div>
+                                Day: {api.rate_limit_per_day.toLocaleString()}
+                              </div>
+                            )}
+                            {api.rate_limit_per_month > 0 && (
+                              <div>
+                                Month:{" "}
+                                {api.rate_limit_per_month.toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
