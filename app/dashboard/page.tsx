@@ -171,7 +171,7 @@ export default function DashboardPage() {
               <div className="text-center py-8">
                 <p className="text-slate-400 mb-4">No APIs configured yet</p>
                 <Button
-                  onClick={() => router.push("/dashboard/apis")}
+                  onClick={() => router.push("/dashboard/apis?modal=open")}
                   className="bg-blue-500 hover:bg-blue-600"
                 >
                   Add Your First API

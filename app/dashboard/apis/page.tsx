@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiConfigAPI, APIConfig } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -20,10 +21,20 @@ import APIConfigModal from "@/components/dashboard/APIConfigModal";
 import APIProxyInfo from "@/components/dashboard/APIProxyInfo";
 
 export default function APIsPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const shouldAutoOpen = searchParams.get("modal") === "open";
+
+  const [isModalOpen, setIsModalOpen] = useState(shouldAutoOpen);
   const [editingAPI, setEditingAPI] = useState<APIConfig | undefined>();
   const [selectedAPI, setSelectedAPI] = useState<APIConfig | null>(null);
   const queryClient = useQueryClient();
+
+  // Clean up URL parameter after initial mount if modal was auto-opened
+  useEffect(() => {
+    if (shouldAutoOpen) {
+      window.history.replaceState({}, "", "/dashboard/apis");
+    }
+  }, [shouldAutoOpen]);
 
   const { data: apis, isLoading } = useQuery({
     queryKey: ["apis"],
