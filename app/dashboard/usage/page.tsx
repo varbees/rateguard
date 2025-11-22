@@ -1,0 +1,365 @@
+"use client";
+
+import { useQuery } from "@tanstack/react-query";
+import { dashboardAPI } from "@/lib/api";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  BarChart3,
+  TrendingUp,
+  Activity,
+  Clock,
+  Calendar,
+  Download,
+} from "lucide-react";
+import {
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+
+// Mock data for detailed analytics
+const usageOverTime = [
+  { date: "2025-11-15", requests: 1200, success: 1150, errors: 50 },
+  { date: "2025-11-16", requests: 1800, success: 1720, errors: 80 },
+  { date: "2025-11-17", requests: 2200, success: 2100, errors: 100 },
+  { date: "2025-11-18", requests: 1900, success: 1820, errors: 80 },
+  { date: "2025-11-19", requests: 2500, success: 2400, errors: 100 },
+  { date: "2025-11-20", requests: 2800, success: 2700, errors: 100 },
+  { date: "2025-11-21", requests: 3200, success: 3100, errors: 100 },
+];
+
+const apiUsageBreakdown = [
+  { name: "JSONPlaceholder", requests: 770, percentage: 45, color: "#3b82f6" },
+  { name: "Stripe API", requests: 520, percentage: 30, color: "#10b981" },
+  { name: "GitHub API", requests: 340, percentage: 20, color: "#f59e0b" },
+  { name: "Others", requests: 85, percentage: 5, color: "#6b7280" },
+];
+
+const responseTimeData = [
+  { time: "00:00", avg: 120, p95: 180, p99: 250 },
+  { time: "04:00", avg: 110, p95: 160, p99: 220 },
+  { time: "08:00", avg: 140, p95: 200, p99: 280 },
+  { time: "12:00", avg: 160, p95: 240, p99: 320 },
+  { time: "16:00", avg: 150, p95: 220, p99: 300 },
+  { time: "20:00", avg: 130, p95: 190, p99: 260 },
+];
+
+export default function UsagePage() {
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: dashboardAPI.stats,
+    refetchInterval: 30000,
+  });
+
+  const { data: usage } = useQuery({
+    queryKey: ["dashboard-usage"],
+    queryFn: dashboardAPI.usage,
+    refetchInterval: 30000,
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Usage Analytics</h1>
+          <p className="text-slate-400 mt-1">
+            Detailed insights into your API usage and performance
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="border-slate-700 text-slate-300 hover:bg-slate-800"
+          >
+            <Calendar className="w-4 h-4 mr-2" />
+            Last 30 Days
+          </Button>
+          <Button
+            variant="outline"
+            className="border-slate-700 text-slate-300 hover:bg-slate-800"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export
+          </Button>
+        </div>
+      </div>
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-400">
+                  Total Requests
+                </p>
+                <p className="text-2xl font-bold text-white mt-2">
+                  {isLoading
+                    ? "..."
+                    : (stats?.total_requests || 0).toLocaleString()}
+                </p>
+                <p className="text-xs text-green-500 mt-1">
+                  +12% from last month
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-blue-500/10">
+                <Activity className="w-6 h-6 text-blue-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-400">
+                  Success Rate
+                </p>
+                <p className="text-2xl font-bold text-white mt-2">
+                  {isLoading
+                    ? "..."
+                    : `${(stats?.success_rate || 0).toFixed(1)}%`}
+                </p>
+                <p className="text-xs text-green-500 mt-1">
+                  +2.1% from last month
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-green-500/10">
+                <TrendingUp className="w-6 h-6 text-green-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-400">
+                  Avg Response Time
+                </p>
+                <p className="text-2xl font-bold text-white mt-2">
+                  {isLoading
+                    ? "..."
+                    : `${(stats?.avg_response_time_ms || 0).toFixed(0)}ms`}
+                </p>
+                <p className="text-xs text-red-500 mt-1">
+                  +5ms from last month
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-purple-500/10">
+                <Clock className="w-6 h-6 text-purple-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-slate-400">Error Rate</p>
+                <p className="text-2xl font-bold text-white mt-2">
+                  {isLoading
+                    ? "..."
+                    : `${(100 - (stats?.success_rate || 0)).toFixed(1)}%`}
+                </p>
+                <p className="text-xs text-green-500 mt-1">
+                  -0.8% from last month
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-red-500/10">
+                <BarChart3 className="w-6 h-6 text-red-500" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Usage Over Time */}
+      <Card className="bg-slate-900 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-white">Usage Over Time</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={400}>
+            <AreaChart data={usageOverTime}>
+              <defs>
+                <linearGradient id="colorRequests" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="colorErrors" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="date" stroke="#64748b" />
+              <YAxis stroke="#64748b" />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: "#1e293b",
+                  border: "1px solid #334155",
+                  borderRadius: "8px",
+                  color: "#fff",
+                }}
+              />
+              <Area
+                type="monotone"
+                dataKey="requests"
+                stroke="#3b82f6"
+                fillOpacity={1}
+                fill="url(#colorRequests)"
+                name="Total Requests"
+              />
+              <Area
+                type="monotone"
+                dataKey="errors"
+                stroke="#ef4444"
+                fillOpacity={1}
+                fill="url(#colorErrors)"
+                name="Errors"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* API Usage Breakdown and Response Times */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* API Usage Breakdown */}
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white">API Usage Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {apiUsageBreakdown.map((api) => (
+                <div
+                  key={api.name}
+                  className="flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: api.color }}
+                    />
+                    <span className="text-slate-300">{api.name}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-white font-medium">
+                      {api.requests.toLocaleString()}
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      className="bg-slate-800 text-slate-300"
+                    >
+                      {api.percentage}%
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Response Time Trends */}
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white">Response Time Trends</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={responseTimeData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="time" stroke="#64748b" />
+                <YAxis stroke="#64748b" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#1e293b",
+                    border: "1px solid #334155",
+                    borderRadius: "8px",
+                    color: "#fff",
+                  }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="avg"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  name="Average"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="p95"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  name="95th Percentile"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="p99"
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  name="99th Percentile"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Activity */}
+      <Card className="bg-slate-900 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-white">Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {stats?.usage_by_api?.map((api, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-4 bg-slate-800 rounded-lg"
+              >
+                <div>
+                  <p className="font-medium text-white">{api.api_name}</p>
+                  <p className="text-sm text-slate-400">
+                    Last used: {new Date(api.last_used).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-medium text-white">
+                    {api.requests.toLocaleString()} requests
+                  </p>
+                  <p className="text-sm text-slate-400">
+                    {api.success_rate.toFixed(1)}% success rate
+                  </p>
+                </div>
+              </div>
+            )) || (
+              <p className="text-slate-400 text-center py-8">
+                No recent activity
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
