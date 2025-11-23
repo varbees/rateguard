@@ -11,6 +11,7 @@ import {
   CreditCard,
   LogOut,
   Activity,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,16 @@ const navItems = [
     title: "APIs",
     href: "/dashboard/apis",
     icon: Activity,
+  },
+  {
+    title: "Streaming",
+    href: "/dashboard/streaming",
+    icon: BarChart3,
+  },
+  {
+    title: "Analytics",
+    href: "/dashboard/analytics",
+    icon: BarChart3,
   },
   {
     title: "Billing",

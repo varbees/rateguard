@@ -23,7 +23,7 @@ import {
   CheckCircle2,
   Shield,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toasts, handleApiError } from "@/lib/toast";
 import { apiClient } from "@/lib/api";
 import { useDashboardStore } from "@/lib/store";
 
@@ -43,19 +43,19 @@ export default function SignUpForm() {
 
     if (!email || !password) {
       setError("Please fill in all fields");
-      toast.error("Please fill in all fields");
+      toasts.validation.failed();
       return;
     }
 
     if (password.length < 8) {
       setError("Password must be at least 8 characters long");
-      toast.error("Password must be at least 8 characters");
+      toasts.validation.invalidFormat("Password (min 8 characters)");
       return;
     }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
-      toast.error("Passwords do not match");
+      toasts.validation.invalidFormat("Passwords");
       return;
     }
 
@@ -70,21 +70,15 @@ export default function SignUpForm() {
       });
 
       if (data.api_key) {
-        apiClient.setApiKey(data.api_key);
         setApiKey(data.api_key);
       }
 
-      toast.success("Account created successfully!", {
-        description: "Welcome to RateGuard!",
-      });
+      toasts.auth.signupSuccess();
 
       router.push("/dashboard");
-    } catch (err) {
-      const error = err as Error;
-      setError(error.message || "Sign up failed");
-      toast.error("Sign up failed", {
-        description: error.message,
-      });
+    } catch (error) {
+      setError((error as Error).message || "Sign up failed");
+      handleApiError(error, "Sign up failed");
     } finally {
       setLoading(false);
     }

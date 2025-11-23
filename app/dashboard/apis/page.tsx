@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Edit, Power, ExternalLink } from "lucide-react";
-import { toast } from "sonner";
+import { toasts, handleApiError } from "@/lib/toast";
 import APIConfigModal from "@/components/dashboard/APIConfigModal";
 import APIProxyInfo from "@/components/dashboard/APIProxyInfo";
 
@@ -45,10 +45,10 @@ export default function APIsPage() {
     mutationFn: apiConfigAPI.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["apis"] });
-      toast.success("API configuration deleted");
+      toasts.api.deleted("API");
     },
     onError: (error: Error) => {
-      toast.error(`Failed to delete API: ${error.message}`);
+      handleApiError(error, "Failed to delete API");
     },
   });
 

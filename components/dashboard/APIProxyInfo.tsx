@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Copy, Check, ExternalLink } from "lucide-react";
-import { toast } from "sonner";
+import { copyToClipboard as copyHelper } from "@/lib/toast";
 
 interface APIProxyInfoProps {
   apiName: string;
@@ -23,10 +23,9 @@ export default function APIProxyInfo({
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008"
   }/proxy/${apiName}`;
 
-  const copyToClipboard = (text: string, field: string) => {
-    navigator.clipboard.writeText(text);
+  const copyToClipboard = async (text: string, field: string) => {
+    await copyHelper(text, field === "proxy-url" ? "Proxy URL" : "Code");
     setCopiedField(field);
-    toast.success("Copied to clipboard");
     setTimeout(() => setCopiedField(null), 2000);
   };
 

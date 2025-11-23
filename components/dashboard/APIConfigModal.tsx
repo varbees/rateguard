@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
+import { toasts, handleApiError } from "@/lib/toast";
 import { slugify } from "@/lib/utils-slug";
 
 interface APIConfigModalProps {
@@ -78,17 +78,19 @@ export default function APIConfigModal({
     try {
       if (api) {
         await apiConfigAPI.update(api.id, formData);
-        toast.success("API configuration updated");
+        toasts.api.updated(formData.name);
       } else {
         await apiConfigAPI.create(formData);
-        toast.success("API configuration created");
+        toasts.api.created(formData.name);
       }
       queryClient.invalidateQueries({ queryKey: ["apis"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       onClose();
-    } catch (err) {
-      const error = err as Error;
-      toast.error(error.message || "Failed to save API configuration");
+    } catch (error) {
+      handleApiError(
+        error,
+        api ? "Failed to update API" : "Failed to create API"
+      );
     } finally {
       setLoading(false);
     }
