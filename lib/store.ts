@@ -1,20 +1,24 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { APIConfig, DashboardStats, UsageStats } from "./api";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { APIConfig, DashboardStats, UsageStats, apiClient } from "./api";
 
 interface DashboardStore {
   // Auth State
   apiKey: string | null;
   isAuthenticated: boolean;
+  _hasHydrated: boolean;
+
+  // Actions
   setApiKey: (key: string) => void;
   clearAuth: () => void;
+  setHasHydrated: (state: boolean) => void;
 
   // Dashboard Data
   stats: DashboardStats | null;
   usage: UsageStats | null;
   apis: APIConfig[];
 
-  // Actions
+  // Data Actions
   setStats: (stats: DashboardStats) => void;
   setUsage: (usage: UsageStats) => void;
   setAPIs: (apis: APIConfig[]) => void;
@@ -29,20 +33,29 @@ export const useDashboardStore = create<DashboardStore>()(
       // Initial State
       apiKey: null,
       isAuthenticated: false,
+      _hasHydrated: false,
       stats: null,
       usage: null,
       apis: [],
 
       // Auth Actions
-      setApiKey: (key: string) => set({ apiKey: key, isAuthenticated: true }),
-      clearAuth: () =>
+      setApiKey: (key: string) => {
+        // Sync with APIClient
+        apiClient.setApiKey(key);
+        set({ apiKey: key, isAuthenticated: true });
+      },
+      clearAuth: () => {
+        // Sync with APIClient
+        apiClient.clearApiKey();
         set({
           apiKey: null,
           isAuthenticated: false,
           stats: null,
           usage: null,
           apis: [],
-        }),
+        });
+      },
+      setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
 
       // Data Actions
       setStats: (stats: DashboardStats) => set({ stats }),
@@ -61,10 +74,18 @@ export const useDashboardStore = create<DashboardStore>()(
     }),
     {
       name: "rateguard-dashboard",
+      storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         apiKey: state.apiKey,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Sync API client with persisted state after hydration
+        if (state?.apiKey) {
+          apiClient.setApiKey(state.apiKey);
+        }
+        state?.setHasHydrated(true);
+      },
     }
   )
 );
