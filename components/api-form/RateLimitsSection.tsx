@@ -25,10 +25,12 @@ interface RateLimitsSectionProps {
   burst: number;
   perHour: number;
   perDay: number;
+  perMonth: number;
   onPerSecondChange: (value: number) => void;
   onBurstChange: (value: number) => void;
   onPerHourChange: (value: number) => void;
   onPerDayChange: (value: number) => void;
+  onPerMonthChange: (value: number) => void;
 }
 
 interface RateLimitField {
@@ -55,10 +57,12 @@ export function RateLimitsSection({
   burst,
   perHour,
   perDay,
+  perMonth,
   onPerSecondChange,
   onBurstChange,
   onPerHourChange,
   onPerDayChange,
+  onPerMonthChange,
 }: RateLimitsSectionProps) {
   const fields: RateLimitField[] = [
     {
@@ -111,6 +115,19 @@ export function RateLimitsSection({
       recommended: 10000,
       tooltip:
         "Total requests allowed in a rolling 24-hour window. 0 means unlimited. Helps manage daily usage caps.",
+      formatValue: (v) => (v === 0 ? "Unlimited" : formatNumber(v)),
+    },
+    {
+      label: "Per Month",
+      value: perMonth,
+      onChange: onPerMonthChange,
+      min: 0,
+      max: 1000000,
+      step: 10000,
+      unit: "req/month",
+      recommended: 100000,
+      tooltip:
+        "Total requests allowed in a rolling 30-day window. 0 means unlimited. Perfect for monthly billing cycles.",
       formatValue: (v) => (v === 0 ? "Unlimited" : formatNumber(v)),
     },
   ];
@@ -233,6 +250,17 @@ export function RateLimitsSection({
                 <>
                   Maximum of{" "}
                   <strong>{formatNumber(perDay)} requests per day</strong>
+                </>
+              )}
+            </li>
+            <li>
+              •{" "}
+              {perMonth === 0 ? (
+                <strong>No monthly limit</strong>
+              ) : (
+                <>
+                  Maximum of{" "}
+                  <strong>{formatNumber(perMonth)} requests per month</strong>
                 </>
               )}
             </li>

@@ -20,6 +20,7 @@ interface PreviewPanelProps {
   burst: number;
   perHour: number;
   perDay: number;
+  perMonth: number;
 }
 
 const API_BASE_URL = "https://api.rateguard.io/v1";
@@ -37,6 +38,7 @@ export function PreviewPanel({
   burst,
   perHour,
   perDay,
+  perMonth,
 }: PreviewPanelProps) {
   const slugifiedName = apiName
     .toLowerCase()
@@ -175,15 +177,22 @@ func main() {
                 {perDay === 0 ? "Unlimited" : `${formatNumber(perDay)}`}
               </Badge>
             </div>
+            <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950 rounded-lg">
+              <span className="text-sm font-medium">Per Month</span>
+              <Badge className="bg-purple-600">
+                {perMonth === 0 ? "Unlimited" : `${formatNumber(perMonth)}`}
+              </Badge>
+            </div>
           </div>
 
-          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-            <p className="text-xs text-muted-foreground leading-relaxed">
+          <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+            <p className="text-sm text-muted-foreground">
               Your API will accept{" "}
               <strong>{perSecond} requests per second</strong> with burst
               tolerance of <strong>{burst} requests</strong>.
               {perHour > 0 && ` Hourly limit: ${formatNumber(perHour)}.`}
               {perDay > 0 && ` Daily limit: ${formatNumber(perDay)}.`}
+              {perMonth > 0 && ` Monthly limit: ${formatNumber(perMonth)}.`}
             </p>
           </div>
         </CardContent>

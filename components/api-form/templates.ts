@@ -13,6 +13,7 @@ export interface APITemplate {
     burst: number;
     perHour: number;
     perDay: number;
+    perMonth: number;
     timeoutSeconds: number;
     retryAttempts: number;
   };
@@ -32,6 +33,7 @@ export const API_TEMPLATES: APITemplate[] = [
       burst: 20,
       perHour: 1000,
       perDay: 10000,
+      perMonth: 100000,
       timeoutSeconds: 30,
       retryAttempts: 1,
     },
@@ -49,6 +51,7 @@ export const API_TEMPLATES: APITemplate[] = [
       burst: 10,
       perHour: 500,
       perDay: 5000,
+      perMonth: 50000,
       timeoutSeconds: 60,
       retryAttempts: 2,
     },
@@ -66,6 +69,7 @@ export const API_TEMPLATES: APITemplate[] = [
       burst: 30,
       perHour: 5000,
       perDay: 0,
+      perMonth: 0,
       timeoutSeconds: 30,
       retryAttempts: 1,
     },
@@ -83,6 +87,7 @@ export const API_TEMPLATES: APITemplate[] = [
       burst: 20,
       perHour: 1000,
       perDay: 10000,
+      perMonth: 100000,
       timeoutSeconds: 30,
       retryAttempts: 1,
     },
@@ -100,6 +105,7 @@ export const API_TEMPLATES: APITemplate[] = [
       burst: 20,
       perHour: 1000,
       perDay: 10000,
+      perMonth: 100000,
       timeoutSeconds: 30,
       retryAttempts: 1,
     },
@@ -117,6 +123,7 @@ export const API_TEMPLATES: APITemplate[] = [
       burst: 40,
       perHour: 0,
       perDay: 0,
+      perMonth: 0,
       timeoutSeconds: 30,
       retryAttempts: 1,
     },
@@ -132,6 +139,7 @@ export function getDefaultConfig() {
     burst: 20,
     perHour: 1000,
     perDay: 10000,
+    perMonth: 100000,
     timeoutSeconds: 30,
     retryAttempts: 1,
     corsOrigins: "",
