@@ -160,11 +160,11 @@ func main() {
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-950 rounded-lg">
               <span className="text-sm font-medium">Per Second</span>
-              <Badge className="bg-blue-600">{perSecond} req/s</Badge>
+              <Badge className="bg-blue-600">{perSecond ?? 0} req/s</Badge>
             </div>
             <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-950 rounded-lg">
               <span className="text-sm font-medium">Burst Allowance</span>
-              <Badge className="bg-purple-600">{burst} requests</Badge>
+              <Badge className="bg-purple-600">{burst ?? 0} requests</Badge>
             </div>
             <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-950 rounded-lg">
               <span className="text-sm font-medium">Per Hour</span>
@@ -189,11 +189,12 @@ func main() {
           <div className="mt-4 p-4 bg-muted/50 rounded-lg">
             <p className="text-sm text-muted-foreground">
               Your API will accept{" "}
-              <strong>{perSecond} requests per second</strong> with burst
-              tolerance of <strong>{burst} requests</strong>.
-              {perHour > 0 && ` Hourly limit: ${formatNumber(perHour)}.`}
-              {perDay > 0 && ` Daily limit: ${formatNumber(perDay)}.`}
-              {perMonth > 0 && ` Monthly limit: ${formatNumber(perMonth)}.`}
+              <strong>{perSecond ?? 0} requests per second</strong> with burst
+              tolerance of <strong>{burst ?? 0} requests</strong>.
+              {(perHour ?? 0) > 0 && ` Hourly limit: ${formatNumber(perHour)}.`}
+              {(perDay ?? 0) > 0 && ` Daily limit: ${formatNumber(perDay)}.`}
+              {(perMonth ?? 0) > 0 &&
+                ` Monthly limit: ${formatNumber(perMonth)}.`}
             </p>
           </div>
         </CardContent>

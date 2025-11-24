@@ -197,7 +197,7 @@ export function RateLimitsSection({
                 {field.min}
               </span>
               <Slider
-                value={[field.value]}
+                value={[field.value ?? field.min]}
                 onValueChange={(values) => field.onChange(values[0])}
                 min={field.min}
                 max={field.max}
@@ -212,7 +212,7 @@ export function RateLimitsSection({
             <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
               <span className="font-medium">Current setting:</span>{" "}
               <span className="text-foreground font-semibold">
-                {field.formatValue(field.value)} {field.unit}
+                {field.formatValue(field.value ?? field.min)} {field.unit}
               </span>
             </div>
           </div>
