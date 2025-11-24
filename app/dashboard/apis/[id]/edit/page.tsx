@@ -71,7 +71,8 @@ export default function EditAPIPage() {
     }
 
     loadAPI();
-  }, [apiId, router, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiId]);
 
   const handleTemplateSelect = (template: APITemplate) => {
     setFormData({
