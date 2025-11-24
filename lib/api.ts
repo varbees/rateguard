@@ -63,6 +63,10 @@ export interface DashboardStats {
   monthly_usage: number;
   plan_limit: number;
   usage_by_api: UsageByAPI[];
+  usage_percentages: {
+    daily_pct: number;
+    monthly_pct: number;
+  };
   timestamp: string;
 }
 
@@ -151,6 +155,15 @@ export interface LoginResponse {
   user: User;
   api_key: string;
   token?: string;
+}
+
+export interface RequestPasswordResetRequest {
+  email: string;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
 }
 
 // Custom API Error Class
@@ -292,6 +305,25 @@ class APIClient {
     });
   }
 
+  // Password Reset
+  async requestPasswordReset(
+    data: RequestPasswordResetRequest
+  ): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/api/v1/auth/request-reset", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async resetPassword(
+    data: ResetPasswordRequest
+  ): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/api/v1/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
   // Dashboard Stats
   async getDashboardStats(): Promise<DashboardStats> {
     return this.request<DashboardStats>("/api/v1/dashboard/stats");
@@ -332,6 +364,23 @@ class APIClient {
     return this.request(`/api/v1/apis/${id}`, {
       method: "DELETE",
     });
+  }
+
+  // Rate Limit Suggestions
+  async getRateLimitSuggestions(
+    apiId: string
+  ): Promise<{ suggestion: unknown }> {
+    return this.request(`/api/v1/apis/${apiId}/rate-limit/suggestions`);
+  }
+
+  async applyRateLimitSuggestions(apiId: string): Promise<{ message: string }> {
+    return this.request(`/api/v1/apis/${apiId}/rate-limit/apply`, {
+      method: "POST",
+    });
+  }
+
+  async getRateLimitObservations(apiId: string): Promise<unknown[]> {
+    return this.request(`/api/v1/apis/${apiId}/rate-limit/observations`);
   }
 
   // Proxy Request
