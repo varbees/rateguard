@@ -46,7 +46,8 @@ interface RateLimitField {
   formatValue: (value: number) => string;
 }
 
-function formatNumber(num: number): string {
+function formatNumber(num: number | undefined): string {
+  if (num === undefined || num === null) return "0";
   if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
   if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
   return num.toString();
