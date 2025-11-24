@@ -394,7 +394,7 @@ export default function AnalyticsPage() {
                 <ResponsiveContainer width="100%" height={300}>
                   <PieChart>
                     <Pie
-                      data={data.statusCodes}
+                      data={data.statusCodes as any}
                       dataKey="value"
                       nameKey="name"
                       cx="50%"

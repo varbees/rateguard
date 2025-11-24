@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
 import {
   fetchStreamingHistory,
   fetchStreamingByAPI,
@@ -34,14 +34,12 @@ export function StreamingHistoryChart({
   period = "7d",
   className = "",
 }: Omit<StreamingChartProps, "chartType">) {
-  const { data, error, isLoading } = useSWR(
-    `/api/v1/dashboard/streaming/history?period=${period}`,
-    () => fetchStreamingHistory(period),
-    {
-      refreshInterval: 10000, // Refresh every 10 seconds
-      revalidateOnFocus: true,
-    }
-  );
+  const { data, error, isLoading } = useQuery({
+    queryKey: [`/api/v1/dashboard/streaming/history`, period],
+    queryFn: () => fetchStreamingHistory(period),
+    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchOnWindowFocus: true,
+  });
 
   const chartData = useMemo(() => {
     if (!data?.data) return [];
@@ -125,14 +123,12 @@ export function StreamingByAPIChart({
   period = "30d",
   className = "",
 }: Omit<StreamingChartProps, "chartType">) {
-  const { data, error, isLoading } = useSWR(
-    `/api/v1/dashboard/streaming/by-api?period=${period}`,
-    () => fetchStreamingByAPI(period),
-    {
-      refreshInterval: 10000,
-      revalidateOnFocus: true,
-    }
-  );
+  const { data, error, isLoading } = useQuery({
+    queryKey: [`/api/v1/dashboard/streaming/by-api`, period],
+    queryFn: () => fetchStreamingByAPI(period),
+    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
+  });
 
   const chartData = useMemo(() => {
     if (!data?.apis) return [];
@@ -219,14 +215,12 @@ export function StreamingDurationChart({
   period = "30d",
   className = "",
 }: Omit<StreamingChartProps, "chartType">) {
-  const { data, error, isLoading } = useSWR(
-    `/api/v1/dashboard/streaming/by-api?period=${period}`,
-    () => fetchStreamingByAPI(period),
-    {
-      refreshInterval: 10000,
-      revalidateOnFocus: true,
-    }
-  );
+  const { data, error, isLoading } = useQuery({
+    queryKey: [`/api/v1/dashboard/streaming/by-api`, period],
+    queryFn: () => fetchStreamingByAPI(period),
+    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
+  });
 
   const chartData = useMemo(() => {
     if (!data?.apis) return [];

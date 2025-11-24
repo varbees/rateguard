@@ -129,7 +129,7 @@ export function RateLimitVisualizer() {
         remaining: config.perSecond,
         window: "1s",
         icon: Zap,
-        color: "text-yellow-500",
+        color: "text-chart-1",
       },
       {
         name: "Burst",
@@ -137,7 +137,7 @@ export function RateLimitVisualizer() {
         remaining: config.burst,
         window: "10s",
         icon: Layers,
-        color: "text-orange-500",
+        color: "text-chart-2",
       },
       {
         name: "Per Hour",
@@ -145,7 +145,7 @@ export function RateLimitVisualizer() {
         remaining: config.perHour,
         window: "1h",
         icon: Clock,
-        color: "text-blue-500",
+        color: "text-primary",
       },
       {
         name: "Per Day",
@@ -153,7 +153,7 @@ export function RateLimitVisualizer() {
         remaining: config.perDay,
         window: "24h",
         icon: Calendar,
-        color: "text-green-500",
+        color: "text-chart-3",
       },
     ]);
     setCurrentTime(0);
@@ -172,28 +172,28 @@ export function RateLimitVisualizer() {
         limit: config.perSecond,
         timeToExceed: config.perSecond / rate,
         icon: Zap,
-        color: "text-yellow-500",
+        color: "text-chart-1",
       },
       {
         tier: "Burst",
         limit: config.burst,
         timeToExceed: config.burst / rate,
         icon: Layers,
-        color: "text-orange-500",
+        color: "text-chart-2",
       },
       {
         tier: "Per Hour",
         limit: config.perHour,
         timeToExceed: config.perHour / rate,
         icon: Clock,
-        color: "text-blue-500",
+        color: "text-primary",
       },
       {
         tier: "Per Day",
         limit: config.perDay,
         timeToExceed: config.perDay / rate,
         icon: Calendar,
-        color: "text-green-500",
+        color: "text-chart-3",
       },
     ].sort((a, b) => a.timeToExceed - b.timeToExceed);
   }, [config, requestRate]);
@@ -344,7 +344,7 @@ export function RateLimitVisualizer() {
                 {/* Per Second */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Zap className="size-4 text-yellow-500" />
+                    <Zap className="size-4 text-chart-1" />
                     <label className="text-sm font-medium flex items-center gap-1">
                       Per Second:{" "}
                       <span className="text-primary">{config.perSecond}</span>
@@ -410,7 +410,7 @@ export function RateLimitVisualizer() {
                 {/* Per Hour */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Clock className="size-4 text-blue-500" />
+                    <Clock className="size-4 text-primary" />
                     <label className="text-sm font-medium flex items-center gap-1">
                       Hour:{" "}
                       <span className="text-primary">
@@ -445,7 +445,7 @@ export function RateLimitVisualizer() {
                 {/* Per Day */}
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
-                    <Calendar className="size-4 text-green-500" />
+                    <Calendar className="size-4 text-chart-3" />
                     <label className="text-sm font-medium flex items-center gap-1">
                       Day:{" "}
                       <span className="text-primary">
@@ -577,8 +577,7 @@ export function RateLimitVisualizer() {
                       <Card
                         className={cn(
                           "border-2 transition-all",
-                          isExceeded &&
-                            "border-red-500 bg-red-50/50 dark:bg-red-950/20"
+                          isExceeded && "border-destructive bg-destructive/10"
                         )}
                       >
                         <CardContent className="pt-4 pb-3">
@@ -605,9 +604,9 @@ export function RateLimitVisualizer() {
                                 className={cn(
                                   "absolute bottom-0 left-0 right-0 transition-colors",
                                   isCritical
-                                    ? "bg-red-500"
+                                    ? "bg-destructive"
                                     : isLow
-                                    ? "bg-orange-500"
+                                    ? "bg-accent"
                                     : "bg-primary"
                                 )}
                                 initial={{ height: "100%" }}
@@ -642,7 +641,7 @@ export function RateLimitVisualizer() {
                                 <motion.div
                                   initial={{ opacity: 0, y: -5 }}
                                   animate={{ opacity: 1, y: 0 }}
-                                  className="text-xs text-red-600 dark:text-red-400 font-medium text-center"
+                                  className="text-xs text-destructive font-medium text-center"
                                 >
                                   🔴 429 Exceeded
                                 </motion.div>
@@ -676,7 +675,7 @@ export function RateLimitVisualizer() {
                       key={result.tier}
                       className={cn(
                         "border-2 transition-all p-3",
-                        isFirst && "border-red-500 bg-red-50 dark:bg-red-950/20"
+                        isFirst && "border-destructive bg-destructive/10"
                       )}
                     >
                       <div className="flex items-center justify-between gap-2">
@@ -701,10 +700,10 @@ export function RateLimitVisualizer() {
                             {formatTime(result.timeToExceed)}
                           </Badge>
                           {isFirst && (
-                            <AlertTriangle className="size-3 text-red-500" />
+                            <AlertTriangle className="size-3 text-destructive" />
                           )}
                           {!isFirst && result.timeToExceed > 60 && (
-                            <CheckCircle2 className="size-3 text-green-500" />
+                            <CheckCircle2 className="size-3 text-primary" />
                           )}
                         </div>
                       </div>
@@ -714,11 +713,11 @@ export function RateLimitVisualizer() {
               </div>
 
               {testResults.length > 0 && (
-                <div className="mt-4 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md">
-                  <p className="text-xs font-medium text-amber-900 dark:text-amber-100">
+                <div className="mt-4 p-3 bg-accent/10 border border-accent rounded-md">
+                  <p className="text-xs font-medium text-foreground">
                     ⚠️ First limit: <strong>{testResults[0].tier}</strong>
                   </p>
-                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     Exceeds in{" "}
                     <strong>{formatTime(testResults[0].timeToExceed)}</strong>
                   </p>

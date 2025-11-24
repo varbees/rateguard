@@ -64,17 +64,17 @@ export default function LoginForm() {
   };
 
   return (
-    <Card className="w-full max-w-md bg-slate-900 border-slate-800">
+    <Card className="w-full max-w-md bg-card border-border">
       <CardHeader className="space-y-1">
         <div className="flex items-center justify-center mb-4">
-          <div className="p-3 bg-blue-500 rounded-lg">
-            <Shield className="w-8 h-8 text-white" />
+          <div className="p-3 bg-primary rounded-lg">
+            <Shield className="w-8 h-8 text-primary-foreground" />
           </div>
         </div>
-        <CardTitle className="text-2xl text-center text-white">
+        <CardTitle className="text-2xl text-center text-card-foreground">
           Sign in to RateGuard
         </CardTitle>
-        <CardDescription className="text-center text-slate-400">
+        <CardDescription className="text-center text-muted-foreground">
           Enter your credentials to access your dashboard
         </CardDescription>
       </CardHeader>
@@ -84,7 +84,7 @@ export default function LoginForm() {
           {error && (
             <Alert
               variant="destructive"
-              className="bg-red-500/10 border-red-500/50"
+              className="bg-destructive/10 border-destructive"
             >
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
@@ -92,18 +92,18 @@ export default function LoginForm() {
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-slate-300">
+            <Label htmlFor="email" className="text-foreground">
               Email
             </Label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
               <Input
                 id="email"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="pl-10 bg-slate-800 border-slate-700 text-white"
+                className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
                 required
                 disabled={loading}
               />
@@ -111,18 +111,18 @@ export default function LoginForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-slate-300">
+            <Label htmlFor="password" className="text-foreground">
               Password
             </Label>
             <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-5 h-5" />
+              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
               <Input
                 id="password"
                 type="password"
                 placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-10 bg-slate-800 border-slate-700 text-white"
+                className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
                 required
                 disabled={loading}
               />
@@ -131,8 +131,8 @@ export default function LoginForm() {
 
           <div className="flex items-center justify-between text-sm">
             <Link
-              href="/reset-password"
-              className="text-blue-400 hover:text-blue-300 underline"
+              href="/forgot-password"
+              className="text-primary hover:text-primary/80 underline"
             >
               Forgot password?
             </Link>
@@ -140,7 +140,7 @@ export default function LoginForm() {
 
           <Button
             type="submit"
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white"
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
             disabled={loading}
           >
             {loading ? (
@@ -156,18 +156,18 @@ export default function LoginForm() {
       </CardContent>
 
       <CardFooter className="flex flex-col space-y-4">
-        <div className="text-center text-sm text-slate-400">
+        <div className="text-center text-sm text-muted-foreground">
           Don&apos;t have an account?{" "}
           <Link
             href="/signup"
-            className="text-blue-400 hover:text-blue-300 underline font-medium"
+            className="text-primary hover:text-primary/80 underline font-medium"
           >
             Sign up for free
           </Link>
         </div>
 
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3">
-          <p className="text-xs text-blue-300 text-center">
+        <div className="bg-primary/10 border border-primary/30 rounded-lg p-3">
+          <p className="text-xs text-primary text-center">
             🎉 New users get 10,000 free requests per month!
           </p>
         </div>

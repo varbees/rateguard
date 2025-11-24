@@ -2,14 +2,20 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { APIConfig, DashboardStats, UsageStats, apiClient } from "./api";
 
+interface User {
+  email?: string;
+  id?: string;
+}
+
 interface DashboardStore {
   // Auth State
   apiKey: string | null;
+  user: User | null;
   isAuthenticated: boolean;
   _hasHydrated: boolean;
 
   // Actions
-  setApiKey: (key: string) => void;
+  setApiKey: (key: string, user?: User) => void;
   clearAuth: () => void;
   setHasHydrated: (state: boolean) => void;
 
@@ -32,6 +38,7 @@ export const useDashboardStore = create<DashboardStore>()(
     (set) => ({
       // Initial State
       apiKey: null,
+      user: null,
       isAuthenticated: false,
       _hasHydrated: false,
       stats: null,
@@ -39,16 +46,17 @@ export const useDashboardStore = create<DashboardStore>()(
       apis: [],
 
       // Auth Actions
-      setApiKey: (key: string) => {
+      setApiKey: (key: string, user?: User) => {
         // Sync with APIClient
         apiClient.setApiKey(key);
-        set({ apiKey: key, isAuthenticated: true });
+        set({ apiKey: key, user: user || null, isAuthenticated: true });
       },
       clearAuth: () => {
         // Sync with APIClient
         apiClient.clearApiKey();
         set({
           apiKey: null,
+          user: null,
           isAuthenticated: false,
           stats: null,
           usage: null,
@@ -77,6 +85,7 @@ export const useDashboardStore = create<DashboardStore>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         apiKey: state.apiKey,
+        user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
       onRehydrateStorage: () => (state) => {

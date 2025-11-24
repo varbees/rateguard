@@ -1,6 +1,6 @@
 "use client";
 
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
 import {
   fetchStreamingStats,
   formatBytes,
@@ -25,15 +25,13 @@ export function StreamingMetrics({
   period = "30d",
   className = "",
 }: StreamingMetricsProps) {
-  const { data, error, isLoading } = useSWR<StreamingStats>(
-    `/api/v1/dashboard/stats/streaming?period=${period}`,
-    () => fetchStreamingStats(period),
-    {
-      refreshInterval: 5000, // Poll every 5 seconds
-      revalidateOnFocus: true,
-      revalidateOnReconnect: true,
-    }
-  );
+  const { data, error, isLoading } = useQuery<StreamingStats>({
+    queryKey: [`/api/v1/dashboard/stats/streaming`, period],
+    queryFn: () => fetchStreamingStats(period),
+    refetchInterval: 5000, // Poll every 5 seconds
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  });
 
   if (isLoading) {
     return <MetricsSkeleton />;
@@ -185,7 +183,10 @@ function MetricCard({
 
 function MetricsSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div
+      data-testid="metrics-skeleton"
+      className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+    >
       {[...Array(6)].map((_, i) => (
         <div
           key={i}

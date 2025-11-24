@@ -180,11 +180,11 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-white">Settings</h1>
-        <p className="text-slate-400 mt-1">
+        <h1 className="text-3xl font-bold text-foreground">Settings</h1>
+        <p className="text-muted-foreground mt-2">
           Manage your account preferences and configuration
         </p>
       </div>
@@ -193,26 +193,26 @@ export default function SettingsPage() {
       <Tabs
         value={activeTab}
         onValueChange={setActiveTab}
-        className="space-y-6"
+        className="space-y-8"
       >
-        <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5 bg-slate-900 border border-slate-800">
-          <TabsTrigger value="profile" className="gap-2">
+        <TabsList className="inline-flex h-12 items-center justify-start rounded-lg bg-muted p-1.5 text-muted-foreground w-full overflow-x-auto">
+          <TabsTrigger value="profile" className="gap-2 px-4">
             <User className="w-4 h-4" />
             <span className="hidden sm:inline">Profile</span>
           </TabsTrigger>
-          <TabsTrigger value="apikeys" className="gap-2">
+          <TabsTrigger value="apikeys" className="gap-2 px-4">
             <Key className="w-4 h-4" />
             <span className="hidden sm:inline">API Keys</span>
           </TabsTrigger>
-          <TabsTrigger value="billing" className="gap-2">
+          <TabsTrigger value="billing" className="gap-2 px-4">
             <CreditCard className="w-4 h-4" />
             <span className="hidden sm:inline">Billing</span>
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2">
+          <TabsTrigger value="notifications" className="gap-2 px-4">
             <Bell className="w-4 h-4" />
             <span className="hidden sm:inline">Notifications</span>
           </TabsTrigger>
-          <TabsTrigger value="security" className="gap-2">
+          <TabsTrigger value="security" className="gap-2 px-4">
             <Shield className="w-4 h-4" />
             <span className="hidden sm:inline">Security</span>
           </TabsTrigger>
@@ -220,9 +220,9 @@ export default function SettingsPage() {
 
         {/* Profile Tab */}
         <TabsContent value="profile" className="space-y-6">
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-white">Personal Information</CardTitle>
+              <CardTitle className="text-foreground">Personal Information</CardTitle>
               <CardDescription>
                 Update your account details and profile
               </CardDescription>
@@ -234,7 +234,7 @@ export default function SettingsPage() {
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-slate-800 border-slate-700"
+                  className="bg-accent border-slate-700"
                   placeholder="Enter your full name"
                 />
               </div>
@@ -246,9 +246,9 @@ export default function SettingsPage() {
                   type="email"
                   value={email}
                   readOnly
-                  className="bg-slate-800 border-slate-700 opacity-60"
+                  className="bg-accent border-slate-700 opacity-60"
                 />
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-foreground">
                   Email cannot be changed
                 </p>
               </div>
@@ -264,12 +264,12 @@ export default function SettingsPage() {
                     Upload Image
                   </Button>
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-foreground">
                   JPG, PNG or GIF. Max 2MB.
                 </p>
               </div>
 
-              <Separator className="bg-slate-800" />
+              <Separator className="bg-accent" />
 
               <ButtonLoading
                 loading={isSavingProfile}
@@ -281,9 +281,9 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
+              <CardTitle className="text-foreground flex items-center gap-2">
                 <Lock className="w-5 h-5" />
                 Change Password
               </CardTitle>
@@ -299,7 +299,7 @@ export default function SettingsPage() {
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="bg-slate-800 border-slate-700"
+                  className="bg-accent border-slate-700"
                   placeholder="Enter current password"
                 />
               </div>
@@ -311,7 +311,7 @@ export default function SettingsPage() {
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="bg-slate-800 border-slate-700"
+                  className="bg-accent border-slate-700"
                   placeholder="Enter new password (min 8 characters)"
                 />
               </div>
@@ -323,7 +323,7 @@ export default function SettingsPage() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="bg-slate-800 border-slate-700"
+                  className="bg-accent border-slate-700"
                   placeholder="Confirm new password"
                 />
               </div>
@@ -342,9 +342,9 @@ export default function SettingsPage() {
 
         {/* API Keys Tab */}
         <TabsContent value="apikeys" className="space-y-6">
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-white">API Keys</CardTitle>
+              <CardTitle className="text-foreground">API Keys</CardTitle>
               <CardDescription>
                 Manage your API keys for authentication
               </CardDescription>
@@ -355,7 +355,7 @@ export default function SettingsPage() {
                   value={newKeyName}
                   onChange={(e) => setNewKeyName(e.target.value)}
                   placeholder="Key name (e.g., Production Key)"
-                  className="bg-slate-800 border-slate-700"
+                  className="bg-accent border-slate-700"
                   onKeyDown={(e) => e.key === "Enter" && handleCreateKey()}
                 />
                 <ButtonLoading
@@ -369,24 +369,24 @@ export default function SettingsPage() {
                 </ButtonLoading>
               </div>
 
-              <Separator className="bg-slate-800" />
+              <Separator className="bg-accent" />
 
               <div className="space-y-3">
                 {apiKeys.map((key) => (
                   <div
                     key={key.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-slate-800 border border-slate-700 rounded-lg"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-accent border border-slate-700 rounded-lg"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium text-white">{key.name}</p>
+                        <p className="font-medium text-foreground">{key.name}</p>
                         {key.lastUsed === "Never" && (
                           <Badge variant="outline" className="text-xs">
                             New
                           </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-slate-400 font-mono truncate">
+                      <p className="text-sm text-muted-foreground font-mono truncate">
                         {key.key}
                       </p>
                       <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
@@ -419,7 +419,7 @@ export default function SettingsPage() {
               </div>
 
               {apiKeys.length === 0 && (
-                <div className="text-center py-8 text-slate-400">
+                <div className="text-center py-8 text-muted-foreground">
                   <Key className="w-12 h-12 mx-auto mb-3 opacity-50" />
                   <p>No API keys yet. Create one to get started.</p>
                 </div>
@@ -438,9 +438,9 @@ export default function SettingsPage() {
 
         {/* Billing Tab */}
         <TabsContent value="billing" className="space-y-6">
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-white">Current Plan</CardTitle>
+              <CardTitle className="text-foreground">Current Plan</CardTitle>
               <CardDescription>
                 Manage your subscription and billing
               </CardDescription>
@@ -448,12 +448,12 @@ export default function SettingsPage() {
             <CardContent className="space-y-6">
               <div className="flex items-center justify-between p-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-lg">
                 <div>
-                  <h3 className="text-2xl font-bold text-white mb-1">
+                  <h3 className="text-2xl font-bold text-foreground mb-1">
                     Free Plan
                   </h3>
-                  <p className="text-slate-400">Perfect for getting started</p>
+                  <p className="text-muted-foreground">Perfect for getting started</p>
                 </div>
-                <Badge className="bg-blue-500 text-white px-4 py-2 text-lg">
+                <Badge className="bg-blue-500 text-foreground px-4 py-2 text-lg">
                   $0/mo
                 </Badge>
               </div>
@@ -461,30 +461,30 @@ export default function SettingsPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label>API Requests This Month</Label>
-                  <span className="text-sm text-slate-400">2,450 / 10,000</span>
+                  <span className="text-sm text-muted-foreground">2,450 / 10,000</span>
                 </div>
-                <div className="w-full bg-slate-800 rounded-full h-2">
+                <div className="w-full bg-accent rounded-full h-2">
                   <div
                     className="bg-blue-500 h-2 rounded-full"
                     style={{ width: "24.5%" }}
                   />
                 </div>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-foreground">
                   7,550 requests remaining this month
                 </p>
               </div>
 
-              <Separator className="bg-slate-800" />
+              <Separator className="bg-accent" />
 
               <div className="space-y-3">
-                <h4 className="font-semibold text-white">Upgrade Options</h4>
+                <h4 className="font-semibold text-foreground">Upgrade Options</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-800 border border-slate-700 rounded-lg">
-                    <h5 className="font-semibold text-white mb-2">Pro Plan</h5>
+                  <div className="p-4 bg-accent border border-slate-700 rounded-lg">
+                    <h5 className="font-semibold text-foreground mb-2">Pro Plan</h5>
                     <p className="text-2xl font-bold text-blue-500 mb-3">
                       $29/mo
                     </p>
-                    <ul className="space-y-2 text-sm text-slate-400 mb-4">
+                    <ul className="space-y-2 text-sm text-muted-foreground mb-4">
                       <li>✓ 100,000 requests/month</li>
                       <li>✓ Priority support</li>
                       <li>✓ Advanced analytics</li>
@@ -492,17 +492,17 @@ export default function SettingsPage() {
                     </ul>
                     <Button className="w-full">Upgrade to Pro</Button>
                   </div>
-                  <div className="p-4 bg-slate-800 border border-purple-500/30 rounded-lg relative overflow-hidden">
+                  <div className="p-4 bg-accent border border-purple-500/30 rounded-lg relative overflow-hidden">
                     <div className="absolute top-2 right-2">
                       <Badge className="bg-purple-500">Popular</Badge>
                     </div>
-                    <h5 className="font-semibold text-white mb-2">
+                    <h5 className="font-semibold text-foreground mb-2">
                       Business Plan
                     </h5>
                     <p className="text-2xl font-bold text-purple-500 mb-3">
                       $99/mo
                     </p>
-                    <ul className="space-y-2 text-sm text-slate-400 mb-4">
+                    <ul className="space-y-2 text-sm text-muted-foreground mb-4">
                       <li>✓ 1,000,000 requests/month</li>
                       <li>✓ 24/7 premium support</li>
                       <li>✓ Custom integrations</li>
@@ -517,29 +517,29 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-white">Payment Method</CardTitle>
+              <CardTitle className="text-foreground">Payment Method</CardTitle>
               <CardDescription>Manage your billing information</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 bg-slate-800 border border-slate-700 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-accent border border-slate-700 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded flex items-center justify-center text-white text-xs font-bold">
+                  <div className="w-12 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded flex items-center justify-center text-foreground text-xs font-bold">
                     VISA
                   </div>
                   <div>
-                    <p className="text-white font-medium">
+                    <p className="text-foreground font-medium">
                       •••• •••• •••• 4242
                     </p>
-                    <p className="text-sm text-slate-400">Expires 12/2025</p>
+                    <p className="text-sm text-muted-foreground">Expires 12/2025</p>
                   </div>
                 </div>
                 <Button variant="outline" size="sm">
                   Update
                 </Button>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted-foreground">
                 No payment method required for Free plan
               </p>
             </CardContent>
@@ -548,9 +548,9 @@ export default function SettingsPage() {
 
         {/* Notifications Tab */}
         <TabsContent value="notifications" className="space-y-6">
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-white">
+              <CardTitle className="text-foreground">
                 Notification Preferences
               </CardTitle>
               <CardDescription>
@@ -561,7 +561,7 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <Label>Email Alerts</Label>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     Receive email notifications for important events
                   </p>
                 </div>
@@ -571,7 +571,7 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <Separator className="bg-slate-800" />
+              <Separator className="bg-accent" />
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -587,18 +587,18 @@ export default function SettingsPage() {
                   step={5}
                   className="w-full"
                 />
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-muted-foreground">
                   Get notified when you reach this percentage of your monthly
                   quota
                 </p>
               </div>
 
-              <Separator className="bg-slate-800" />
+              <Separator className="bg-accent" />
 
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <Label>Error Rate Alerts</Label>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     Get notified when error rates spike
                   </p>
                 </div>
@@ -608,12 +608,12 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <Separator className="bg-slate-800" />
+              <Separator className="bg-accent" />
 
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <Label>Weekly Report</Label>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     Receive a summary of your API usage every week
                   </p>
                 </div>
@@ -623,7 +623,7 @@ export default function SettingsPage() {
                 />
               </div>
 
-              <Separator className="bg-slate-800" />
+              <Separator className="bg-accent" />
 
               <ButtonLoading
                 loading={isSavingNotifications}
@@ -638,48 +638,48 @@ export default function SettingsPage() {
 
         {/* Security Tab */}
         <TabsContent value="security" className="space-y-6">
-          <Card className="bg-slate-900 border-slate-800">
+          <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-white">Security Settings</CardTitle>
+              <CardTitle className="text-foreground">Security Settings</CardTitle>
               <CardDescription>Enhance your account security</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-slate-800 border border-slate-700 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-accent border border-slate-700 rounded-lg">
                 <div className="space-y-1">
                   <Label className="text-base">Two-Factor Authentication</Label>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     Add an extra layer of security to your account
                   </p>
                 </div>
-                <Badge variant="outline" className="text-slate-400">
+                <Badge variant="outline" className="text-muted-foreground">
                   Coming Soon
                 </Badge>
               </div>
 
-              <Separator className="bg-slate-800" />
+              <Separator className="bg-accent" />
 
-              <div className="flex items-center justify-between p-4 bg-slate-800 border border-slate-700 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-accent border border-slate-700 rounded-lg">
                 <div className="space-y-1">
                   <Label className="text-base">API Key Rotation Schedule</Label>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     Automatically rotate your API keys periodically
                   </p>
                 </div>
-                <Badge variant="outline" className="text-slate-400">
+                <Badge variant="outline" className="text-muted-foreground">
                   Coming Soon
                 </Badge>
               </div>
 
-              <Separator className="bg-slate-800" />
+              <Separator className="bg-accent" />
 
-              <div className="flex items-center justify-between p-4 bg-slate-800 border border-slate-700 rounded-lg hover:bg-slate-800/70 transition-colors cursor-pointer">
+              <div className="flex items-center justify-between p-4 bg-accent border border-slate-700 rounded-lg hover:bg-accent/70 transition-colors cursor-pointer">
                 <div className="space-y-1">
                   <Label className="text-base cursor-pointer">Audit Log</Label>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-muted-foreground">
                     View all account activity and API key usage
                   </p>
                 </div>
-                <ExternalLink className="w-5 h-5 text-slate-400" />
+                <ExternalLink className="w-5 h-5 text-muted-foreground" />
               </div>
             </CardContent>
           </Card>
@@ -699,24 +699,24 @@ export default function SettingsPage() {
         open={!!keyToDelete}
         onOpenChange={(open) => !open && setKeyToDelete(null)}
       >
-        <AlertDialogContent className="bg-slate-900 border-slate-800">
+        <AlertDialogContent className="bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">
+            <AlertDialogTitle className="text-foreground">
               Revoke API Key?
             </AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-400">
+            <AlertDialogDescription className="text-muted-foreground">
               This action cannot be undone. This API key will be permanently
               revoked and any applications using it will no longer be able to
               authenticate.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-slate-800 border-slate-700 hover:bg-slate-700">
+            <AlertDialogCancel className="bg-accent border-slate-700 hover:bg-slate-700">
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteKey}
-              className="bg-red-500 hover:bg-red-600 text-white"
+              className="bg-destructive/100 hover:bg-red-600 text-foreground"
             >
               Revoke Key
             </AlertDialogAction>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import useSWR from "swr";
+import { useQuery } from "@tanstack/react-query";
 import { StreamingMetrics } from "@/components/dashboard/StreamingMetrics";
 import {
   StreamingHistoryChart,
@@ -22,10 +22,10 @@ export default function StreamingDashboardPage() {
   const [period, setPeriod] = useState<TimePeriod>("30d");
   const [selectedAPI, setSelectedAPI] = useState<string>("all");
 
-  const { data: apiData, mutate } = useSWR(
-    `/api/v1/dashboard/streaming/by-api?period=${period}`,
-    () => fetchStreamingByAPI(period)
-  );
+  const { data: apiData, refetch } = useQuery({
+    queryKey: [`/api/v1/dashboard/streaming/by-api`, period],
+    queryFn: () => fetchStreamingByAPI(period),
+  });
 
   // Filter APIs for dropdown
   const apis = apiData?.apis || [];
@@ -40,7 +40,7 @@ export default function StreamingDashboardPage() {
   };
 
   const handleRefresh = () => {
-    mutate();
+    refetch();
   };
 
   return (
@@ -59,15 +59,15 @@ export default function StreamingDashboardPage() {
 
           <div className="flex items-center gap-3">
             {/* Period Selector */}
-            <div className="flex items-center gap-2 bg-slate-800 rounded-lg border border-slate-700 p-1">
+            <div className="flex items-center gap-2 bg-card rounded-lg border border-border p-1">
               {(["24h", "7d", "30d"] as TimePeriod[]).map((p) => (
                 <button
                   key={p}
                   onClick={() => setPeriod(p)}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     period === p
-                      ? "bg-blue-600 text-white"
-                      : "text-slate-400 hover:text-white"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {p === "24h"
@@ -84,7 +84,7 @@ export default function StreamingDashboardPage() {
               <select
                 value={selectedAPI}
                 onChange={(e) => setSelectedAPI(e.target.value)}
-                className="appearance-none bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 pr-10 text-sm font-medium text-slate-300 hover:border-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="appearance-none bg-input border-input rounded-lg px-4 py-2 pr-10 text-sm font-medium text-foreground hover:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="all">All APIs</option>
                 {apis.map((api) => (
@@ -93,13 +93,13 @@ export default function StreamingDashboardPage() {
                   </option>
                 ))}
               </select>
-              <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              <Filter className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             </div>
 
             {/* Refresh Button */}
             <button
               onClick={handleRefresh}
-              className="flex items-center gap-2 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-700 transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-lg text-sm font-medium text-foreground hover:bg-accent transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
               <span className="hidden md:inline">Refresh</span>
@@ -109,7 +109,7 @@ export default function StreamingDashboardPage() {
             <button
               onClick={handleExportCSV}
               disabled={apis.length === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
               <span className="hidden md:inline">Export CSV</span>
@@ -134,63 +134,63 @@ export default function StreamingDashboardPage() {
           </div>
 
           {/* API Table */}
-          <div className="bg-slate-900 border border-slate-800 rounded-lg p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">
+          <div className="bg-card border border-border rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-card-foreground mb-4">
               Top Streaming APIs
             </h3>
 
             {apis.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
+              <div className="text-center py-12 text-muted-foreground">
                 <p>No streaming data available for the selected period</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-slate-800">
-                      <th className="text-left py-3 px-4 text-sm font-semibold text-slate-300">
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-4 text-sm font-semibold text-muted-foreground">
                         API Name
                       </th>
-                      <th className="text-right py-3 px-4 text-sm font-semibold text-slate-300">
+                      <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">
                         Streams
                       </th>
-                      <th className="text-right py-3 px-4 text-sm font-semibold text-slate-300">
+                      <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">
                         Data
                       </th>
-                      <th className="text-right py-3 px-4 text-sm font-semibold text-slate-300">
+                      <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">
                         Avg Duration
                       </th>
-                      <th className="text-right py-3 px-4 text-sm font-semibold text-slate-300">
+                      <th className="text-right py-3 px-4 text-sm font-semibold text-muted-foreground">
                         Success Rate
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800">
+                  <tbody className="divide-y divide-border">
                     {apis.map((api) => (
                       <tr
                         key={api.api_id}
-                        className="hover:bg-slate-800 transition-colors"
+                        className="hover:bg-accent/50 transition-colors"
                       >
-                        <td className="py-3 px-4 text-sm font-medium text-white">
+                        <td className="py-3 px-4 text-sm font-medium text-foreground">
                           {api.api_name}
                         </td>
-                        <td className="py-3 px-4 text-sm text-right text-slate-300">
+                        <td className="py-3 px-4 text-sm text-right text-foreground">
                           {api.streams.toLocaleString()}
                         </td>
-                        <td className="py-3 px-4 text-sm text-right text-slate-300">
+                        <td className="py-3 px-4 text-sm text-right text-foreground">
                           {formatBytes(api.bytes)}
                         </td>
-                        <td className="py-3 px-4 text-sm text-right text-slate-300">
+                        <td className="py-3 px-4 text-sm text-right text-foreground">
                           {formatDuration(api.avg_duration_ms)}
                         </td>
                         <td className="py-3 px-4 text-sm text-right">
                           <span
                             className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                               api.success_rate >= 99
-                                ? "bg-green-500/20 text-green-400"
+                                ? "bg-primary/20 text-primary"
                                 : api.success_rate >= 95
-                                ? "bg-yellow-500/20 text-yellow-400"
-                                : "bg-red-500/20 text-red-400"
+                                ? "bg-accent text-accent-foreground"
+                                : "bg-destructive/20 text-destructive"
                             }`}
                           >
                             {api.success_rate.toFixed(1)}%

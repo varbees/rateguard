@@ -64,25 +64,25 @@ export default function RateLimitingGuidePage() {
             {[
               {
                 icon: Zap,
-                color: "text-yellow-500",
+                color: "text-chart-1",
                 name: "Per Second",
                 desc: "Fast requests, resets every second",
               },
               {
                 icon: Layers,
-                color: "text-orange-500",
+                color: "text-chart-2",
                 name: "Burst",
                 desc: "Handle traffic spikes gracefully",
               },
               {
                 icon: Clock,
-                color: "text-blue-500",
+                color: "text-primary",
                 name: "Per Hour",
                 desc: "Medium-term quota management",
               },
               {
                 icon: Calendar,
-                color: "text-green-500",
+                color: "text-chart-3",
                 name: "Per Day/Month",
                 desc: "Long-term usage limits",
               },
@@ -270,9 +270,9 @@ export default function RateLimitingGuidePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card className="border-2 border-green-200 dark:border-green-900">
+            <Card className="border-2 border-primary/20">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-green-700 dark:text-green-300">
+                <CardTitle className="text-lg flex items-center gap-2 text-primary">
                   <CheckCircle2 className="size-5" />
                   Do
                 </CardTitle>
@@ -288,7 +288,7 @@ export default function RateLimitingGuidePage() {
                     "Log 429 errors for monitoring",
                   ].map((item) => (
                     <li key={item} className="flex items-start gap-2">
-                      <CheckCircle2 className="size-4 text-green-500 mt-0.5 shrink-0" />
+                      <CheckCircle2 className="size-4 text-primary mt-0.5 shrink-0" />
                       <span>{item}</span>
                     </li>
                   ))}
@@ -296,9 +296,9 @@ export default function RateLimitingGuidePage() {
               </CardContent>
             </Card>
 
-            <Card className="border-2 border-red-200 dark:border-red-900">
+            <Card className="border-2 border-destructive/20">
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2 text-red-700 dark:text-red-300">
+                <CardTitle className="text-lg flex items-center gap-2 text-destructive">
                   <AlertTriangle className="size-5" />
                   Don&apos;t
                 </CardTitle>
@@ -314,7 +314,7 @@ export default function RateLimitingGuidePage() {
                     "Set limits too high without monitoring",
                   ].map((item) => (
                     <li key={item} className="flex items-start gap-2">
-                      <AlertTriangle className="size-4 text-red-500 mt-0.5 shrink-0" />
+                      <AlertTriangle className="size-4 text-destructive mt-0.5 shrink-0" />
                       <span>{item}</span>
                     </li>
                   ))}

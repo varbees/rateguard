@@ -29,15 +29,15 @@ export default function StatsCards({
         return (
           <Card
             key={stat.title}
-            className="bg-slate-900 border-slate-800 hover:border-slate-700 transition-colors"
+            className="bg-card border-border hover:border-primary/50 transition-colors"
           >
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-400">
+                  <p className="text-sm font-medium text-muted-foreground">
                     {stat.title}
                   </p>
-                  <p className="text-2xl font-bold text-white mt-2">
+                  <p className="text-2xl font-bold text-foreground mt-2">
                     {loading ? "..." : stat.value}
                   </p>
                   {stat.change && (
@@ -47,7 +47,7 @@ export default function StatsCards({
                           ? "text-green-500"
                           : stat.changeType === "negative"
                           ? "text-red-500"
-                          : "text-slate-400"
+                          : "text-muted-foreground"
                       }`}
                     >
                       {stat.change}
