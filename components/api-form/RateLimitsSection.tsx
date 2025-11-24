@@ -175,7 +175,7 @@ export function RateLimitsSection({
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
-                  value={field.value}
+                  value={field.value ?? 0}
                   onChange={(e) => {
                     const val = parseInt(e.target.value) || 0;
                     field.onChange(

@@ -42,7 +42,7 @@ export default function NewAPIPage() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [formData]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load draft on mount
   React.useEffect(() => {
