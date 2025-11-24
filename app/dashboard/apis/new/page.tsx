@@ -33,33 +33,51 @@ export default function NewAPIPage() {
   const [errors, setErrors] = React.useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = React.useState(false);
 
-  // Auto-save draft every 5 seconds
+  // Track previous form data for auto-save
+  const prevFormDataRef = React.useRef(formData);
+
+  // Auto-save draft when form data changes (debounced)
   React.useEffect(() => {
-    const interval = setInterval(() => {
-      if (formData.name || formData.targetUrl) {
-        localStorage.setItem("api_draft", JSON.stringify(formData));
-      }
-    }, 5000);
+    // Only save if there's actual content
+    if (formData.name || formData.targetUrl) {
+      // Debounce save to avoid excessive writes
+      const saveTimeout = setTimeout(() => {
+        // Compare with previous save to avoid unnecessary writes
+        if (
+          JSON.stringify(formData) !== JSON.stringify(prevFormDataRef.current)
+        ) {
+          localStorage.setItem("api_draft", JSON.stringify(formData));
+          prevFormDataRef.current = { ...formData };
+          console.log("Draft auto-saved");
+        }
+      }, 2000); // 2 second debounce
 
-    return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      return () => clearTimeout(saveTimeout);
+    }
+  }, [formData]); // Depend on formData to detect changes
 
-  // Load draft on mount
+  // Track if we've already shown the toast
+  const draftToastShown = React.useRef(false);
+
+  // Load draft on mount (only once)
   React.useEffect(() => {
     const draft = localStorage.getItem("api_draft");
-    if (draft) {
+    if (draft && !draftToastShown.current) {
       try {
         const parsed = JSON.parse(draft);
         setFormData(parsed);
+
+        // Only show toast once
         toast({
           title: "Draft restored",
           description: "Your previous work has been restored.",
         });
+        draftToastShown.current = true;
       } catch (e) {
         console.error("Failed to parse draft", e);
       }
     }
-  }, [toast]);
+  }, []); // No dependencies - run only once on mount
 
   // Memoize onChange handlers to prevent infinite re-renders
   const handlePerSecondChange = React.useCallback(
@@ -82,6 +100,12 @@ export default function NewAPIPage() {
     (value: number) => setFormData((prev) => ({ ...prev, perMonth: value })),
     []
   );
+
+  // Function to clear draft from localStorage
+  const clearDraft = React.useCallback(() => {
+    localStorage.removeItem("api_draft");
+    console.log("Draft cleared");
+  }, []);
 
   const handleTemplateSelect = (template: APITemplate) => {
     setFormData({
@@ -195,7 +219,9 @@ export default function NewAPIPage() {
           : undefined,
       });
 
-      localStorage.removeItem("api_draft");
+      // Clear draft after successful submission
+      clearDraft();
+
       toast({
         title: "API created successfully!",
         description: `${formData.name} is now protected and ready to use.`,
