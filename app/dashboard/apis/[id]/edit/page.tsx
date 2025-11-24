@@ -52,6 +52,7 @@ export default function EditAPIPage() {
           burst: api.burst_size,
           perHour: api.rate_limit_per_hour,
           perDay: api.rate_limit_per_day,
+          perMonth: api.rate_limit_per_month || 0,
           timeoutSeconds: api.timeout_seconds,
           retryAttempts: api.retry_attempts,
           corsOrigins: api.allowed_origins?.join("\n") || "",
@@ -170,6 +171,7 @@ export default function EditAPIPage() {
         burst_size: formData.burst,
         rate_limit_per_hour: formData.perHour,
         rate_limit_per_day: formData.perDay,
+        rate_limit_per_month: formData.perMonth,
         timeout_seconds: formData.timeoutSeconds,
         retry_attempts: formData.retryAttempts,
         allowed_origins: formData.corsOrigins
@@ -333,6 +335,7 @@ export default function EditAPIPage() {
               burst={formData.burst}
               perHour={formData.perHour}
               perDay={formData.perDay}
+              perMonth={formData.perMonth}
               onPerSecondChange={(value) =>
                 setFormData({ ...formData, perSecond: value })
               }
@@ -344,6 +347,9 @@ export default function EditAPIPage() {
               }
               onPerDayChange={(value) =>
                 setFormData({ ...formData, perDay: value })
+              }
+              onPerMonthChange={(value) =>
+                setFormData({ ...formData, perMonth: value })
               }
             />
 
@@ -376,6 +382,7 @@ export default function EditAPIPage() {
               burst={formData.burst}
               perHour={formData.perHour}
               perDay={formData.perDay}
+              perMonth={formData.perMonth}
             />
           </div>
         </div>
