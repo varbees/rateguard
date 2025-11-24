@@ -160,10 +160,16 @@ export function APIListTable({
             </TableHeader>
             <TableBody>
               {apis.map((api) => (
-                <TableRow key={api.id} className="group">
+                <TableRow
+                  key={api.id}
+                  className="group hover:bg-muted/50 cursor-pointer"
+                  onClick={() => onViewStats?.(api)}
+                >
                   <TableCell>
                     <div>
-                      <div className="font-medium">{api.name}</div>
+                      <div className="font-medium hover:text-primary transition-colors">
+                        {api.name}
+                      </div>
                       <div className="text-xs text-muted-foreground md:hidden">
                         {api.target_url}
                       </div>
@@ -200,7 +206,10 @@ export function APIListTable({
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell
+                    className="text-right"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
@@ -212,15 +221,30 @@ export function APIListTable({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onEdit?.(api)}>
-                          <Edit className="size-4 mr-2" />
-                          Edit Configuration
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onViewStats?.(api)}>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onViewStats?.(api);
+                          }}
+                        >
                           <BarChart3 className="size-4 mr-2" />
                           View Statistics
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onToggleStatus?.(api)}>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit?.(api);
+                          }}
+                        >
+                          <Edit className="size-4 mr-2" />
+                          Edit Configuration
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleStatus?.(api);
+                          }}
+                        >
                           {api.enabled ? (
                             <>
                               <Pause className="size-4 mr-2" />
@@ -234,7 +258,10 @@ export function APIListTable({
                           )}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => onDelete?.(api)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete?.(api);
+                          }}
                           className="text-destructive focus:text-destructive"
                         >
                           <Trash2 className="size-4 mr-2" />

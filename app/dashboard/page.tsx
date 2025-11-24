@@ -62,17 +62,7 @@ export default function DashboardPage() {
     generateMockRequests()
   );
 
-  React.useEffect(() => {
-    if (!isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-
-    fetchDashboardData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated]);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = React.useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -90,7 +80,17 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  React.useEffect(() => {
+    if (!isAuthenticated) {
+      router.push("/login");
+      return;
+    }
+
+    fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, fetchDashboardData]);
 
   const handleLogout = () => {
     apiClient.clearApiKey();
@@ -109,22 +109,30 @@ export default function DashboardPage() {
   };
 
   const handleEditAPI = (api: APIConfig) => {
-    router.push(`/dashboard/apis?edit=${api.id}`);
+    router.push(`/dashboard/apis/${api.id}/edit`);
   };
 
   const handleViewStats = (api: APIConfig) => {
-    router.push(`/dashboard/apis?stats=${api.id}`);
+    router.push(`/dashboard/apis/${api.id}`);
   };
 
   const handleToggleStatus = async (api: APIConfig) => {
-    console.log("Toggle status for:", api.name);
-    // Implement toggle logic
+    try {
+      await apiClient.updateAPIConfig(api.id, { enabled: !api.enabled });
+      await fetchDashboardData(); // Refresh data
+    } catch (err) {
+      console.error("Failed to toggle API status:", err);
+    }
   };
 
   const handleDeleteAPI = async (api: APIConfig) => {
     if (confirm(`Are you sure you want to delete ${api.name}?`)) {
-      console.log("Delete:", api.name);
-      // Implement delete logic
+      try {
+        await apiClient.deleteAPIConfig(api.id);
+        await fetchDashboardData(); // Refresh data
+      } catch (err) {
+        console.error("Failed to delete API:", err);
+      }
     }
   };
 
