@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * @deprecated This modal-based form is deprecated in favor of standalone form pages.
+ * Use `/dashboard/apis/new` for creating new APIs and `/dashboard/apis/[id]/edit` for editing.
+ * This component is kept for backward compatibility but should not be used in new code.
+ *
+ * Migration:
+ * - Replace modal with: router.push('/dashboard/apis/new')
+ * - Replace edit modal with: router.push(`/dashboard/apis/${api.id}/edit`)
+ */
+
 import { useState, useEffect } from "react";
 import { APIConfig, apiConfigAPI } from "@/lib/api";
 import { useQueryClient } from "@tanstack/react-query";
