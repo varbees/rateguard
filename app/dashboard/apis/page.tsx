@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiConfigAPI, APIConfig } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -15,35 +15,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import {
-  Plus,
-  Trash2,
-  Edit,
-  Power,
-  ExternalLink,
-  BarChart3,
-  Eye,
-} from "lucide-react";
+import { Plus, Trash2, Edit, Power, ExternalLink, Eye } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
-import APIConfigModal from "@/components/dashboard/APIConfigModal";
 import APIProxyInfo from "@/components/dashboard/APIProxyInfo";
 
 export default function APIsPage() {
-  const searchParams = useSearchParams();
   const router = useRouter();
-  const shouldAutoOpen = searchParams.get("modal") === "open";
-
-  const [isModalOpen, setIsModalOpen] = useState(shouldAutoOpen);
-  const [editingAPI, setEditingAPI] = useState<APIConfig | undefined>();
   const [selectedAPI, setSelectedAPI] = useState<APIConfig | null>(null);
   const queryClient = useQueryClient();
-
-  // Clean up URL parameter after initial mount if modal was auto-opened
-  useEffect(() => {
-    if (shouldAutoOpen) {
-      window.history.replaceState({}, "", "/dashboard/apis");
-    }
-  }, [shouldAutoOpen]);
 
   const { data: apis, isLoading } = useQuery({
     queryKey: ["apis"],
@@ -66,19 +45,13 @@ export default function APIsPage() {
   };
 
   const handleEdit = (api: APIConfig) => {
-    setEditingAPI(api);
-    setIsModalOpen(true);
+    router.push(`/dashboard/apis/${api.id}/edit`);
   };
 
   const handleDelete = (id: string) => {
     if (confirm("Are you sure you want to delete this API configuration?")) {
       deleteMutation.mutate(id);
     }
-  };
-
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setEditingAPI(undefined);
   };
 
   return (
@@ -94,7 +67,7 @@ export default function APIsPage() {
           </p>
         </div>
         <Button
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => router.push("/dashboard/apis/new")}
           className="bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -243,7 +216,7 @@ export default function APIsPage() {
                 No APIs configured yet
               </p>
               <Button
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => router.push("/dashboard/apis/new")}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -261,13 +234,6 @@ export default function APIsPage() {
           targetUrl={selectedAPI.target_url}
         />
       )}
-
-      {/* API Config Modal */}
-      <APIConfigModal
-        isOpen={isModalOpen}
-        onClose={handleCloseModal}
-        api={editingAPI}
-      />
     </div>
   );
 }
