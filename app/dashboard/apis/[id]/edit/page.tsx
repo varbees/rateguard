@@ -74,6 +74,28 @@ export default function EditAPIPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiId]);
 
+  // Memoize onChange handlers to prevent infinite re-renders
+  const handlePerSecondChange = React.useCallback(
+    (value: number) => setFormData((prev) => ({ ...prev, perSecond: value })),
+    []
+  );
+  const handleBurstChange = React.useCallback(
+    (value: number) => setFormData((prev) => ({ ...prev, burst: value })),
+    []
+  );
+  const handlePerHourChange = React.useCallback(
+    (value: number) => setFormData((prev) => ({ ...prev, perHour: value })),
+    []
+  );
+  const handlePerDayChange = React.useCallback(
+    (value: number) => setFormData((prev) => ({ ...prev, perDay: value })),
+    []
+  );
+  const handlePerMonthChange = React.useCallback(
+    (value: number) => setFormData((prev) => ({ ...prev, perMonth: value })),
+    []
+  );
+
   const handleTemplateSelect = (template: APITemplate) => {
     setFormData({
       ...template.config,
@@ -337,21 +359,11 @@ export default function EditAPIPage() {
               perHour={formData.perHour}
               perDay={formData.perDay}
               perMonth={formData.perMonth}
-              onPerSecondChange={(value) =>
-                setFormData({ ...formData, perSecond: value })
-              }
-              onBurstChange={(value) =>
-                setFormData({ ...formData, burst: value })
-              }
-              onPerHourChange={(value) =>
-                setFormData({ ...formData, perHour: value })
-              }
-              onPerDayChange={(value) =>
-                setFormData({ ...formData, perDay: value })
-              }
-              onPerMonthChange={(value) =>
-                setFormData({ ...formData, perMonth: value })
-              }
+              onPerSecondChange={handlePerSecondChange}
+              onBurstChange={handleBurstChange}
+              onPerHourChange={handlePerHourChange}
+              onPerDayChange={handlePerDayChange}
+              onPerMonthChange={handlePerMonthChange}
             />
 
             <AdvancedSection

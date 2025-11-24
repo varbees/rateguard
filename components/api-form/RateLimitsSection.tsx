@@ -65,73 +65,87 @@ export function RateLimitsSection({
   onPerDayChange,
   onPerMonthChange,
 }: RateLimitsSectionProps) {
-  const fields: RateLimitField[] = [
-    {
-      label: "Per Second",
-      value: perSecond,
-      onChange: onPerSecondChange,
-      min: 1,
-      max: 100,
-      step: 1,
-      unit: "req/sec",
-      recommended: 10,
-      tooltip:
-        "Maximum number of requests allowed per second. This prevents sudden spikes from overwhelming your API.",
-      formatValue: (v) => `${v}`,
-    },
-    {
-      label: "Burst",
-      value: burst,
-      onChange: onBurstChange,
-      min: 1,
-      max: 200,
-      step: 5,
-      unit: "requests",
-      recommended: 20,
-      tooltip:
-        "Temporary spike allowance over 10 seconds. Allows brief traffic bursts without triggering rate limits.",
-      formatValue: (v) => `${v}`,
-    },
-    {
-      label: "Per Hour",
-      value: perHour,
-      onChange: onPerHourChange,
-      min: 0,
-      max: 10000,
-      step: 100,
-      unit: "req/hour",
-      recommended: 1000,
-      tooltip:
-        "Total requests allowed in a rolling hour window. 0 means unlimited. Useful for controlling hourly quotas.",
-      formatValue: (v) => (v === 0 ? "Unlimited" : formatNumber(v)),
-    },
-    {
-      label: "Per Day",
-      value: perDay,
-      onChange: onPerDayChange,
-      min: 0,
-      max: 100000,
-      step: 1000,
-      unit: "req/day",
-      recommended: 10000,
-      tooltip:
-        "Total requests allowed in a rolling 24-hour window. 0 means unlimited. Helps manage daily usage caps.",
-      formatValue: (v) => (v === 0 ? "Unlimited" : formatNumber(v)),
-    },
-    {
-      label: "Per Month",
-      value: perMonth,
-      onChange: onPerMonthChange,
-      min: 0,
-      max: 1000000,
-      step: 10000,
-      unit: "req/month",
-      recommended: 100000,
-      tooltip:
-        "Total requests allowed in a rolling 30-day window. 0 means unlimited. Perfect for monthly billing cycles.",
-      formatValue: (v) => (v === 0 ? "Unlimited" : formatNumber(v)),
-    },
-  ];
+  const fields: RateLimitField[] = React.useMemo(
+    () => [
+      {
+        label: "Per Second",
+        value: perSecond,
+        onChange: onPerSecondChange,
+        min: 1,
+        max: 100,
+        step: 1,
+        unit: "req/sec",
+        recommended: 10,
+        tooltip:
+          "Maximum number of requests allowed per second. This prevents sudden spikes from overwhelming your API.",
+        formatValue: (v) => `${v}`,
+      },
+      {
+        label: "Burst",
+        value: burst,
+        onChange: onBurstChange,
+        min: 1,
+        max: 200,
+        step: 5,
+        unit: "requests",
+        recommended: 20,
+        tooltip:
+          "Temporary spike allowance over 10 seconds. Allows brief traffic bursts without triggering rate limits.",
+        formatValue: (v) => `${v}`,
+      },
+      {
+        label: "Per Hour",
+        value: perHour,
+        onChange: onPerHourChange,
+        min: 0,
+        max: 10000,
+        step: 100,
+        unit: "req/hour",
+        recommended: 1000,
+        tooltip:
+          "Total requests allowed in a rolling hour window. 0 means unlimited. Useful for controlling hourly quotas.",
+        formatValue: (v) => (v === 0 ? "Unlimited" : formatNumber(v)),
+      },
+      {
+        label: "Per Day",
+        value: perDay,
+        onChange: onPerDayChange,
+        min: 0,
+        max: 100000,
+        step: 1000,
+        unit: "req/day",
+        recommended: 10000,
+        tooltip:
+          "Total requests allowed in a rolling 24-hour window. 0 means unlimited. Helps manage daily usage caps.",
+        formatValue: (v) => (v === 0 ? "Unlimited" : formatNumber(v)),
+      },
+      {
+        label: "Per Month",
+        value: perMonth,
+        onChange: onPerMonthChange,
+        min: 0,
+        max: 1000000,
+        step: 10000,
+        unit: "req/month",
+        recommended: 100000,
+        tooltip:
+          "Total requests allowed in a rolling 30-day window. 0 means unlimited. Perfect for monthly billing cycles.",
+        formatValue: (v) => (v === 0 ? "Unlimited" : formatNumber(v)),
+      },
+    ],
+    [
+      perSecond,
+      burst,
+      perHour,
+      perDay,
+      perMonth,
+      onPerSecondChange,
+      onBurstChange,
+      onPerHourChange,
+      onPerDayChange,
+      onPerMonthChange,
+    ]
+  );
 
   return (
     <Card className="border-2">
