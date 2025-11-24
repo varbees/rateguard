@@ -30,27 +30,68 @@ export default function APIConfigModal({
   const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState({
-    name: api?.name || "",
-    target_url: api?.target_url || "",
-    rate_limit_per_second: api?.rate_limit_per_second || 10,
-    burst_size: api?.burst_size || 20,
-    rate_limit_per_hour: api?.rate_limit_per_hour || 0,
-    rate_limit_per_day: api?.rate_limit_per_day || 0,
-    rate_limit_per_month: api?.rate_limit_per_month || 0,
-    allowed_origins: api?.allowed_origins || [],
-    timeout_seconds: api?.timeout_seconds || 30,
-    retry_attempts: api?.retry_attempts || 1,
-    enabled: api?.enabled ?? true,
+    name: "",
+    target_url: "",
+    rate_limit_per_second: 10,
+    burst_size: 20,
+    rate_limit_per_hour: 0,
+    rate_limit_per_day: 0,
+    rate_limit_per_month: 0,
+    allowed_origins: [] as string[],
+    timeout_seconds: 30,
+    retry_attempts: 1,
+    enabled: true,
   });
 
   const [loading, setLoading] = useState(false);
   const [slugPreview, setSlugPreview] = useState("");
   const [newOrigin, setNewOrigin] = useState("");
 
+  // Reset form when modal opens or api prop changes
+  useEffect(() => {
+    if (isOpen) {
+      if (api) {
+        // Editing existing API
+        setFormData({
+          name: api.name || "",
+          target_url: api.target_url || "",
+          rate_limit_per_second: api.rate_limit_per_second || 10,
+          burst_size: api.burst_size || 20,
+          rate_limit_per_hour: api.rate_limit_per_hour || 0,
+          rate_limit_per_day: api.rate_limit_per_day || 0,
+          rate_limit_per_month: api.rate_limit_per_month || 0,
+          allowed_origins: api.allowed_origins || [],
+          timeout_seconds: api.timeout_seconds || 30,
+          retry_attempts: api.retry_attempts || 1,
+          enabled: api.enabled ?? true,
+        });
+      } else {
+        // Creating new API - reset to defaults
+        setFormData({
+          name: "",
+          target_url: "",
+          rate_limit_per_second: 10,
+          burst_size: 20,
+          rate_limit_per_hour: 0,
+          rate_limit_per_day: 0,
+          rate_limit_per_month: 0,
+          allowed_origins: [],
+          timeout_seconds: 30,
+          retry_attempts: 1,
+          enabled: true,
+        });
+      }
+    }
+  }, [isOpen, api]);
+
   // Update slug preview when name changes
   useEffect(() => {
-    const slug = slugify(formData.name);
-    setSlugPreview(slug);
+    if (formData.name) {
+      const slug = slugify(formData.name);
+      setSlugPreview(slug);
+    } else {
+      setSlugPreview("");
+    }
   }, [formData.name]);
 
   const handleAddOrigin = () => {
