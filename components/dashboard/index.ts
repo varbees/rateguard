@@ -3,6 +3,10 @@ export { MetricCards } from "./MetricCards";
 export { UsageGraphSection } from "./UsageGraphSection";
 export { APIListTable } from "./APIListTable";
 export { RecentActivity } from "./RecentActivity";
+export { AlertBanner } from "./AlertBanner";
+export { CostEstimateCard } from "./CostEstimateCard";
+export { PlanLimitsCard } from "./PlanLimitsCard";
+export { FeatureGate } from "./FeatureGate";
 
 // Legacy components (keep for backward compatibility)
 export { default as DashboardNav } from "./DashboardNav";

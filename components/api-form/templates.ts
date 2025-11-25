@@ -130,6 +130,8 @@ export const API_TEMPLATES: APITemplate[] = [
   },
 ];
 
+export type AuthType = "none" | "bearer" | "api_key" | "basic";
+
 export function getDefaultConfig() {
   return {
     name: "",
@@ -144,5 +146,7 @@ export function getDefaultConfig() {
     retryAttempts: 1,
     corsOrigins: "",
     enabled: true,
+    authType: "none" as AuthType,
+    authCredentials: {} as Record<string, string>,
   };
 }
