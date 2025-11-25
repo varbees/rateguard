@@ -1,125 +1,100 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism";
-import { HOW_IT_WORKS_STEPS } from "@/lib/constants";
-import { fadeIn, slideIn, staggerContainer } from "@/lib/animations";
+import { Server, Shield, Database, Activity, ArrowRight } from "lucide-react";
 
-/**
- * How It Works Section
- * 3-step process with code examples
- */
+const steps = [
+  {
+    id: 1,
+    title: "Your Requests",
+    description: "API traffic hits our transparent proxy.",
+    icon: Activity,
+    color: "bg-blue-500",
+  },
+  {
+    id: 2,
+    title: "The Guard",
+    description: "5-tier rate limiting checks in <2ms.",
+    icon: Shield,
+    color: "bg-green-500",
+  },
+  {
+    id: 3,
+    title: "Billing & Analytics",
+    description: "Usage tracked, keys validated, bills calculated.",
+    icon: Database,
+    color: "bg-purple-500",
+  },
+  {
+    id: 4,
+    title: "Your Backend",
+    description: "Clean, safe traffic reaches your servers.",
+    icon: Server,
+    color: "bg-orange-500",
+  },
+];
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="py-24 bg-card/30">
-      <div className="container mx-auto px-4">
-        {/* Section Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-20"
-        >
-          <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
-            Get Started in Minutes
+    <section id="how-it-works" className="py-24 bg-muted/30">
+      <div className="container px-4 md:px-6">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
+            How RateGuard Works
           </h2>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Three simple steps to protect your API calls from rate limits
+          <p className="mt-4 text-muted-foreground md:text-xl">
+            Your requests, our proxy, 5-tier limits, encrypted keys, chill billing.
           </p>
-        </motion.div>
+        </div>
 
-        {/* Steps */}
-        <div className="max-w-6xl mx-auto space-y-24">
-          {HOW_IT_WORKS_STEPS.map((step, i) => {
-            const Icon = step.icon;
-            const isEven = i % 2 === 0;
+        <div className="relative">
+          {/* Connecting Line */}
+          <div className="absolute top-1/2 left-0 w-full h-1 bg-gradient-to-r from-transparent via-border to-transparent -translate-y-1/2 hidden md:block" />
 
-            return (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 relative z-10">
+            {steps.map((step, index) => (
               <motion.div
-                key={step.step}
-                variants={staggerContainer(0.2, 0)}
-                initial="hidden"
-                whileInView="show"
-                viewport={{ once: true, amount: 0.3 }}
-                className={`flex flex-col ${
-                  isEven ? "lg:flex-row" : "lg:flex-row-reverse"
-                } gap-12 items-center`}
+                key={step.id}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.2 }}
+                viewport={{ once: true }}
+                className="flex flex-col items-center text-center group"
               >
-                {/* Content */}
-                <motion.div
-                  variants={slideIn(isEven ? "right" : "left", "spring", 0.2)}
-                  className="flex-1"
-                >
-                  {/* Step number badge */}
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary to-chart-2 flex items-center justify-center text-foreground text-2xl font-bold shadow-lg">
-                      {step.step}
-                    </div>
-                    <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center">
-                      <Icon className="w-6 h-6 text-primary" />
-                    </div>
-                  </div>
-
-                  <h3 className="text-3xl font-bold text-foreground mb-4">
-                    {step.title}
-                  </h3>
-                  <p className="text-lg text-muted-foreground leading-relaxed">
-                    {step.description}
-                  </p>
-
-                  {/* Connection line (desktop only) */}
-                  {i < HOW_IT_WORKS_STEPS.length - 1 && (
-                    <div className="hidden lg:block mt-12">
-                      <div className="w-px h-24 bg-gradient-to-b from-slate-700 to-transparent mx-8" />
-                    </div>
-                  )}
-                </motion.div>
-
-                {/* Code Example */}
-                <motion.div
-                  variants={slideIn(isEven ? "left" : "right", "spring", 0.4)}
-                  className="flex-1 w-full"
-                >
-                  <div className="relative rounded-xl overflow-hidden border border-border shadow-2xl">
-                    {/* Code header */}
-                    <div className="bg-card px-4 py-3 flex items-center gap-2 border-b border-border">
-                      <div className="flex gap-2">
-                        <div className="w-3 h-3 rounded-full bg-red-500" />
-                        <div className="w-3 h-3 rounded-full bg-yellow-500" />
-                        <div className="w-3 h-3 rounded-full bg-green-500" />
-                      </div>
-                      <span className="text-xs text-slate-500 ml-2">
-                        {step.code.language}
-                      </span>
-                    </div>
-
-                    {/* Code content */}
-                    <div className="bg-[#1e1e1e]">
-                      <SyntaxHighlighter
-                        language={step.code.language}
-                        style={vscDarkPlus}
-                        customStyle={{
-                          margin: 0,
-                          padding: "1.5rem",
-                          background: "transparent",
-                          fontSize: "0.875rem",
-                        }}
-                        showLineNumbers={false}
-                      >
-                        {step.code.snippet}
-                      </SyntaxHighlighter>
-                    </div>
-
-                    {/* Glow effect */}
-                    <div className="absolute -inset-px rounded-xl bg-gradient-to-br from-primary/20 to-chart-2/20 opacity-50 blur-xl -z-10" />
-                  </div>
-                </motion.div>
+                <div className={`w-16 h-16 rounded-2xl ${step.color} bg-opacity-10 flex items-center justify-center mb-6 relative transition-transform group-hover:scale-110 duration-300 shadow-lg`}>
+                  <step.icon className={`w-8 h-8 text-white`} />
+                  <div className={`absolute inset-0 ${step.color} opacity-20 blur-xl rounded-full`} />
+                </div>
+                <h3 className="text-xl font-bold mb-2">{step.title}</h3>
+                <p className="text-muted-foreground">{step.description}</p>
               </motion.div>
-            );
-          })}
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-20 p-8 rounded-2xl border bg-card shadow-sm">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="space-y-4 flex-1">
+              <h3 className="text-2xl font-bold">Architecture That Scales</h3>
+              <p className="text-muted-foreground">
+                We built RateGuard on a distributed edge network. It's not just a proxy; 
+                it's a global shield for your API infrastructure.
+              </p>
+              <ul className="space-y-2">
+                {["Global Edge Network", "Sub-millisecond Latency", "99.99% Uptime SLA"].map((item) => (
+                  <li key={item} className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex-1 w-full h-64 bg-muted/50 rounded-xl flex items-center justify-center border border-dashed">
+              <span className="text-muted-foreground font-mono text-sm">
+                [Interactive Architecture Diagram Placeholder]
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </section>

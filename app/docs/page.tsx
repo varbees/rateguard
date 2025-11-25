@@ -1,5 +1,26 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import {
+  Shield,
+  Zap,
+  TrendingUp,
+  Layers,
+  Activity,
+  Globe,
+  CreditCard,
+  Lock,
+  BarChart,
+  ArrowRight,
+  BookOpen,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = {
   title: "Introduction | RateGuard Documentation",
@@ -8,62 +29,142 @@ export const metadata: Metadata = {
 
 export default function DocsIntroductionPage() {
   return (
-    <div className="prose prose-lg max-w-none prose-headings:text-foreground prose-p:text-foreground prose-li:text-foreground prose-a:text-primary hover:prose-a:text-primary/80 prose-strong:text-foreground prose-code:text-foreground">
-      <h1>Welcome to the RateGuard Documentation</h1>
-      <p>
-        This documentation provides a comprehensive guide to using and
-        integrating with RateGuard, our intelligent API rate limiting and proxy
-        service.
-      </p>
+    <div className="space-y-12">
+      {/* Hero Section */}
+      <div className="space-y-4">
+        <h1 className="text-4xl font-bold tracking-tight lg:text-5xl">
+          RateGuard Documentation
+        </h1>
+        <p className="text-xl text-muted-foreground max-w-3xl leading-relaxed">
+          Welcome to the comprehensive guide for RateGuard. Learn how to integrate,
+          configure, and optimize your API rate limiting and proxy service.
+        </p>
+        <div className="flex gap-4 pt-4">
+          <Button asChild size="lg">
+            <Link href="/docs/authentication">
+              Get Started <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="lg">
+            <Link href="/docs/api-reference">API Reference</Link>
+          </Button>
+        </div>
+      </div>
 
-      <h2>Getting Started</h2>
-      <p>
-        If you&apos;re new here, we recommend starting with the following
-        guides:
-      </p>
-      <ul>
-        <li>
-          <Link href="/docs/authentication">Authentication</Link>
-        </li>
-        <li>
-          <Link href="/docs/guides/rate-limiting">Rate Limiting Guide</Link>
-        </li>
-      </ul>
+      {/* Core Features Grid */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Link href="/docs/features/transparent-proxy">
+          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50">
+            <CardHeader>
+              <Activity className="h-8 w-8 text-primary mb-2" />
+              <CardTitle>Transparent Proxy</CardTitle>
+              <CardDescription>
+                Seamlessly forward requests with intelligent rate limiting and analytics.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
 
-      <h2>Features</h2>
-      <p>
-        Explore RateGuard&apos;s intelligent features that make API management
-        effortless:
-      </p>
-      <ul>
-        <li>
-          <Link href="/docs/features/transparent-proxy">
-            <strong>Transparent Proxy</strong>
-          </Link>{" "}
-          - Seamlessly forwards requests to upstream APIs with rate limiting and
-          analytics
-        </li>
-        <li>
-          <Link href="/docs/features/queue-management">
-            <strong>Queue Management</strong>
-          </Link>{" "}
-          - Automatically queues requests instead of rejecting them when rate
-          limits are hit
-        </li>
-        <li>
-          <Link href="/docs/features/rate-limit-discovery">
-            <strong>Rate Limit Discovery</strong>
-          </Link>{" "}
-          - Automatically learns API limits from 429 responses and provides
-          smart suggestions
-        </li>
-      </ul>
+        <Link href="/docs/features/rate-limit-discovery">
+          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50">
+            <CardHeader>
+              <TrendingUp className="h-8 w-8 text-primary mb-2" />
+              <CardTitle>Rate Limit Discovery</CardTitle>
+              <CardDescription>
+                Automatically learn and adapt to upstream API rate limits.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
 
-      <h2>API Reference</h2>
-      <p>
-        For detailed information about our API endpoints, please see the{" "}
-        <Link href="/docs/api-reference">API Reference</Link>.
-      </p>
+        <Link href="/docs/features/queue-management">
+          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50">
+            <CardHeader>
+              <Layers className="h-8 w-8 text-primary mb-2" />
+              <CardTitle>Queue Management</CardTitle>
+              <CardDescription>
+                Intelligent request queuing to prevent 429 errors and smooth traffic.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        <Link href="/docs/features/geo-currency">
+          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50">
+            <CardHeader>
+              <Globe className="h-8 w-8 text-primary mb-2" />
+              <CardTitle>Geo-Currency</CardTitle>
+              <CardDescription>
+                Automatic IP-based country and currency detection for localized pricing.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        <Link href="/docs/features/payment-gateways">
+          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50">
+            <CardHeader>
+              <CreditCard className="h-8 w-8 text-primary mb-2" />
+              <CardTitle>Payment Gateways</CardTitle>
+              <CardDescription>
+                Hybrid billing system with Razorpay (India) and Stripe (Global).
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        <Link href="/docs/features/plan-enforcement">
+          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50">
+            <CardHeader>
+              <Lock className="h-8 w-8 text-primary mb-2" />
+              <CardTitle>Plan Enforcement</CardTitle>
+              <CardDescription>
+                Strict enforcement of API limits, request quotas, and feature access.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+      </div>
+
+      {/* Getting Started Section */}
+      <div className="space-y-6">
+        <h2 className="text-3xl font-bold tracking-tight">Getting Started</h2>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card className="bg-muted/50 border-none">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-primary" />
+                <CardTitle className="text-xl">Authentication</CardTitle>
+              </div>
+              <CardDescription>
+                Secure your API requests with API keys and learn about our authentication methods.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="secondary" className="w-full justify-start">
+                <Link href="/docs/authentication">Read Authentication Guide</Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-muted/50 border-none">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-primary" />
+                <CardTitle className="text-xl">Rate Limiting Guide</CardTitle>
+              </div>
+              <CardDescription>
+                Understand how our multi-tier rate limiting works and how to configure it.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button asChild variant="secondary" className="w-full justify-start">
+                <Link href="/docs/guides/rate-limiting">Read Rate Limiting Guide</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

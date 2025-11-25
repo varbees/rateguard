@@ -232,6 +232,51 @@ export interface ResetPasswordRequest {
   password: string;
 }
 
+// Queue Types
+export interface QueuedRequest {
+  request_id: string;
+  target_api: string;
+  method: string;
+  path: string;
+  enqueued_at: string;
+  queued_for_ms: number;
+  position: number;
+  est_wait_time_ms: number;
+}
+
+export interface APIQueue {
+  api_name: string;
+  queued_requests: number;
+  avg_wait_time_ms: number;
+  rate_limit_hits_24h: number;
+}
+
+export interface QueueStats {
+  active_queues: number;
+  total_queued_requests: number;
+  longest_queued_time_ms: number;
+  avg_wait_time_ms: number;
+  peak_queue_length: number;
+  total_requests_queued_24h: number;
+  queued_by_api: APIQueue[];
+  timestamp: string;
+}
+
+export interface APIQueueConfig {
+  api_name: string;
+  enabled: boolean;
+  max_wait_time_ms: number;
+  max_queue_length: number;
+  priority: number;
+}
+
+export interface QueueConfig {
+  enabled: boolean;
+  max_wait_time_ms: number;
+  queueing_strategy: "fifo" | "priority" | "weighted";
+  per_api_settings: APIQueueConfig[];
+}
+
 // Custom API Error Class
 export class APIError extends Error {
   constructor(
@@ -305,15 +350,21 @@ class APIClient {
       if (
         response.status === 401 &&
         endpoint !== "/api/v1/auth/refresh" &&
-        endpoint !== "/api/v1/auth/login"
+        endpoint !== "/api/v1/auth/login" &&
+        endpoint !== "/api/v1/auth/me" // Don't auto-redirect when checking auth status
       ) {
         try {
           await this.refreshAccessToken();
           // Retry the original request
           return this.request<T>(endpoint, options);
         } catch {
-          // Refresh failed - redirect to login
-          if (typeof window !== "undefined") {
+          // Refresh failed - redirect to login ONLY from protected pages
+          const publicPaths = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/pricing', '/docs'];
+          const isPublicPage = typeof window !== "undefined" && publicPaths.some(path => 
+            window.location.pathname === path || window.location.pathname.startsWith('/docs')
+          );
+          
+          if (typeof window !== "undefined" && !isPublicPage && !window.location.pathname.startsWith("/login")) {
             window.location.href = "/login";
           }
           throw new APIError("Session expired. Please log in again.", 401);
@@ -516,6 +567,32 @@ class APIClient {
 
   async getRateLimitObservations(apiId: string): Promise<unknown[]> {
     return this.request(`/api/v1/apis/${apiId}/rate-limit/observations`);
+  }
+
+  // Queue API methods
+  async getQueueStats(): Promise<QueueStats> {
+    return this.request<QueueStats>("/api/v1/dashboard/queues");
+  }
+
+  async getActiveQueues(): Promise<QueuedRequest[]> {
+    return this.request<QueuedRequest[]>("/api/v1/dashboard/queues/active");
+  }
+
+  async getQueueConfig(): Promise<QueueConfig> {
+    return this.request<QueueConfig>("/api/v1/dashboard/queues/config");
+  }
+
+  async updateQueueConfig(config: QueueConfig): Promise<QueueConfig> {
+    return this.request<QueueConfig>("/api/v1/dashboard/queues/config", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    });
+  }
+
+  async cancelQueuedRequest(requestId: string): Promise<{ cancelled: boolean }> {
+    return this.request<{ cancelled: boolean }>(`/api/v1/dashboard/queues/${requestId}`, {
+      method: "DELETE",
+    });
   }
 
   // Proxy Request

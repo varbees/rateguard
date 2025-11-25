@@ -60,11 +60,11 @@ export function StreamingCostCalculator({
 
   return (
     <div
-      className={`bg-white rounded-lg border border-gray-200 p-6 ${className}`}
+      className={`bg-card rounded-lg border border-border p-6 ${className}`}
     >
       <div className="flex items-center gap-2 mb-6">
-        <Calculator className="w-5 h-5 text-blue-600" />
-        <h3 className="text-lg font-semibold text-gray-900">
+        <Calculator className="w-5 h-5 text-primary" />
+        <h3 className="text-lg font-semibold text-card-foreground">
           Streaming Cost Calculator
         </h3>
       </div>
@@ -75,7 +75,7 @@ export function StreamingCostCalculator({
         <div>
           <label
             htmlFor="monthlyStreams"
-            className="block text-sm font-medium text-gray-700 mb-2"
+            className="block text-sm font-medium text-muted-foreground mb-2"
           >
             Monthly Streams: {monthlyStreams.toLocaleString()}
           </label>
@@ -87,9 +87,9 @@ export function StreamingCostCalculator({
             step="1000"
             value={monthlyStreams}
             onChange={(e) => setMonthlyStreams(Number(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
           />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
+          <div className="flex justify-between text-xs text-muted-foreground mt-1">
             <span>0</span>
             <span>100k</span>
           </div>
@@ -99,7 +99,7 @@ export function StreamingCostCalculator({
         <div>
           <label
             htmlFor="avgResponse"
-            className="block text-sm font-medium text-gray-700 mb-2"
+            className="block text-sm font-medium text-muted-foreground mb-2"
           >
             Avg Response Size: {avgResponseKB} KB
           </label>
@@ -111,9 +111,9 @@ export function StreamingCostCalculator({
             step="10"
             value={avgResponseKB}
             onChange={(e) => setAvgResponseKB(Number(e.target.value))}
-            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+            className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer accent-primary"
           />
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
+          <div className="flex justify-between text-xs text-muted-foreground mt-1">
             <span>10 KB</span>
             <span>500 KB</span>
           </div>
@@ -121,7 +121,7 @@ export function StreamingCostCalculator({
 
         {/* Plan Selection */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-muted-foreground mb-2">
             Your Plan
           </label>
           <div className="grid grid-cols-3 gap-2">
@@ -131,8 +131,8 @@ export function StreamingCostCalculator({
                 onClick={() => setPlan(planType)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                   plan === planType
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-accent text-accent-foreground hover:bg-accent/80"
                 }`}
               >
                 {planType.charAt(0).toUpperCase() + planType.slice(1)}
@@ -143,66 +143,66 @@ export function StreamingCostCalculator({
       </div>
 
       {/* Results Section */}
-      <div className="border-t border-gray-200 pt-6 space-y-4">
-        <h4 className="text-sm font-semibold text-gray-900 mb-3">
+      <div className="border-t border-border pt-6 space-y-4">
+        <h4 className="text-sm font-semibold text-card-foreground mb-3">
           Estimated Monthly Cost
         </h4>
 
         {/* Breakdown */}
         <div className="space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Data Transferred:</span>
-            <span className="font-medium">
+            <span className="text-muted-foreground">Data Transferred:</span>
+            <span className="font-medium text-foreground">
               {calculations.totalGB} GB ({calculations.totalMB} MB)
             </span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">Bandwidth Cost:</span>
-            <span className="font-medium">${calculations.bandwidthCost}</span>
+            <span className="text-muted-foreground">Bandwidth Cost:</span>
+            <span className="font-medium text-foreground">${calculations.bandwidthCost}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-gray-600">RateGuard ({plan}):</span>
-            <span className="font-medium">${calculations.rateGuardCost}</span>
+            <span className="text-muted-foreground">RateGuard ({plan}):</span>
+            <span className="font-medium text-foreground">${calculations.rateGuardCost}</span>
           </div>
         </div>
 
         {/* Total Cost */}
-        <div className="flex justify-between items-center pt-3 border-t border-gray-200">
+        <div className="flex justify-between items-center pt-3 border-t border-border">
           <div className="flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-green-600" />
-            <span className="text-base font-semibold text-gray-900">
+            <DollarSign className="w-5 h-5 text-primary" />
+            <span className="text-base font-semibold text-card-foreground">
               Total Cost:
             </span>
           </div>
-          <span className="text-2xl font-bold text-green-600">
+          <span className="text-2xl font-bold text-primary">
             ${calculations.totalCost}
           </span>
         </div>
 
         {/* Cost per Stream */}
         <div className="flex justify-between text-sm">
-          <span className="text-gray-600">Cost per stream:</span>
-          <span className="font-medium">${calculations.costPerStream}</span>
+          <span className="text-muted-foreground">Cost per stream:</span>
+          <span className="font-medium text-foreground">${calculations.costPerStream}</span>
         </div>
 
         {/* Comparison */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+        <div className="bg-primary/10 border border-primary/20 rounded-lg p-4 mt-4">
           <div className="flex items-center gap-2 mb-2">
-            <TrendingDown className="w-4 h-4 text-blue-600" />
-            <h5 className="text-sm font-semibold text-blue-900">
+            <TrendingDown className="w-4 h-4 text-primary" />
+            <h5 className="text-sm font-semibold text-card-foreground">
               vs Self-Hosting
             </h5>
           </div>
           <div className="space-y-1 text-sm">
             <div className="flex justify-between">
-              <span className="text-blue-700">Self-hosting cost:</span>
-              <span className="font-medium text-blue-900">
+              <span className="text-foreground/80">Self-hosting cost:</span>
+              <span className="font-medium text-foreground">
                 ${calculations.selfHostingCost}/mo
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-blue-700">Your savings:</span>
-              <span className="font-medium text-blue-900">
+              <span className="text-foreground/80">Your savings:</span>
+              <span className="font-medium text-foreground">
                 ${calculations.savings} ({calculations.savingsPercent}%)
               </span>
             </div>
@@ -210,8 +210,8 @@ export function StreamingCostCalculator({
         </div>
 
         {/* Notes */}
-        <div className="bg-gray-50 rounded-lg p-3 mt-4">
-          <p className="text-xs text-gray-600">
+        <div className="bg-muted/50 rounded-lg p-3 mt-4">
+          <p className="text-xs text-muted-foreground">
             <strong>Note:</strong> Bandwidth costs are estimates based on
             industry averages ($0.10/GB). Actual costs may vary. Self-hosting
             comparison includes infrastructure, monitoring, and maintenance

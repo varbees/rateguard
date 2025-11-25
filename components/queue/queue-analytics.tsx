@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { QueueStats, APIQueue } from "@/lib/api/queue";
+import type { QueueStats, APIQueue } from "@/lib/api";
 import {
   BarChart,
   Bar,

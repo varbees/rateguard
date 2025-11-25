@@ -2,13 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -25,8 +23,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Loader2, Mail, Shield } from "lucide-react";
-import { apiClient } from "@/lib/api";
 import { handleApiError } from "@/lib/toast";
+import { useForgotPassword } from "@/lib/hooks/use-api";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address." }),
@@ -44,20 +42,19 @@ export default function ForgotPasswordPage() {
     },
   });
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: apiClient.requestPasswordReset,
-    onSuccess: () => {
-      setIsSuccess(true);
-    },
-    onError: (error: Error) => {
-      // The backend will return success even for non-existent emails
-      // to prevent email enumeration. We only show hard errors.
-      handleApiError(error, "Failed to send reset link");
-    },
-  });
+  const forgotPasswordMutation = useForgotPassword();
 
   const onSubmit = (values: ForgotPasswordFormValues) => {
-    mutate(values);
+    forgotPasswordMutation.mutate(values.email, {
+      onSuccess: () => {
+        setIsSuccess(true);
+      },
+      onError: (error: Error) => {
+        // The backend will return success even for non-existent emails
+        // to prevent email enumeration. We only show hard errors.
+        handleApiError(error, "Failed to send reset link");
+      },
+    });
   };
 
   return (
@@ -108,7 +105,7 @@ export default function ForgotPasswordPage() {
                             placeholder="you@example.com"
                             {...field}
                             className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
-                            disabled={isPending}
+                            disabled={forgotPasswordMutation.isPending}
                           />
                         </div>
                       </FormControl>
@@ -119,9 +116,9 @@ export default function ForgotPasswordPage() {
                 <Button
                   type="submit"
                   className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                  disabled={isPending}
+                  disabled={forgotPasswordMutation.isPending}
                 >
-                  {isPending ? (
+                  {forgotPasswordMutation.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Sending...

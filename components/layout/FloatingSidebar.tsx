@@ -55,9 +55,9 @@ const authNavItems = [
 ];
 
 export default function FloatingSidebar() {
-  const [isExpanded, setIsExpanded] = useState(true); // Open by default
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const { isAuthenticated, user, clearAuth } = useDashboardStore();
+  const { isAuthenticated, user, clearAuth, isSidebarCollapsed, toggleSidebar } = useDashboardStore();
+  const isExpanded = !isSidebarCollapsed;
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
@@ -305,7 +305,7 @@ export default function FloatingSidebar() {
           {/* Toggle Button */}
           <div className="p-2 border-b border-border/50">
             <Button
-              onClick={() => setIsExpanded(!isExpanded)}
+              onClick={() => toggleSidebar()}
               variant="ghost"
               size="sm"
               className="w-full h-8 justify-center p-0"

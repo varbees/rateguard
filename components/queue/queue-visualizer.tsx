@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { QueuedRequest, APIQueue } from "@/lib/api/queue";
+import type { QueuedRequest, APIQueue } from "@/lib/api";
 import {
   Card,
   CardContent,

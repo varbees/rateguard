@@ -508,6 +508,20 @@ export const handleApiError = (
         description: "The requested resource does not exist",
       });
     } else if (
+      error.message.includes("409") ||
+      error.message.includes("Conflict") ||
+      error.message.includes("already exists")
+    ) {
+      toast.error("❌ Email already registered", {
+        description: "An account with this email already exists. Please sign in instead.",
+        action: {
+          label: "Sign In",
+          onClick: () => {
+            window.location.href = "/login";
+          },
+        },
+      });
+    } else if (
       error.message.includes("429") ||
       error.message.includes("Rate limit")
     ) {

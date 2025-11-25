@@ -41,9 +41,17 @@ export function StreamingMetrics({
     return <MetricsError error={error} />;
   }
 
-  if (!data) {
-    return <MetricsEmpty />;
-  }
+  // Use default values if no data
+  const metrics = data || {
+    total_streams: 0,
+    active_streams: 0,
+    total_bytes: 0,
+    total_bytes_gb: 0,
+    avg_duration_ms: 0,
+    max_duration_ms: 0,
+    success_rate: 0,
+    streaming_enabled: false,
+  };
 
   return (
     <div
@@ -52,64 +60,64 @@ export function StreamingMetrics({
       {/* Total Streams */}
       <MetricCard
         title="Total Streams"
-        value={data.total_streams.toLocaleString()}
+        value={metrics.total_streams.toLocaleString()}
         icon={<Activity className="w-5 h-5" />}
-        iconColor="text-blue-600"
-        iconBg="bg-blue-50"
+        iconColor="text-primary"
+        iconBg="bg-primary/10"
         tooltip="Total number of streaming requests in the selected period"
       />
 
       {/* Active Streams */}
       <MetricCard
         title="Active Streams"
-        value={data.active_streams.toString()}
+        value={metrics.active_streams.toString()}
         icon={<Activity className="w-5 h-5 animate-pulse" />}
-        iconColor="text-green-600"
-        iconBg="bg-green-50"
+        iconColor="text-chart-4"
+        iconBg="bg-chart-4/20"
         tooltip="Currently active streaming connections"
-        pulse={data.active_streams > 0}
+        pulse={metrics.active_streams > 0}
       />
 
       {/* Data Transferred */}
       <MetricCard
         title="Data Transferred"
-        value={formatBytes(data.total_bytes)}
-        subValue={`${data.total_bytes_gb.toFixed(2)} GB`}
+        value={formatBytes(metrics.total_bytes)}
+        subValue={`${metrics.total_bytes_gb.toFixed(2)} GB`}
         icon={<Database className="w-5 h-5" />}
-        iconColor="text-purple-600"
-        iconBg="bg-purple-50"
+        iconColor="text-chart-3"
+        iconBg="bg-chart-3/20"
         tooltip="Total bytes transferred via streaming"
       />
 
       {/* Avg Duration */}
       <MetricCard
         title="Avg Duration"
-        value={formatDuration(data.avg_duration_ms)}
-        subValue={`Max: ${formatDuration(data.max_duration_ms)}`}
+        value={formatDuration(metrics.avg_duration_ms)}
+        subValue={`Max: ${formatDuration(metrics.max_duration_ms)}`}
         icon={<Clock className="w-5 h-5" />}
-        iconColor="text-orange-600"
-        iconBg="bg-orange-50"
+        iconColor="text-chart-5"
+        iconBg="bg-chart-5/20"
         tooltip="Average streaming request duration"
       />
 
       {/* Success Rate */}
       <MetricCard
         title="Success Rate"
-        value={`${data.success_rate.toFixed(1)}%`}
+        value={`${metrics.success_rate.toFixed(1)}%`}
         icon={<CheckCircle2 className="w-5 h-5" />}
         iconColor={
-          data.success_rate >= 99
-            ? "text-green-600"
-            : data.success_rate >= 95
-            ? "text-yellow-600"
-            : "text-red-600"
+          metrics.success_rate >= 99
+            ? "text-chart-4"
+            : metrics.success_rate >= 95
+            ? "text-chart-2"
+            : "text-destructive"
         }
         iconBg={
-          data.success_rate >= 99
-            ? "bg-green-50"
-            : data.success_rate >= 95
-            ? "bg-yellow-50"
-            : "bg-red-50"
+          metrics.success_rate >= 99
+            ? "bg-chart-4/20"
+            : metrics.success_rate >= 95
+            ? "bg-chart-2/20"
+            : "bg-destructive/20"
         }
         tooltip="Percentage of successful streaming requests"
       />
@@ -117,16 +125,16 @@ export function StreamingMetrics({
       {/* Streaming Status */}
       <MetricCard
         title="Streaming Status"
-        value={data.streaming_enabled ? "Enabled" : "Disabled"}
+        value={metrics.streaming_enabled ? "Enabled" : "Disabled"}
         icon={
-          data.streaming_enabled ? (
+          metrics.streaming_enabled ? (
             <CheckCircle2 className="w-5 h-5" />
           ) : (
             <AlertCircle className="w-5 h-5" />
           )
         }
-        iconColor={data.streaming_enabled ? "text-green-600" : "text-gray-400"}
-        iconBg={data.streaming_enabled ? "bg-green-50" : "bg-gray-50"}
+        iconColor={metrics.streaming_enabled ? "text-chart-4" : "text-muted-foreground"}
+        iconBg={metrics.streaming_enabled ? "bg-chart-4/20" : "bg-muted/50"}
         tooltip="Current streaming feature status"
       />
     </div>
@@ -155,24 +163,24 @@ function MetricCard({
   pulse = false,
 }: MetricCardProps) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 hover:shadow-lg hover:border-slate-700 transition-all">
+    <div className="bg-card border border-border rounded-lg p-6 hover:shadow-lg hover:border-border/80 transition-all">
       <div className="flex items-center justify-between">
         <div className="flex-1">
           <p
-            className="text-sm font-medium text-slate-400 mb-1"
+            className="text-sm font-medium text-muted-foreground mb-1"
             title={tooltip}
           >
             {title}
           </p>
           <p
-            className={`text-2xl font-bold text-white ${
+            className={`text-2xl font-bold text-card-foreground ${
               pulse ? "animate-pulse" : ""
             }`}
           >
             {value}
           </p>
           {subValue && (
-            <p className="text-xs text-slate-500 mt-1">{subValue}</p>
+            <p className="text-xs text-muted-foreground mt-1">{subValue}</p>
           )}
         </div>
         <div className={`${iconBg} ${iconColor} rounded-lg p-3`}>{icon}</div>
@@ -190,14 +198,14 @@ function MetricsSkeleton() {
       {[...Array(6)].map((_, i) => (
         <div
           key={i}
-          className="bg-slate-900 border border-slate-800 rounded-lg p-6 animate-pulse"
+          className="bg-card border border-border rounded-lg p-6 animate-pulse"
         >
           <div className="flex items-center justify-between">
             <div className="flex-1">
-              <div className="h-4 bg-slate-800 rounded w-24 mb-2"></div>
-              <div className="h-8 bg-slate-800 rounded w-16"></div>
+              <div className="h-4 bg-muted rounded w-24 mb-2"></div>
+              <div className="h-8 bg-muted rounded w-16"></div>
             </div>
-            <div className="w-12 h-12 bg-slate-800 rounded-lg"></div>
+            <div className="w-12 h-12 bg-muted rounded-lg"></div>
           </div>
         </div>
       ))}
@@ -207,14 +215,14 @@ function MetricsSkeleton() {
 
 function MetricsError({ error }: { error: Error }) {
   return (
-    <div className="bg-red-950/50 border border-red-900/50 rounded-lg p-6">
+    <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-6">
       <div className="flex items-center gap-3">
-        <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+        <AlertCircle className="w-5 h-5 text-destructive shrink-0" />
         <div>
-          <h3 className="font-semibold text-red-400">
+          <h3 className="font-semibold text-destructive">
             Failed to load streaming metrics
           </h3>
-          <p className="text-sm text-red-300/80 mt-1">{error.message}</p>
+          <p className="text-sm text-destructive/80 mt-1">{error.message}</p>
         </div>
       </div>
     </div>
@@ -223,12 +231,12 @@ function MetricsError({ error }: { error: Error }) {
 
 function MetricsEmpty() {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg p-12 text-center">
-      <Activity className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-      <h3 className="font-semibold text-slate-300 mb-2">
+    <div className="bg-card border border-border rounded-lg p-12 text-center">
+      <Activity className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+      <h3 className="font-semibold text-card-foreground mb-2">
         No Streaming Data Yet
       </h3>
-      <p className="text-sm text-slate-400">
+      <p className="text-sm text-muted-foreground">
         Start using streaming APIs to see metrics here
       </p>
     </div>

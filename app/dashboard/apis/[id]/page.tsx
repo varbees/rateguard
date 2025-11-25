@@ -28,6 +28,7 @@ import {
   Activity,
 } from "lucide-react";
 import { UsageProgressBar } from "@/components/dashboard/UsageProgressBar";
+import { useAPIConfig, useDashboardStats } from "@/lib/hooks/use-api";
 
 interface RateLimitSuggestion {
   api_id: string;
@@ -65,7 +66,7 @@ function RateLimitSuggestions({ apiId }: { apiId: string }) {
         title: "Success",
         description: "Rate limits updated successfully",
       });
-      queryClient.invalidateQueries({ queryKey: ["api", apiId] });
+      queryClient.invalidateQueries({ queryKey: ["apiConfigs", apiId] });
       queryClient.invalidateQueries({
         queryKey: ["rate-limit-suggestions", apiId],
       });
@@ -240,17 +241,10 @@ export default function APIDetailPage() {
   const router = useRouter();
   const apiId = params.id as string;
 
-  const { data: api, isLoading } = useQuery({
-    queryKey: ["api", apiId],
-    queryFn: () => apiClient.getAPIConfig(apiId),
-  });
+  const { data: api, isLoading } = useAPIConfig(apiId);
 
   // Fetch dashboard stats for usage percentages
-  const { data: dashboardStats } = useQuery({
-    queryKey: ["dashboard-stats"],
-    queryFn: () => apiClient.getDashboardStats(),
-    refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  const { data: dashboardStats } = useDashboardStats();
 
   if (isLoading) {
     return (
@@ -329,17 +323,17 @@ export default function APIDetailPage() {
             {/* Daily Usage */}
             <UsageProgressBar
               label="Daily Requests"
-              current={dashboardStats.requests_today}
+              current={dashboardStats.stats.requests_today}
               limit={api.rate_limit_per_day}
-              percentage={dashboardStats.usage_percentages.daily_pct}
+              percentage={dashboardStats.stats.usage_percentages.daily_pct}
               resetTime={new Date(new Date().setHours(23, 59, 59, 999))}
             />
             {/* Monthly Usage */}
             <UsageProgressBar
               label="Monthly Requests"
-              current={dashboardStats.monthly_usage}
-              limit={dashboardStats.plan_limit}
-              percentage={dashboardStats.usage_percentages.monthly_pct}
+              current={dashboardStats.stats.monthly_usage}
+              limit={dashboardStats.stats.plan_limit}
+              percentage={dashboardStats.stats.usage_percentages.monthly_pct}
               resetTime={
                 new Date(
                   new Date().getFullYear(),

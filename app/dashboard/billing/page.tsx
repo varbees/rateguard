@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AlertCircle } from "lucide-react";
-import { apiClient } from "@/lib/api";
+import { useDashboardStats } from "@/lib/hooks/use-api";
 import { CurrentPlanCard } from "@/components/billing/CurrentPlanCard";
 import { PlanComparisonCards } from "@/components/billing/PlanComparisonCards";
 
@@ -15,11 +15,7 @@ export default function BillingPage() {
     data: dashboardData,
     isLoading,
     error,
-  } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => apiClient.getDashboardStats(),
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
+  } = useDashboardStats();
 
   const plan = dashboardData?.plan;
   const stats = dashboardData?.stats;

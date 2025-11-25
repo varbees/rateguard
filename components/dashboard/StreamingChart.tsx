@@ -75,12 +75,12 @@ export function StreamingHistoryChart({
 
   return (
     <div
-      className={`bg-white rounded-lg border border-gray-200 p-6 ${className}`}
+      className={`bg-card rounded-lg border border-border p-6 ${className}`}
     >
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <TrendingUp className="w-5 h-5 text-blue-600" />
-          <h3 className="text-lg font-semibold text-gray-900">
+          <TrendingUp className="w-5 h-5 text-primary" />
+          <h3 className="text-lg font-semibold text-card-foreground">
             Streaming Activity Over Time
           </h3>
         </div>
@@ -163,12 +163,12 @@ export function StreamingByAPIChart({
 
   return (
     <div
-      className={`bg-white rounded-lg border border-gray-200 p-6 ${className}`}
+      className={`bg-card rounded-lg border border-border p-6 ${className}`}
     >
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <Database className="w-5 h-5 text-purple-600" />
-          <h3 className="text-lg font-semibold text-gray-900">
+          <Database className="w-5 h-5 text-chart-3" />
+          <h3 className="text-lg font-semibold text-card-foreground">
             Bytes Transferred per API
           </h3>
         </div>
@@ -254,12 +254,12 @@ export function StreamingDurationChart({
 
   return (
     <div
-      className={`bg-white rounded-lg border border-gray-200 p-6 ${className}`}
+      className={`bg-card rounded-lg border border-border p-6 ${className}`}
     >
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
-          <Clock className="w-5 h-5 text-orange-600" />
-          <h3 className="text-lg font-semibold text-gray-900">
+          <Clock className="w-5 h-5 text-chart-5" />
+          <h3 className="text-lg font-semibold text-card-foreground">
             Average Stream Duration
           </h3>
         </div>
@@ -309,19 +309,19 @@ export function StreamingDurationChart({
 
 function ChartSkeleton({ title }: { title: string }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <div className="h-6 bg-gray-200 rounded w-48 mb-6 animate-pulse"></div>
-      <div className="h-[300px] bg-gray-100 rounded animate-pulse"></div>
+    <div className="bg-card rounded-lg border border-border p-6">
+      <div className="h-6 bg-muted rounded w-48 mb-6 animate-pulse"></div>
+      <div className="h-[300px] bg-muted/50 rounded animate-pulse"></div>
     </div>
   );
 }
 
 function ChartError({ title, error }: { title: string; error: Error }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <p className="text-sm text-red-700">{error.message}</p>
+    <div className="bg-card rounded-lg border border-border p-6">
+      <h3 className="text-lg font-semibold text-card-foreground mb-4">{title}</h3>
+      <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+        <p className="text-sm text-destructive">{error.message}</p>
       </div>
     </div>
   );
@@ -329,10 +329,10 @@ function ChartError({ title, error }: { title: string; error: Error }) {
 
 function ChartEmpty({ title, message }: { title: string; message: string }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">{title}</h3>
-      <div className="h-[300px] flex items-center justify-center bg-gray-50 rounded-lg">
-        <p className="text-sm text-gray-600">{message}</p>
+    <div className="bg-card rounded-lg border border-border p-6">
+      <h3 className="text-lg font-semibold text-card-foreground mb-4">{title}</h3>
+      <div className="h-[300px] flex items-center justify-center bg-muted/30 rounded-lg">
+        <p className="text-sm text-muted-foreground">{message}</p>
       </div>
     </div>
   );

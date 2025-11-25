@@ -30,8 +30,8 @@ const metrics = [
     icon: Activity,
     key: "totalRequests24h" as keyof MetricData,
     format: (value: number) => value.toLocaleString(),
-    color: "text-blue-600",
-    bgColor: "bg-blue-50 dark:bg-blue-950",
+    color: "text-primary",
+    bgColor: "bg-primary/10",
     tooltip: "Total number of API requests in the last 24 hours",
   },
   {
@@ -40,13 +40,13 @@ const metrics = [
     icon: TrendingUp,
     key: "successRate" as keyof MetricData,
     format: (value: number) => `${value.toFixed(1)}%`,
-    color: "text-green-600",
-    bgColor: "bg-green-50 dark:bg-green-950",
+    color: "text-chart-4",
+    bgColor: "bg-chart-4/20",
     tooltip: "Percentage of successful API requests (HTTP 2xx responses)",
     getStatusColor: (value: number) => {
-      if (value >= 95) return "text-green-600";
-      if (value >= 80) return "text-yellow-600";
-      return "text-red-600";
+      if (value >= 95) return "text-chart-4";
+      if (value >= 80) return "text-chart-2";
+      return "text-destructive";
     },
   },
   {
@@ -55,8 +55,8 @@ const metrics = [
     icon: Zap,
     key: "activeApis" as keyof MetricData,
     format: (value: number) => value.toString(),
-    color: "text-purple-600",
-    bgColor: "bg-purple-50 dark:bg-purple-950",
+    color: "text-chart-3",
+    bgColor: "bg-chart-3/20",
     tooltip: "Number of API configurations that are currently active",
   },
   {
@@ -65,13 +65,13 @@ const metrics = [
     icon: Clock,
     key: "avgResponseTime" as keyof MetricData,
     format: (value: number) => `${value}ms`,
-    color: "text-orange-600",
-    bgColor: "bg-orange-50 dark:bg-orange-950",
+    color: "text-chart-5",
+    bgColor: "bg-chart-5/20",
     tooltip: "Average response time across all API requests",
     getStatusColor: (value: number) => {
-      if (value <= 200) return "text-green-600";
-      if (value <= 500) return "text-yellow-600";
-      return "text-red-600";
+      if (value <= 200) return "text-chart-4";
+      if (value <= 500) return "text-chart-2";
+      return "text-destructive";
     },
   },
 ];

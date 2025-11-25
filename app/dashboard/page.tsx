@@ -4,7 +4,14 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useDashboardStore } from "@/lib/store";
-import { apiClient, DashboardStats, APIConfig } from "@/lib/api";
+import { apiClient, APIConfig } from "@/lib/api";
+import {
+  useDashboardStats,
+  useAPIConfigs,
+  useUpdateAPIConfig,
+  useDeleteAPIConfig,
+  useLogout,
+} from "@/lib/hooks/use-api";
 import {
   MetricCards,
   UsageGraphSection,
@@ -54,55 +61,53 @@ function generateMockRequests() {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, clearAuth } = useDashboardStore();
+  const { clearAuth } = useDashboardStore();
 
-  const [stats, setStats] = React.useState<DashboardStats | null>(null);
-  const [apiList, setApiList] = React.useState<APIConfig[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  // Data Fetching Hooks
+  const { 
+    data: stats, 
+    isLoading: statsLoading, 
+    error: statsError,
+    refetch: refetchStats 
+  } = useDashboardStats();
+
+  const { 
+    data: apiList = [], 
+    isLoading: apisLoading, 
+    error: apisError,
+    refetch: refetchApis 
+  } = useAPIConfigs();
+
+  // Mutation Hooks
+  const updateApiMutation = useUpdateAPIConfig();
+  const deleteApiMutation = useDeleteAPIConfig();
+  const logoutMutation = useLogout();
+
   const [usageData, setUsageData] = React.useState(generateMockUsageData());
   const [recentRequests, setRecentRequests] = React.useState(
     generateMockRequests()
   );
 
-  const fetchDashboardData = React.useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Fetch stats using API client
-      const statsData = await apiClient.getDashboardStats();
-      setStats(statsData);
-
-      // Fetch API list using API client
-      const apisData = await apiClient.listAPIConfigs();
-      setApiList(apisData);
-    } catch (err) {
-      console.error("Error fetching dashboard data:", err);
-      setError(err instanceof Error ? err.message : "An error occurred");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    fetchDashboardData();
-  }, [fetchDashboardData]);
+  const loading = statsLoading || apisLoading;
+  const error = statsError || apisError;
 
   const handleLogout = async () => {
-    try {
-      await apiClient.logout();
-      clearAuth();
-      window.location.href = "/login";
-    } catch (error) {
-      console.error("Logout failed:", error);
-      // Force redirect even if logout fails
-      window.location.href = "/login";
-    }
+    logoutMutation.mutate(undefined, {
+      onSuccess: () => {
+        clearAuth();
+        window.location.href = "/login";
+      },
+      onError: (error) => {
+        console.error("Logout failed:", error);
+        // Force redirect even if logout fails
+        window.location.href = "/login";
+      },
+    });
   };
 
   const handleRefreshData = () => {
-    fetchDashboardData();
+    refetchStats();
+    refetchApis();
     setUsageData(generateMockUsageData());
     setRecentRequests(generateMockRequests());
   };
@@ -119,23 +124,16 @@ export default function DashboardPage() {
     router.push(`/dashboard/apis/${api.id}`);
   };
 
-  const handleToggleStatus = async (api: APIConfig) => {
-    try {
-      await apiClient.updateAPIConfig(api.id, { enabled: !api.enabled });
-      await fetchDashboardData(); // Refresh data
-    } catch (err) {
-      console.error("Failed to toggle API status:", err);
-    }
+  const handleToggleStatus = (api: APIConfig) => {
+    updateApiMutation.mutate({ 
+      id: api.id, 
+      data: { enabled: !api.enabled } 
+    });
   };
 
-  const handleDeleteAPI = async (api: APIConfig) => {
+  const handleDeleteAPI = (api: APIConfig) => {
     if (confirm(`Are you sure you want to delete ${api.name}?`)) {
-      try {
-        await apiClient.deleteAPIConfig(api.id);
-        await fetchDashboardData(); // Refresh data
-      } catch (err) {
-        console.error("Failed to delete API:", err);
-      }
+      deleteApiMutation.mutate(api.id);
     }
   };
 
@@ -156,10 +154,10 @@ export default function DashboardPage() {
   // Transform stats for MetricCards
   const metricData = stats
     ? {
-        totalRequests24h: stats.total_requests || 0,
-        successRate: stats.success_rate || 0,
-        activeApis: stats.active_apis || apiList.length,
-        avgResponseTime: stats.avg_response_time_ms || 0,
+        totalRequests24h: stats.stats.total_requests || 0,
+        successRate: stats.stats.success_rate || 0,
+        activeApis: stats.stats.active_apis || apiList.length,
+        avgResponseTime: stats.stats.avg_response_time_ms || 0,
       }
     : null;
 
@@ -170,8 +168,10 @@ export default function DashboardPage() {
           <div className="text-destructive text-xl font-semibold">
             Error Loading Dashboard
           </div>
-          <p className="text-muted-foreground">{error}</p>
-          <Button onClick={fetchDashboardData} className="gap-2">
+          <p className="text-muted-foreground">
+            {error instanceof Error ? error.message : "An error occurred"}
+          </p>
+          <Button onClick={handleRefreshData} className="gap-2">
             Retry
           </Button>
         </div>

@@ -24,7 +24,11 @@ import {
 import { DeleteDialog } from "@/components/api-form/DeleteDialog";
 import { ArrowLeft, Save, Upload, Download, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiClient } from "@/lib/api";
+import { 
+  useAPIConfig, 
+  useUpdateAPIConfig, 
+  useDeleteAPIConfig 
+} from "@/lib/hooks/use-api";
 
 export default function EditAPIPage() {
   const params = useParams();
@@ -35,47 +39,45 @@ export default function EditAPIPage() {
   // Form state
   const [formData, setFormData] = React.useState(getDefaultConfig());
   const [errors, setErrors] = React.useState<Record<string, string>>({});
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  // Hooks
+  const { data: api, isLoading, error } = useAPIConfig(apiId);
+  const updateMutation = useUpdateAPIConfig();
+  const deleteMutation = useDeleteAPIConfig();
 
   // Load existing API config
   React.useEffect(() => {
-    async function loadAPI() {
-      try {
-        const api = await apiClient.getAPIConfig(apiId);
-
-        setFormData({
-          name: api.name,
-          targetUrl: api.target_url,
-          description: api.custom_headers?.description || "",
-          perSecond: api.rate_limit_per_second,
-          burst: api.burst_size,
-          perHour: api.rate_limit_per_hour,
-          perDay: api.rate_limit_per_day,
-          perMonth: api.rate_limit_per_month || 0,
-          timeoutSeconds: api.timeout_seconds,
-          retryAttempts: api.retry_attempts,
-          corsOrigins: api.allowed_origins?.join("\n") || "",
-          enabled: api.enabled,
-          authType: api.auth_type || "none",
-          authCredentials: api.auth_credentials || {},
-        });
-      } catch {
-        toast({
-          title: "Failed to load API",
-          description: "Could not find the API configuration.",
-          variant: "destructive",
-        });
-        router.push("/dashboard/apis");
-      } finally {
-        setIsLoading(false);
-      }
+    if (api) {
+      setFormData({
+        name: api.name,
+        targetUrl: api.target_url,
+        description: api.custom_headers?.description || "",
+        perSecond: api.rate_limit_per_second,
+        burst: api.burst_size,
+        perHour: api.rate_limit_per_hour,
+        perDay: api.rate_limit_per_day,
+        perMonth: api.rate_limit_per_month || 0,
+        timeoutSeconds: api.timeout_seconds,
+        retryAttempts: api.retry_attempts,
+        corsOrigins: api.allowed_origins?.join("\n") || "",
+        enabled: api.enabled,
+        authType: api.auth_type || "none",
+        authCredentials: api.auth_credentials || {},
+      });
     }
+  }, [api]);
 
-    loadAPI();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiId]);
+  // Handle error
+  React.useEffect(() => {
+    if (error) {
+      toast({
+        title: "Failed to load API",
+        description: "Could not find the API configuration.",
+        variant: "destructive",
+      });
+      router.push("/dashboard/apis");
+    }
+  }, [error, router, toast]);
 
   // Memoize onChange handlers to prevent infinite re-renders
   const handlePerSecondChange = React.useCallback(
@@ -179,7 +181,7 @@ export default function EditAPIPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleUpdate = async () => {
+  const handleUpdate = () => {
     if (!validateForm()) {
       toast({
         title: "Validation failed",
@@ -189,70 +191,72 @@ export default function EditAPIPage() {
       return;
     }
 
-    setIsSaving(true);
-
-    try {
-      await apiClient.updateAPIConfig(apiId, {
-        name: formData.name,
-        target_url: formData.targetUrl,
-        rate_limit_per_second: formData.perSecond,
-        burst_size: formData.burst,
-        rate_limit_per_hour: formData.perHour,
-        rate_limit_per_day: formData.perDay,
-        rate_limit_per_month: formData.perMonth,
-        timeout_seconds: formData.timeoutSeconds,
-        retry_attempts: formData.retryAttempts,
-        allowed_origins: formData.corsOrigins
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        enabled: formData.enabled,
-        auth_type: formData.authType,
-        auth_credentials:
-          Object.keys(formData.authCredentials).length > 0
-            ? formData.authCredentials
+    updateMutation.mutate(
+      {
+        id: apiId,
+        data: {
+          name: formData.name,
+          target_url: formData.targetUrl,
+          rate_limit_per_second: formData.perSecond,
+          burst_size: formData.burst,
+          rate_limit_per_hour: formData.perHour,
+          rate_limit_per_day: formData.perDay,
+          rate_limit_per_month: formData.perMonth,
+          timeout_seconds: formData.timeoutSeconds,
+          retry_attempts: formData.retryAttempts,
+          allowed_origins: formData.corsOrigins
+            .split("\n")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          enabled: formData.enabled,
+          auth_type: formData.authType,
+          auth_credentials:
+            Object.keys(formData.authCredentials).length > 0
+              ? formData.authCredentials
+              : undefined,
+          custom_headers: formData.description
+            ? { description: formData.description }
             : undefined,
-        custom_headers: formData.description
-          ? { description: formData.description }
-          : undefined,
-      });
-
-      toast({
-        title: "API updated successfully!",
-        description: `${formData.name} has been updated.`,
-      });
-      router.push("/dashboard/apis");
-    } catch (error) {
-      toast({
-        title: "Failed to update API",
-        description:
-          error instanceof Error ? error.message : "An error occurred",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
-    }
+        },
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: "API updated successfully!",
+            description: `${formData.name} has been updated.`,
+          });
+          router.push("/dashboard/apis");
+        },
+        onError: (error) => {
+          toast({
+            title: "Failed to update API",
+            description:
+              error instanceof Error ? error.message : "An error occurred",
+            variant: "destructive",
+          });
+        },
+      }
+    );
   };
 
-  const handleDelete = async () => {
-    setIsDeleting(true);
-
-    try {
-      await apiClient.deleteAPIConfig(apiId);
-      toast({
-        title: "API deleted successfully",
-        description: `${formData.name} has been removed.`,
-      });
-      router.push("/dashboard/apis");
-    } catch (error) {
-      toast({
-        title: "Failed to delete API",
-        description:
-          error instanceof Error ? error.message : "An error occurred",
-        variant: "destructive",
-      });
-      setIsDeleting(false);
-    }
+  const handleDelete = () => {
+    deleteMutation.mutate(apiId, {
+      onSuccess: () => {
+        toast({
+          title: "API deleted successfully",
+          description: `${formData.name} has been removed.`,
+        });
+        router.push("/dashboard/apis");
+      },
+      onError: (error) => {
+        toast({
+          title: "Failed to delete API",
+          description:
+            error instanceof Error ? error.message : "An error occurred",
+          variant: "destructive",
+        });
+      },
+    });
   };
 
   if (isLoading) {
@@ -330,15 +334,15 @@ export default function EditAPIPage() {
             <DeleteDialog
               apiName={formData.name}
               onConfirm={handleDelete}
-              isDeleting={isDeleting}
+              isDeleting={deleteMutation.isPending}
             />
             <Button
               onClick={handleUpdate}
-              disabled={isSaving}
+              disabled={updateMutation.isPending}
               className="gap-2"
             >
               <Save className="size-4" />
-              {isSaving ? "Updating..." : "Update API"}
+              {updateMutation.isPending ? "Updating..." : "Update API"}
             </Button>
           </div>
         </div>

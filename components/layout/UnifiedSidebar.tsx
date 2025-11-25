@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useDashboardStore } from "@/lib/store";
+import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import {
@@ -14,14 +15,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  LayoutDashboard,
+  LayoutGrid,
   Settings,
   CreditCard,
   LogOut,
-  Activity,
+  Server,
   BarChart3,
-  ChevronLeft,
-  ChevronRight,
   Menu,
   ShieldCheck,
   LogIn,
@@ -29,15 +28,25 @@ import {
   BookOpen,
   Moon,
   Sun,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Zap,
+  PieChart,
+  Activity,
+  List,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
+import { motion, AnimatePresence } from "framer-motion";
 
 const loggedInNavItems = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { title: "APIs", href: "/dashboard/apis", icon: Activity },
-  { title: "Usage", href: "/dashboard/usage", icon: BarChart3 },
-  { title: "Streaming", href: "/dashboard/streaming", icon: Activity },
+  { title: "Dashboard", href: "/dashboard", icon: LayoutGrid },
+  { title: "APIs", href: "/dashboard/apis", icon: Server },
+  { title: "Usage", href: "/dashboard/usage", icon: Activity },
+  { title: "Queues", href: "/dashboard/queues", icon: List },
+  { title: "Streaming", href: "/dashboard/streaming", icon: Zap },
+  { title: "Analytics", href: "/dashboard/analytics", icon: PieChart },
   { title: "Billing", href: "/dashboard/billing", icon: CreditCard },
 ];
 
@@ -51,17 +60,32 @@ const loggedOutNavItems = [
 ];
 
 export default function UnifiedSidebar() {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { 
+    isAuthenticated, 
+    user, 
+    clearAuth, 
+    isSidebarCollapsed, 
+    toggleSidebar 
+  } = useDashboardStore();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-
-  const { isAuthenticated, user, clearAuth } = useDashboardStore();
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
 
-  const handleLogout = () => {
-    clearAuth();
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      // Call backend logout to clear JWT cookie
+      await apiClient.logout();
+      // Clear frontend state
+      clearAuth();
+      // Redirect to landing page
+      router.push("/");
+    } catch (error) {
+      console.error("Logout failed:", error);
+      // Even if backend logout fails, clear frontend state
+      clearAuth();
+      router.push("/");
+    }
   };
 
   const NavLink = ({
@@ -73,387 +97,279 @@ export default function UnifiedSidebar() {
     const isActive =
       pathname === item.href ||
       (item.href !== "/dashboard" && pathname.startsWith(item.href));
+    
     return (
-      <Link href={item.href} onClick={() => setIsSheetOpen(false)}>
+      <Link href={item.href} onClick={() => setIsSheetOpen(false)} className="block w-full">
         <div
           className={cn(
-            "flex items-center gap-3 px-4 py-3 rounded-lg transition-colors",
+            "flex items-center gap-3 px-2 py-2 rounded-md transition-all duration-200 group relative overflow-hidden",
             isActive
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+            isSidebarCollapsed ? "justify-center" : "justify-start"
           )}
         >
-          <Icon className="w-5 h-5 shrink-0" />
-          {!isCollapsed && (
-            <span className="font-medium truncate">{item.title}</span>
+          <Icon className={cn("w-5 h-5 shrink-0 transition-transform duration-200", isActive && "scale-110")} />
+          
+          <AnimatePresence mode="wait">
+            {!isSidebarCollapsed && (
+              <motion.span
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+                className="font-medium truncate whitespace-nowrap text-sm"
+              >
+                {item.title}
+              </motion.span>
+            )}
+          </AnimatePresence>
+          
+          {isActive && (
+             <motion.div
+                layoutId="active-nav-indicator"
+                className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+             />
           )}
         </div>
       </Link>
     );
   };
 
-  const CollapsedNavLink = ({
-    item,
-  }: {
-    item: { title: string; href: string; icon: React.ElementType };
-  }) => {
-    const Icon = item.icon;
-    const isActive =
-      pathname === item.href ||
-      (item.href !== "/dashboard" && pathname.startsWith(item.href));
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Link href={item.href}>
-            <div
-              className={cn(
-                "flex items-center justify-center h-12 w-12 rounded-lg transition-colors mx-auto",
-                isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-              )}
-            >
-              <Icon className="w-5 h-5" />
-            </div>
-          </Link>
-        </TooltipTrigger>
-        <TooltipContent
-          side="right"
-          className="bg-popover text-popover-foreground border-border"
-        >
-          <p>{item.title}</p>
-        </TooltipContent>
-      </Tooltip>
-    );
-  };
-
-  const sidebarContent = (
-    <div className="flex flex-col h-full bg-sidebar">
-      {/* Logo */}
-      <div className="p-4 border-b border-sidebar-border flex items-center justify-between">
-        <div
-          className={cn("flex items-center gap-2", isCollapsed && "mx-auto")}
-        >
-          <div className="p-2 bg-sidebar-primary rounded-lg">
-            <ShieldCheck className="w-5 h-5 text-sidebar-primary-foreground" />
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full w-full">
+      {/* Header */}
+      <div className={cn("h-14 flex items-center border-b border-white/10", isSidebarCollapsed ? "justify-center px-0" : "justify-between px-3")}>
+        {!isSidebarCollapsed && (
+           <motion.div
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="flex items-center gap-2 overflow-hidden"
+           >
+             <div className="p-1 bg-primary/20 rounded-md">
+                <ShieldCheck className="w-5 h-5 text-primary" />
+             </div>
+             <span className="font-bold text-base tracking-tight truncate">RateGuard</span>
+           </motion.div>
+        )}
+        {isSidebarCollapsed && (
+          <div className="p-1 bg-primary/20 rounded-md">
+             <ShieldCheck className="w-5 h-5 text-primary" />
           </div>
-          {!isCollapsed && (
-            <h1 className="text-xl font-bold text-sidebar-foreground">
-              RateGuard
-            </h1>
-          )}
-        </div>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-none">
         <TooltipProvider delayDuration={0}>
           {isAuthenticated
-            ? loggedInNavItems.map((item) =>
-                isCollapsed ? (
-                  <CollapsedNavLink key={item.href} item={item} />
+            ? loggedInNavItems.map((item) => (
+                isSidebarCollapsed ? (
+                   <Tooltip key={item.href}>
+                    <TooltipTrigger asChild>
+                      <div>
+                         <NavLink item={item} />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="bg-popover text-popover-foreground border-border font-medium ml-2">
+                      {item.title}
+                    </TooltipContent>
+                  </Tooltip>
                 ) : (
                   <NavLink key={item.href} item={item} />
                 )
-              )
-            : loggedOutNavItems.map((item) =>
-                isCollapsed ? (
-                  <CollapsedNavLink key={item.href} item={item} />
+              ))
+            : loggedOutNavItems.map((item) => (
+                isSidebarCollapsed ? (
+                   <Tooltip key={item.href}>
+                    <TooltipTrigger asChild>
+                       <div>
+                         <NavLink item={item} />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="bg-popover text-popover-foreground border-border font-medium ml-2">
+                      {item.title}
+                    </TooltipContent>
+                  </Tooltip>
                 ) : (
                   <NavLink key={item.href} item={item} />
                 )
-              )}
-          <div className="!mt-4 border-t border-sidebar-border my-2 pt-2">
-            {docsNavItems.map((item) =>
-              isCollapsed ? (
-                <CollapsedNavLink key={item.href} item={item} />
-              ) : (
-                <NavLink key={item.href} item={item} />
-              )
-            )}
-          </div>
+              ))}
+
+          <div className="my-2 border-t border-white/10 mx-2" />
+
+          {docsNavItems.map((item) => (
+             isSidebarCollapsed ? (
+                <Tooltip key={item.href}>
+                 <TooltipTrigger asChild>
+                    <div>
+                      <NavLink item={item} />
+                   </div>
+                 </TooltipTrigger>
+                 <TooltipContent side="right" className="bg-popover text-popover-foreground border-border font-medium ml-2">
+                   {item.title}
+                 </TooltipContent>
+               </Tooltip>
+             ) : (
+               <NavLink key={item.href} item={item} />
+             )
+          ))}
         </TooltipProvider>
       </nav>
 
-      {/* Theme Toggle */}
-      <div className="p-3 border-t border-sidebar-border">
-        {isCollapsed ? (
-          <TooltipProvider delayDuration={0}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-12 w-12 mx-auto text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent"
-                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-                  aria-label="Toggle theme"
-                >
-                  {theme === "dark" ? (
-                    <Sun className="w-5 h-5" />
-                  ) : (
-                    <Moon className="w-5 h-5" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent
-                side="right"
-                className="bg-popover text-popover-foreground border-border"
-              >
-                <p>{theme === "dark" ? "Light Mode" : "Dark Mode"}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent"
-            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-          >
-            {theme === "dark" ? (
-              <>
-                <Sun className="w-5 h-5 mr-3" /> Light Mode
-              </>
-            ) : (
-              <>
-                <Moon className="w-5 h-5 mr-3" /> Dark Mode
-              </>
-            )}
-          </Button>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="p-3 border-t border-sidebar-border">
-        {isAuthenticated && (
-          <TooltipProvider delayDuration={0}>
-            <div
-              className={cn(
-                "flex items-center gap-3 px-2 py-2",
-                isCollapsed && "justify-center"
-              )}
-            >
-              <Link href="/dashboard/settings">
-                <Image
-                  src={`https://api.dicebear.com/7.x/initials/svg?seed=${
-                    user?.email || "U"
-                  }`}
-                  width={32}
-                  height={32}
-                  alt="User Avatar"
-                  className="w-8 h-8 rounded-full border-2 border-sidebar-border"
-                />
-              </Link>
-              {!isCollapsed && (
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium text-sidebar-foreground truncate">
-                    {user?.email}
-                  </span>
-                </div>
-              )}
-            </div>
-          </TooltipProvider>
-        )}
-        {isCollapsed ? (
-          <TooltipProvider delayDuration={0}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-12 w-12 mx-auto text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent mt-2"
-                  onClick={
-                    isAuthenticated ? handleLogout : () => router.push("/login")
-                  }
-                  aria-label={isAuthenticated ? "Logout" : "Login"}
-                >
-                  {isAuthenticated ? (
-                    <LogOut className="w-5 h-5" />
-                  ) : (
-                    <LogIn className="w-5 h-5" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent
-                side="right"
-                className="bg-popover text-popover-foreground border-border"
-              >
-                <p>{isAuthenticated ? "Logout" : "Login"}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          <Button
-            variant="ghost"
-            className="w-full justify-start text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent mt-2"
-            onClick={
-              isAuthenticated ? handleLogout : () => router.push("/login")
-            }
-          >
-            {isAuthenticated ? (
-              <>
-                <LogOut className="w-5 h-5 mr-3" /> Logout
-              </>
-            ) : (
-              <>
-                <LogIn className="w-5 h-5 mr-3" /> Login
-              </>
-            )}
-          </Button>
-        )}
-      </div>
-      {/* Toggle Button */}
-      <div className="p-2 border-t border-sidebar-border">
+      {/* Footer Actions */}
+      <div className="p-2 border-t border-white/10 space-y-1">
+        {/* Toggle Button */}
         <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="h-10 w-10 text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent mx-auto block"
-          aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className="w-full h-9 text-muted-foreground hover:text-foreground hover:bg-white/5"
+            title={isSidebarCollapsed ? "Expand" : "Collapse"}
         >
-          {isCollapsed ? (
-            <ChevronRight className="h-5 w-5" />
-          ) : (
-            <ChevronLeft className="h-5 w-5" />
-          )}
+            {isSidebarCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
         </Button>
+
+        {/* Theme Toggle */}
+        <TooltipProvider delayDuration={0}>
+            {isSidebarCollapsed ? (
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="w-full h-9 text-muted-foreground hover:text-foreground hover:bg-white/5"
+                            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                        >
+                            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="ml-2">
+                        {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                    </TooltipContent>
+                </Tooltip>
+            ) : (
+                <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3 px-2 h-9 text-muted-foreground hover:text-foreground hover:bg-white/5"
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                >
+                    {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                    <span className="text-sm">Theme</span>
+                </Button>
+            )}
+        </TooltipProvider>
+
+        {/* User Profile / Logout */}
+        {isAuthenticated && (
+             <div className={cn("flex items-center gap-2 p-1 rounded-lg transition-colors hover:bg-white/5", isSidebarCollapsed ? "justify-center" : "")}>
+                <Link href="/dashboard/settings" className="shrink-0">
+                    <Image
+                        src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.email || "U"}`}
+                        width={24}
+                        height={24}
+                        alt="User Avatar"
+                        className="w-6 h-6 rounded-full border border-white/10 bg-background"
+                    />
+                </Link>
+                {!isSidebarCollapsed && (
+                    <div className="flex flex-col overflow-hidden">
+                        <span className="text-xs font-medium truncate max-w-[120px]">{user?.email}</span>
+                        <button
+                            onClick={handleLogout}
+                            className="text-[10px] text-muted-foreground hover:text-destructive text-left transition-colors flex items-center gap-1"
+                        >
+                            Sign out
+                        </button>
+                    </div>
+                )}
+             </div>
+        )}
       </div>
     </div>
   );
 
   return (
     <>
-      {/* Desktop Sidebar */}
-      <div
-        className={cn(
-          "hidden lg:flex transition-all duration-300 ease-in-out",
-          isCollapsed ? "w-20" : "w-64"
-        )}
+      {/* Desktop Sidebar - Glassmorphic & Grainy */}
+      <motion.aside
+        className="hidden lg:flex fixed left-0 top-0 bottom-0 z-40 bg-background/60 backdrop-blur-xl border-r border-white/10 shadow-xl"
+        initial={false}
+        animate={{ width: isSidebarCollapsed ? 48 : 240 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        style={{
+            // Optional: Add a subtle noise texture if available, or just rely on backdrop blur
+        }}
       >
-        {sidebarContent}
-      </div>
+        <SidebarContent />
+      </motion.aside>
 
       {/* Mobile Header & Sheet */}
-      <header className="lg:hidden sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+      <header className="lg:hidden sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
         <div className="flex h-16 items-center px-4 justify-between">
-          <Link
-            href={isAuthenticated ? "/dashboard" : "/"}
-            className="flex items-center gap-2"
-          >
-            <div className="p-2 bg-primary rounded-lg">
-              <ShieldCheck className="w-5 h-5 text-primary-foreground" />
+          <Link href={isAuthenticated ? "/dashboard" : "/"} className="flex items-center gap-2">
+            <div className="p-1.5 bg-primary/10 rounded-lg">
+              <ShieldCheck className="w-6 h-6 text-primary" />
             </div>
-            <h1 className="text-xl font-bold text-foreground">RateGuard</h1>
+            <span className="font-bold text-lg tracking-tight">RateGuard</span>
           </Link>
           <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
             <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10"
-                aria-label="Open menu"
-              >
+              <Button variant="ghost" size="icon" className="h-10 w-10">
                 <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent
-              side="left"
-              className="w-72 bg-sidebar border-sidebar-border p-0"
-            >
-              {/* We need to render a non-collapsible version for the sheet */}
-              <div className="flex flex-col h-full">
-                {/* Logo */}
-                <div className="p-4 border-b border-sidebar-border">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-sidebar-primary rounded-lg">
-                      <ShieldCheck className="w-5 h-5 text-sidebar-primary-foreground" />
-                    </div>
-                    <h1 className="text-xl font-bold text-sidebar-foreground">
-                      RateGuard
-                    </h1>
+            <SheetContent side="left" className="w-72 p-0 border-r border-sidebar-border bg-sidebar/95 backdrop-blur-xl">
+               <div className="flex flex-col h-full">
+                  <div className="p-4 flex items-center justify-between border-b border-sidebar-border/50">
+                     <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-6 h-6 text-primary" />
+                        <span className="font-bold text-lg">RateGuard</span>
+                     </div>
+                     <Button variant="ghost" size="icon" onClick={() => setIsSheetOpen(false)}>
+                        <X className="w-5 h-5" />
+                     </Button>
                   </div>
-                </div>
-
-                {/* Navigation */}
-                <nav className="flex-1 p-3 space-y-1">
-                  {isAuthenticated
-                    ? loggedInNavItems.map((item) => (
-                        <NavLink key={item.href} item={item} />
-                      ))
-                    : loggedOutNavItems.map((item) => (
-                        <NavLink key={item.href} item={item} />
-                      ))}
-                  <div className="!mt-4 border-t border-sidebar-border my-2 pt-2">
-                    {docsNavItems.map((item) => (
-                      <NavLink key={item.href} item={item} />
-                    ))}
+                  <nav className="flex-1 p-4 space-y-1">
+                     {isAuthenticated
+                        ? loggedInNavItems.map(item => <NavLink key={item.href} item={item} />)
+                        : loggedOutNavItems.map(item => <NavLink key={item.href} item={item} />)
+                     }
+                     <div className="my-4 border-t border-sidebar-border/50" />
+                     {docsNavItems.map(item => <NavLink key={item.href} item={item} />)}
+                  </nav>
+                  <div className="p-4 border-t border-sidebar-border/50 space-y-4">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start gap-3"
+                        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                      >
+                         {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                         {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                      </Button>
+                      {isAuthenticated ? (
+                         <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/50">
+                            <Image
+                                src={`https://api.dicebear.com/7.x/initials/svg?seed=${user?.email || "U"}`}
+                                width={32}
+                                height={32}
+                                alt="User Avatar"
+                                className="w-8 h-8 rounded-full"
+                            />
+                            <div className="flex flex-col flex-1 min-w-0">
+                               <span className="text-sm font-medium truncate">{user?.email}</span>
+                               <button onClick={handleLogout} className="text-xs text-muted-foreground hover:text-destructive text-left">Sign out</button>
+                            </div>
+                         </div>
+                      ) : (
+                         <Button className="w-full" onClick={() => router.push("/login")}>Sign In</Button>
+                      )}
                   </div>
-                </nav>
-
-                {/* Theme Toggle */}
-                <div className="p-3 border-t border-sidebar-border">
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent"
-                    onClick={() =>
-                      setTheme(theme === "dark" ? "light" : "dark")
-                    }
-                  >
-                    {theme === "dark" ? (
-                      <>
-                        <Sun className="w-5 h-5 mr-3" /> Light Mode
-                      </>
-                    ) : (
-                      <>
-                        <Moon className="w-5 h-5 mr-3" /> Dark Mode
-                      </>
-                    )}
-                  </Button>
-                </div>
-
-                {/* Footer */}
-                <div className="p-3 border-t border-sidebar-border">
-                  {isAuthenticated && (
-                    <div className="flex items-center gap-3 px-2 py-2">
-                      <Link href="/dashboard/settings">
-                        <img
-                          src={`https://api.dicebear.com/7.x/initials/svg?seed=${
-                            user?.email || "U"
-                          }`}
-                          alt="User Avatar"
-                          className="w-8 h-8 rounded-full border-2 border-sidebar-border"
-                        />
-                      </Link>
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium text-sidebar-foreground truncate">
-                          {user?.email}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  <Button
-                    variant="ghost"
-                    className="w-full justify-start text-sidebar-foreground hover:text-sidebar-accent-foreground hover:bg-sidebar-accent mt-2"
-                    onClick={
-                      isAuthenticated
-                        ? handleLogout
-                        : () => {
-                            router.push("/login");
-                            setIsSheetOpen(false);
-                          }
-                    }
-                  >
-                    {isAuthenticated ? (
-                      <>
-                        <LogOut className="w-5 h-5 mr-3" /> Logout
-                      </>
-                    ) : (
-                      <>
-                        <LogIn className="w-5 h-5 mr-3" /> Login
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
+               </div>
             </SheetContent>
           </Sheet>
         </div>

@@ -847,10 +847,265 @@ export const responseExamples = {
   },
 };
 
+// Geo-Currency examples
+export const geoCurrencyExamples: ApiExample = {
+  title: "Geo-Currency Detection",
+  description: "Detect user location and currency from IP address",
+  examples: [
+    {
+      language: "curl",
+      label: "cURL",
+      code: `curl -X GET "${API_BASE_URL}/geo/currency" \\
+  -H "X-API-Key: rg_live_abc123xyz789" \\
+  -H "X-Forwarded-For: 203.0.113.1"`,
+    },
+    {
+      language: "javascript",
+      label: "JavaScript",
+      code: `const getCurrency = async (ip) => {
+  const response = await fetch('${API_BASE_URL}/geo/currency', {
+    headers: {
+      'X-API-Key': 'rg_live_abc123xyz789',
+      'X-Forwarded-For': ip
+    }
+  });
+  
+  const data = await response.json();
+  console.log(\`Currency: \${data.currency} (\${data.symbol})\`);
+  return data;
+};`,
+    },
+    {
+      language: "python",
+      label: "Python",
+      code: `import requests
+
+def get_currency(ip_address):
+    headers = {
+        'X-API-Key': 'rg_live_abc123xyz789',
+        'X-Forwarded-For': ip_address
+    }
+    response = requests.get('${API_BASE_URL}/geo/currency', headers=headers)
+    return response.json()
+
+info = get_currency('203.0.113.1')
+print(f"Currency: {info['currency']}")`,
+    },
+    {
+      language: "go",
+      label: "Go",
+      code: `package main
+
+import (
+    "fmt"
+    "net/http"
+    "io/ioutil"
+)
+
+func main() {
+    client := &http.Client{}
+    req, _ := http.NewRequest("GET", "${API_BASE_URL}/geo/currency", nil)
+    req.Header.Set("X-API-Key", "rg_live_abc123xyz789")
+    req.Header.Set("X-Forwarded-For", "203.0.113.1")
+    
+    resp, _ := client.Do(req)
+    defer resp.Body.Close()
+    
+    body, _ := ioutil.ReadAll(resp.Body)
+    fmt.Println(string(body))
+}`,
+    },
+  ],
+};
+
+// Payment Gateway examples
+export const paymentGatewayExamples: ApiExample = {
+  title: "Initiate Payment",
+  description: "Create a checkout session based on user's currency",
+  examples: [
+    {
+      language: "curl",
+      label: "cURL",
+      code: `curl -X POST "${API_BASE_URL}/payments/checkout" \\
+  -H "X-API-Key: rg_live_abc123xyz789" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "plan_id": "plan_pro_monthly",
+    "currency": "INR"
+  }'`,
+    },
+    {
+      language: "javascript",
+      label: "JavaScript",
+      code: `const createCheckout = async (planId, currency) => {
+  const response = await fetch('${API_BASE_URL}/payments/checkout', {
+    method: 'POST',
+    headers: {
+      'X-API-Key': 'rg_live_abc123xyz789',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ plan_id: planId, currency })
+  });
+  
+  const { checkout_url } = await response.json();
+  window.location.href = checkout_url;
+};`,
+    },
+    {
+      language: "python",
+      label: "Python",
+      code: `import requests
+
+def create_checkout(plan_id, currency):
+    response = requests.post(
+        '${API_BASE_URL}/payments/checkout',
+        headers={'X-API-Key': 'rg_live_abc123xyz789'},
+        json={'plan_id': plan_id, 'currency': currency}
+    )
+    return response.json()['checkout_url']
+
+url = create_checkout('plan_pro_monthly', 'USD')
+print(f"Checkout URL: {url}")`,
+    },
+  ],
+};
+
+// Plan Enforcement examples
+export const planEnforcementExamples: ApiExample = {
+  title: "Check Plan Status",
+  description: "Verify if a user has access to a specific feature",
+  examples: [
+    {
+      language: "curl",
+      label: "cURL",
+      code: `curl -X POST "${API_BASE_URL}/plans/check-feature" \\
+  -H "X-API-Key: rg_live_abc123xyz789" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "feature": "custom_domains"
+  }'`,
+    },
+    {
+      language: "javascript",
+      label: "JavaScript",
+      code: `const checkFeatureAccess = async (feature) => {
+  const response = await fetch('${API_BASE_URL}/plans/check-feature', {
+    method: 'POST',
+    headers: {
+      'X-API-Key': 'rg_live_abc123xyz789',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ feature })
+  });
+  
+  const { allowed, upgrade_required } = await response.json();
+  if (!allowed) {
+    console.log('Upgrade required:', upgrade_required);
+  }
+  return allowed;
+};`,
+    },
+    {
+      language: "typescript",
+      label: "TypeScript",
+      code: `interface FeatureCheck {
+  allowed: boolean;
+  upgrade_required?: boolean;
+  current_plan: string;
+}
+
+const checkFeature = async (feature: string): Promise<boolean> => {
+  const response = await fetch('${API_BASE_URL}/plans/check-feature', {
+    method: 'POST',
+    headers: {
+      'X-API-Key': 'rg_live_abc123xyz789',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ feature })
+  });
+  
+  const data: FeatureCheck = await response.json();
+  return data.allowed;
+};`,
+    },
+  ],
+};
+
+// Queue Observability examples
+export const queueObservabilityExamples: ApiExample = {
+  title: "Get Queue Metrics",
+  description: "Fetch real-time metrics for your request queues",
+  examples: [
+    {
+      language: "curl",
+      label: "cURL",
+      code: `curl -X GET "${API_BASE_URL}/observability/queue/metrics" \\
+  -H "X-API-Key: rg_live_abc123xyz789"`,
+    },
+    {
+      language: "javascript",
+      label: "JavaScript",
+      code: `const getQueueMetrics = async () => {
+  const response = await fetch('${API_BASE_URL}/observability/queue/metrics', {
+    headers: { 'X-API-Key': 'rg_live_abc123xyz789' }
+  });
+  
+  const metrics = await response.json();
+  console.log('Queue Depth:', metrics.queues.standard.depth);
+  console.log('Active Workers:', metrics.queues.standard.workers_active);
+};`,
+    },
+    {
+      language: "python",
+      label: "Python",
+      code: `import requests
+
+def get_queue_metrics():
+    response = requests.get(
+        '${API_BASE_URL}/observability/queue/metrics',
+        headers={'X-API-Key': 'rg_live_abc123xyz789'}
+    )
+    data = response.json()
+    for queue_name, stats in data['queues'].items():
+        print(f"{queue_name}: {stats['depth']} pending")
+
+get_queue_metrics()`,
+    },
+    {
+      language: "go",
+      label: "Go",
+      code: `package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "net/http"
+)
+
+func main() {
+    client := &http.Client{}
+    req, _ := http.NewRequest("GET", "${API_BASE_URL}/observability/queue/metrics", nil)
+    req.Header.Set("X-API-Key", "rg_live_abc123xyz789")
+    
+    resp, _ := client.Do(req)
+    defer resp.Body.Close()
+    
+    var data map[string]interface{}
+    json.NewDecoder(resp.Body).Decode(&data)
+    fmt.Printf("System Load: %v\\n", data["system_load"])
+}`,
+    },
+  ],
+};
+
 // All examples grouped
 export const allExamples = {
   authentication: authenticationExamples,
   rateLimiting: rateLimitingExamples,
   errorHandling: errorHandlingExamples,
   keyRotation: keyRotationExamples,
+  geoCurrency: geoCurrencyExamples,
+  paymentGateways: paymentGatewayExamples,
+  planEnforcement: planEnforcementExamples,
+  queueObservability: queueObservabilityExamples,
 };

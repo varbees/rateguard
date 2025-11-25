@@ -5,12 +5,13 @@ import { useEffect, useState } from "react";
 import { useDashboardStore } from "@/lib/store";
 import { LoadingPage } from "@/components/loading";
 import FloatingSidebar from "./FloatingSidebar";
-import { apiClient } from "@/lib/api";
+import UnifiedSidebar from "./UnifiedSidebar";
+import { useUser } from "@/lib/hooks/use-api";
 
 export function GlobalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { user, isAuthenticated, setUser } = useDashboardStore();
-  const [loading, setLoading] = useState(true);
+  const { user, isAuthenticated, setUser, isSidebarCollapsed } = useDashboardStore();
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   // Check if current page is a public auth page
   const isAuthPage =
@@ -22,42 +23,36 @@ export function GlobalLayout({ children }: { children: React.ReactNode }) {
   // Exclude floating sidebar for docs (has own layout)
   const isDocsPage = pathname.startsWith("/docs");
 
-  const isPublicPage = isAuthPage || isDocsPage;
   const isHomePage = pathname === "/";
+  const isPublicPage = isAuthPage || isDocsPage || isHomePage;
 
-  // Auth logic - load user data if needed
+  // Use TanStack Query to fetch user
+  const { data: userData, isLoading: isUserLoading, error: userError } = useUser();
+
+  // Sync user data to store
   useEffect(() => {
-    async function loadUser() {
-      // Skip loading for public pages
-      if (isPublicPage) {
-        setLoading(false);
-        return;
-      }
+    if (userData) {
+      setUser(userData);
+    }
+  }, [userData, setUser]);
 
-      // If user is already loaded, skip
-      if (user && isAuthenticated) {
-        setLoading(false);
-        return;
-      }
+  // Handle auth redirection
+  useEffect(() => {
+    // If we're done loading user data (or it failed)
+    if (!isUserLoading) {
+      setIsAuthChecking(false);
 
-      try {
-        // Try to get current user from JWT cookie
-        const userData = await apiClient.getCurrentUser();
-        setUser(userData);
-        setLoading(false);
-      } catch (error) {
-        console.error("Failed to load user:", error);
-        // Only redirect to login if not on a public page
-        if (!isPublicPage) {
+      // If we failed to load user and we're not on a public page, redirect
+      if (userError && !isPublicPage && !isAuthenticated) {
+        // Double check if we really aren't authenticated (store might have it)
+        if (!user) {
           window.location.href = "/login";
-        } else {
-          setLoading(false);
         }
       }
     }
+  }, [isUserLoading, userError, isPublicPage, isAuthenticated, user]);
 
-    loadUser();
-  }, [pathname, isPublicPage, user, isAuthenticated, setUser]);
+  const loading = isAuthChecking && !isPublicPage && !isAuthenticated;
 
   // Show loading state while checking authentication
   if (loading) {
@@ -82,8 +77,12 @@ export function GlobalLayout({ children }: { children: React.ReactNode }) {
   // If we are authenticated and ready, show the floating sidebar with content
   return (
     <>
-      <FloatingSidebar />
-      <main className="min-h-screen bg-background lg:ml-72 transition-all duration-300">
+      <UnifiedSidebar />
+      <main 
+        className={`min-h-screen bg-background transition-all duration-300 ease-in-out ${
+          isSidebarCollapsed ? "lg:ml-[48px]" : "lg:ml-[240px]"
+        }`}
+      >
         <div className="container mx-auto p-4 md:p-6 lg:p-8">{children}</div>
       </main>
     </>

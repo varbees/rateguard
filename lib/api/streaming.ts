@@ -70,20 +70,14 @@ export async function fetchStreamingStats(
   period: TimePeriod = "30d",
   signal?: AbortSignal
 ): Promise<StreamingStats> {
-  const apiKey = getApiKey();
-
-  if (!apiKey) {
-    throw new Error("API key not found. Please log in.");
-  }
-
   const response = await fetch(
     `${API_BASE_URL}/api/v1/dashboard/stats/streaming?period=${period}`,
     {
       method: "GET",
       headers: {
-        "X-API-Key": apiKey,
         "Content-Type": "application/json",
       },
+      credentials: "include", // Include cookies for JWT auth
       signal,
     }
   );
@@ -108,20 +102,14 @@ export async function fetchStreamingHistory(
   period: TimePeriod = "7d",
   signal?: AbortSignal
 ): Promise<StreamingHistoryResponse> {
-  const apiKey = getApiKey();
-
-  if (!apiKey) {
-    throw new Error("API key not found. Please log in.");
-  }
-
   const response = await fetch(
     `${API_BASE_URL}/api/v1/dashboard/streaming/history?period=${period}`,
     {
       method: "GET",
       headers: {
-        "X-API-Key": apiKey,
         "Content-Type": "application/json",
       },
+      credentials: "include", // Include cookies for JWT auth
       signal,
     }
   );
@@ -148,20 +136,14 @@ export async function fetchStreamingByAPI(
   period: TimePeriod = "30d",
   signal?: AbortSignal
 ): Promise<ApiBreakdownResponse> {
-  const apiKey = getApiKey();
-
-  if (!apiKey) {
-    throw new Error("API key not found. Please log in.");
-  }
-
   const response = await fetch(
     `${API_BASE_URL}/api/v1/dashboard/streaming/by-api?period=${period}`,
     {
       method: "GET",
       headers: {
-        "X-API-Key": apiKey,
         "Content-Type": "application/json",
       },
+      credentials: "include", // Include cookies for JWT auth
       signal,
     }
   );

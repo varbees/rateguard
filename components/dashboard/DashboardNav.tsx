@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useDashboardStore } from "@/lib/store";
-import { apiClient } from "@/lib/api";
+import { useLogout } from "@/lib/hooks/use-api";
 import {
   LayoutDashboard,
   Settings,
@@ -52,11 +52,15 @@ export default function DashboardNav() {
   const pathname = usePathname();
   const router = useRouter();
   const clearAuth = useDashboardStore((state) => state.clearAuth);
+  const logoutMutation = useLogout();
 
   const handleLogout = () => {
-    apiClient.clearApiKey();
-    clearAuth();
-    router.push("/login");
+    logoutMutation.mutate(undefined, {
+      onSuccess: () => {
+        clearAuth();
+        router.push("/login");
+      },
+    });
   };
 
   return (
@@ -101,9 +105,10 @@ export default function DashboardNav() {
           variant="ghost"
           className="w-full justify-start text-slate-400 hover:text-white hover:bg-slate-800"
           onClick={handleLogout}
+          disabled={logoutMutation.isPending}
         >
           <LogOut className="w-5 h-5 mr-3" />
-          Logout
+          {logoutMutation.isPending ? "Logging out..." : "Logout"}
         </Button>
       </div>
     </div>

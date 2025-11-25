@@ -39,9 +39,9 @@ export default function UsageChart({
   const Chart = type === "area" ? AreaChart : LineChart;
 
   return (
-    <Card className="bg-slate-900 border-slate-800">
+    <Card className="bg-card border-border">
       <CardHeader>
-        <CardTitle className="text-white">{title}</CardTitle>
+        <CardTitle className="text-card-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={height}>
@@ -71,15 +71,15 @@ export default function UsageChart({
                 ))}
               </defs>
             )}
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis stroke="#64748b" />
-            <YAxis stroke="#64748b" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+            <XAxis stroke="hsl(var(--muted-foreground))" />
+            <YAxis stroke="hsl(var(--muted-foreground))" />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#1e293b",
-                border: "1px solid #334155",
+                backgroundColor: "hsl(var(--popover))",
+                border: "1px solid hsl(var(--border))",
                 borderRadius: "8px",
-                color: "#fff",
+                color: "hsl(var(--popover-foreground))",
               }}
             />
             {dataKeys.map((dataKey, index) =>

@@ -14,9 +14,14 @@ import {
   TrendingUp,
   Layers,
   Activity,
+  Globe,
+  CreditCard,
+  Lock,
+  BarChart,
 } from "lucide-react";
 import { useDashboardStore } from "@/lib/store";
-import FloatingSidebar from "@/components/layout/FloatingSidebar";
+import UnifiedSidebar from "@/components/layout/UnifiedSidebar";
+import { DocsSearch } from "@/components/docs/DocsSearch";
 
 // VS Code inspired docs navigation
 const docsNav = [
@@ -56,6 +61,26 @@ const docsNav = [
         href: "/docs/features/transparent-proxy",
         icon: Activity,
       },
+      {
+        title: "Geo-Currency",
+        href: "/docs/features/geo-currency",
+        icon: Globe,
+      },
+      {
+        title: "Payment Gateways",
+        href: "/docs/features/payment-gateways",
+        icon: CreditCard,
+      },
+      {
+        title: "Plan Enforcement",
+        href: "/docs/features/plan-enforcement",
+        icon: Lock,
+      },
+      {
+        title: "Queue Observability",
+        href: "/docs/features/queue-observability",
+        icon: BarChart,
+      },
     ],
   },
   { title: "API Reference", href: "/docs/api-reference", icon: FileText },
@@ -67,7 +92,7 @@ export default function DocsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const isAuthenticated = useDashboardStore((state) => state.isAuthenticated);
+  const { isAuthenticated, isSidebarCollapsed } = useDashboardStore();
 
   const NavItem = ({
     item,
@@ -81,10 +106,10 @@ export default function DocsLayout({
       <Link href={item.href}>
         <div
           className={cn(
-            "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors",
+            "flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-all duration-200",
             isActive
               ? "bg-primary/10 text-primary font-medium"
-              : "text-muted-foreground hover:text-foreground hover:bg-accent"
+              : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
           )}
         >
           {Icon && <Icon className="w-4 h-4 shrink-0" />}
@@ -96,59 +121,57 @@ export default function DocsLayout({
 
   return (
     <>
-      {/* Show FloatingSidebar only when authenticated */}
-      {isAuthenticated && <FloatingSidebar />}
+      {/* Show UnifiedSidebar only when authenticated */}
+      {isAuthenticated && <UnifiedSidebar />}
 
       <div
         className={cn(
-          "flex min-h-screen bg-background transition-all duration-300",
-          isAuthenticated && "lg:ml-32"
+          "flex min-h-screen bg-background transition-all duration-300 ease-in-out",
+          isAuthenticated ? (isSidebarCollapsed ? "lg:ml-[48px]" : "lg:ml-[240px]") : ""
         )}
       >
-        {/* Left Sidebar - VS Code Style */}
-        <aside className="hidden lg:flex w-64 border-r border-border bg-card/50 backdrop-blur-sm shrink-0">
-          <div className="flex flex-col w-full">
-            {/* Docs Header */}
-            <div className="p-6 border-b border-border">
-              <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-primary" />
-                <h2 className="font-bold text-foreground">Documentation</h2>
+        {/* Left Sidebar - Glassmorphic Style */}
+        <aside className="hidden lg:flex w-64 border-r border-border bg-card/30 backdrop-blur-xl shrink-0 sticky top-0 h-screen overflow-hidden flex-col">
+          {/* Docs Header */}
+          <div className="p-6 border-b border-border/50 bg-card/50 backdrop-blur-md">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-1.5 bg-primary/10 rounded-lg">
+                 <BookOpen className="w-5 h-5 text-primary" />
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Guides, references, and examples
-              </p>
+              <h2 className="font-bold text-foreground tracking-tight">Documentation</h2>
             </div>
-
-            {/* Navigation */}
-            <nav className="flex-1 overflow-y-auto p-4 space-y-6">
-              {docsNav.map((section) => (
-                <div key={section.title} className="space-y-1">
-                  {section.items ? (
-                    <>
-                      <h4 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                        {section.title}
-                      </h4>
-                      {section.items.map((item) => (
-                        <NavItem key={item.href} item={item} />
-                      ))}
-                    </>
-                  ) : (
-                    <NavItem item={section as any} />
-                  )}
-                </div>
-              ))}
-            </nav>
+            <DocsSearch />
           </div>
+
+          {/* Navigation */}
+          <nav className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
+            {docsNav.map((section) => (
+              <div key={section.title} className="space-y-1">
+                {section.items ? (
+                  <>
+                    <h4 className="px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                      {section.title}
+                    </h4>
+                    {section.items.map((item) => (
+                      <NavItem key={item.href} item={item} />
+                    ))}
+                  </>
+                ) : (
+                  <NavItem item={section as any} />
+                )}
+              </div>
+            ))}
+          </nav>
         </aside>
 
         {/* Center Content - Scrollable */}
-        <main className="flex-1 overflow-y-auto">
-          <div className="max-w-5xl mx-auto px-6 lg:px-8 py-8">{children}</div>
+        <main className="flex-1 min-w-0">
+          <div className="max-w-5xl mx-auto px-6 lg:px-8 py-12">{children}</div>
         </main>
 
         {/* Right Sidebar - Table of Contents (Desktop Only) */}
-        <aside className="hidden 2xl:flex w-64 border-l border-border bg-card/30 backdrop-blur-sm shrink-0">
-          <div className="sticky top-8 w-full p-6 max-h-[calc(100vh-4rem)] overflow-y-auto">
+        <aside className="hidden 2xl:flex w-64 border-l border-border bg-card/20 backdrop-blur-sm shrink-0 sticky top-0 h-screen overflow-y-auto">
+          <div className="w-full p-6">
             <TableOfContents key={pathname} />
           </div>
         </aside>

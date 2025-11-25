@@ -1,8 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { QueueAPI } from "@/lib/api/queue";
-import type { QueuedRequest, QueueStats, QueueConfig } from "@/lib/api/queue";
+import { useState } from "react";
+import type { QueuedRequest, QueueStats, QueueConfig } from "@/lib/api";
+import {
+  useQueueStats,
+  useActiveQueues,
+  useQueueConfig,
+  useUpdateQueueConfig,
+  useCancelQueuedRequest,
+} from "@/lib/hooks/use-api";
 import {
   Card,
   CardContent,
@@ -17,7 +23,6 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
-import { useInterval } from "@/hooks/use-interval";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Check, Clock, RefreshCw, Activity } from "lucide-react";
 import QueueVisualizer from "@/components/queue/queue-visualizer";
@@ -25,122 +30,94 @@ import QueueAnalytics from "@/components/queue/queue-analytics";
 
 export default function QueueDashboardPage() {
   const [activeTab, setActiveTab] = useState("overview");
-  const [queueStats, setQueueStats] = useState<QueueStats | null>(null);
-  const [activeQueues, setActiveQueues] = useState<QueuedRequest[]>([]);
-  const [queueConfig, setQueueConfig] = useState<QueueConfig | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [configChanged, setConfigChanged] = useState(false);
   const { toast } = useToast();
 
-  // Load initial data
-  useEffect(() => {
-    const loadData = async () => {
-      setLoading(true);
-      try {
-        const [stats, queued, config] = await Promise.all([
-          QueueAPI.getQueueStats(),
-          QueueAPI.getActiveQueues(),
-          QueueAPI.getQueueConfig(),
-        ]);
-        setQueueStats(stats);
-        setActiveQueues(queued);
-        setQueueConfig(config);
-      } catch (error) {
-        console.error("Failed to load queue data:", error);
+  // Data Fetching Hooks
+  const { 
+    data: queueStats, 
+    isLoading: statsLoading, 
+    refetch: refetchStats 
+  } = useQueueStats();
+
+  const { 
+    data: activeQueues = [], 
+    isLoading: activeLoading, 
+    refetch: refetchActive 
+  } = useActiveQueues();
+
+  const { 
+    data: queueConfig, 
+    isLoading: configLoading 
+  } = useQueueConfig();
+
+  // Mutation Hooks
+  const updateConfigMutation = useUpdateQueueConfig();
+  const cancelRequestMutation = useCancelQueuedRequest();
+
+  // Local state for config editing
+  const [localConfig, setLocalConfig] = useState<QueueConfig | null>(null);
+  const [configChanged, setConfigChanged] = useState(false);
+
+  // Initialize local config when data loads
+  if (queueConfig && !localConfig && !configChanged) {
+    setLocalConfig(queueConfig);
+  }
+
+  const loading = statsLoading || activeLoading || configLoading;
+
+  const handleCancelRequest = (requestId: string) => {
+    cancelRequestMutation.mutate(requestId, {
+      onSuccess: () => {
         toast({
-          title: "Failed to load queue data",
-          description: "Please try again later",
+          title: "Request cancelled",
+          description: `Request ${requestId.slice(0, 8)} has been removed from the queue`,
+        });
+      },
+      onError: (error) => {
+        console.error("Failed to cancel request:", error);
+        toast({
+          title: "Failed to cancel request",
+          description: "The request could not be cancelled",
           variant: "destructive",
         });
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Refresh data every 5 seconds
-  useInterval(() => {
-    if (activeTab === "active") {
-      refreshActiveQueues();
-    }
-    if (activeTab === "overview") {
-      refreshQueueStats();
-    }
-  }, 5000);
-
-  const refreshQueueStats = async () => {
-    try {
-      const stats = await QueueAPI.getQueueStats();
-      setQueueStats(stats);
-    } catch (error) {
-      console.error("Failed to refresh queue stats:", error);
-    }
-  };
-
-  const refreshActiveQueues = async () => {
-    try {
-      const queued = await QueueAPI.getActiveQueues();
-      setActiveQueues(queued);
-    } catch (error) {
-      console.error("Failed to refresh active queues:", error);
-    }
-  };
-
-  const handleCancelRequest = async (requestId: string) => {
-    try {
-      await QueueAPI.cancelQueuedRequest(requestId);
-      toast({
-        title: "Request cancelled",
-        description: `Request ${requestId.slice(
-          0,
-          8
-        )} has been removed from the queue`,
-      });
-      // Refresh the active queues list
-      refreshActiveQueues();
-    } catch (error) {
-      console.error("Failed to cancel request:", error);
-      toast({
-        title: "Failed to cancel request",
-        description: "The request could not be cancelled",
-        variant: "destructive",
-      });
-    }
+      },
+    });
   };
 
   const handleConfigChange = (newConfig: QueueConfig) => {
-    setQueueConfig(newConfig);
+    setLocalConfig(newConfig);
     setConfigChanged(true);
   };
 
-  const saveQueueConfig = async () => {
-    if (!queueConfig) return;
+  const saveQueueConfig = () => {
+    if (!localConfig) return;
 
-    try {
-      const updated = await QueueAPI.updateQueueConfig(queueConfig);
-      setQueueConfig(updated);
-      setConfigChanged(false);
-      toast({
-        title: "Configuration saved",
-        description: "Queue settings have been updated",
-      });
-    } catch (error) {
-      console.error("Failed to save queue config:", error);
-      toast({
-        title: "Failed to save configuration",
-        description: "Please check your settings and try again",
-        variant: "destructive",
-      });
-    }
+    updateConfigMutation.mutate(localConfig, {
+      onSuccess: () => {
+        setConfigChanged(false);
+        toast({
+          title: "Configuration saved",
+          description: "Queue settings have been updated",
+        });
+      },
+      onError: (error) => {
+        console.error("Failed to save queue config:", error);
+        toast({
+          title: "Failed to save configuration",
+          description: "Please check your settings and try again",
+          variant: "destructive",
+        });
+      },
+    });
   };
 
   const formatTime = (ms: number) => {
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
   };
+
+  // Use local config for UI if editing, otherwise use fetched config
+  const currentConfig = localConfig || queueConfig;
 
   return (
     <div className="space-y-6">
@@ -179,7 +156,7 @@ export default function QueueDashboardPage() {
                 <Activity className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {loading ? (
+                {statsLoading ? (
                   <Skeleton className="h-7 w-20" />
                 ) : (
                   <div className="text-2xl font-bold">
@@ -200,7 +177,7 @@ export default function QueueDashboardPage() {
                 <Clock className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {loading ? (
+                {statsLoading ? (
                   <Skeleton className="h-7 w-20" />
                 ) : (
                   <div className="text-2xl font-bold">
@@ -221,7 +198,7 @@ export default function QueueDashboardPage() {
                 <Clock className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {loading ? (
+                {statsLoading ? (
                   <Skeleton className="h-7 w-20" />
                 ) : (
                   <div className="text-2xl font-bold">
@@ -242,7 +219,7 @@ export default function QueueDashboardPage() {
                 <Activity className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {loading ? (
+                {statsLoading ? (
                   <Skeleton className="h-7 w-20" />
                 ) : (
                   <div className="text-2xl font-bold">
@@ -256,7 +233,7 @@ export default function QueueDashboardPage() {
             </Card>
           </div>
 
-          {loading ? (
+          {statsLoading ? (
             <div className="space-y-4">
               <Skeleton className="h-64 w-full" />
               <Skeleton className="h-24 w-full" />
@@ -279,7 +256,7 @@ export default function QueueDashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {statsLoading ? (
                 <div className="space-y-2">
                   <Skeleton className="h-5 w-full" />
                   <Skeleton className="h-5 w-full" />
@@ -329,7 +306,7 @@ export default function QueueDashboardPage() {
           </Card>
 
           <div className="flex justify-end">
-            <Button onClick={refreshQueueStats} variant="outline" size="sm">
+            <Button onClick={() => refetchStats()} variant="outline" size="sm">
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh
             </Button>
@@ -347,7 +324,7 @@ export default function QueueDashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {loading ? (
+                {statsLoading || activeLoading ? (
                   <div className="space-y-8">
                     <Skeleton className="h-32 w-full" />
                     <Skeleton className="h-32 w-full" />
@@ -370,15 +347,15 @@ export default function QueueDashboardPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="max-h-[500px] overflow-y-auto">
-                {loading ? (
+                {activeLoading ? (
                   <div className="space-y-2">
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
                     <Skeleton className="h-12 w-full" />
                   </div>
-                ) : activeQueues.length > 0 ? (
+                ) : (activeQueues ?? []).length > 0 ? (
                   <div className="space-y-3">
-                    {activeQueues.map((request) => (
+                    {(activeQueues ?? []).map((request) => (
                       <div
                         key={request.request_id}
                         className="flex flex-col space-y-2 rounded-md border p-3"
@@ -422,7 +399,7 @@ export default function QueueDashboardPage() {
           </div>
 
           <div className="flex justify-end">
-            <Button onClick={refreshActiveQueues} variant="outline" size="sm">
+            <Button onClick={() => refetchActive()} variant="outline" size="sm">
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh
             </Button>
@@ -439,7 +416,7 @@ export default function QueueDashboardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {loading || !queueConfig ? (
+              {configLoading || !currentConfig ? (
                 <div className="space-y-4">
                   <Skeleton className="h-10 w-full" />
                   <Skeleton className="h-10 w-full" />
@@ -456,10 +433,10 @@ export default function QueueDashboardPage() {
                       </p>
                     </div>
                     <Switch
-                      checked={queueConfig.enabled}
+                      checked={currentConfig.enabled}
                       onCheckedChange={(checked) => {
                         handleConfigChange({
-                          ...queueConfig,
+                          ...currentConfig,
                           enabled: checked,
                         });
                       }}
@@ -476,21 +453,21 @@ export default function QueueDashboardPage() {
                     <div className="flex items-center space-x-4">
                       <div className="flex-1">
                         <Slider
-                          value={[queueConfig.max_wait_time_ms / 1000]}
+                          value={[currentConfig.max_wait_time_ms / 1000]}
                           min={1}
                           max={60}
                           step={1}
-                          disabled={!queueConfig.enabled}
+                          disabled={!currentConfig.enabled}
                           onValueChange={(value) => {
                             handleConfigChange({
-                              ...queueConfig,
+                              ...currentConfig,
                               max_wait_time_ms: value[0] * 1000,
                             });
                           }}
                         />
                       </div>
                       <div className="w-20 text-center">
-                        {queueConfig.max_wait_time_ms / 1000}s
+                        {currentConfig.max_wait_time_ms / 1000}s
                       </div>
                     </div>
                   </div>
@@ -505,15 +482,15 @@ export default function QueueDashboardPage() {
                     <div className="flex space-x-2">
                       <Button
                         variant={
-                          queueConfig.queueing_strategy === "fifo"
+                          currentConfig.queueing_strategy === "fifo"
                             ? "default"
                             : "outline"
                         }
                         size="sm"
-                        disabled={!queueConfig.enabled}
+                        disabled={!currentConfig.enabled}
                         onClick={() => {
                           handleConfigChange({
-                            ...queueConfig,
+                            ...currentConfig,
                             queueing_strategy: "fifo",
                           });
                         }}
@@ -522,15 +499,15 @@ export default function QueueDashboardPage() {
                       </Button>
                       <Button
                         variant={
-                          queueConfig.queueing_strategy === "priority"
+                          currentConfig.queueing_strategy === "priority"
                             ? "default"
                             : "outline"
                         }
                         size="sm"
-                        disabled={!queueConfig.enabled}
+                        disabled={!currentConfig.enabled}
                         onClick={() => {
                           handleConfigChange({
-                            ...queueConfig,
+                            ...currentConfig,
                             queueing_strategy: "priority",
                           });
                         }}
@@ -543,10 +520,14 @@ export default function QueueDashboardPage() {
                   <div className="pt-4 flex justify-end space-x-2">
                     <Button
                       variant="default"
-                      disabled={!configChanged}
+                      disabled={!configChanged || updateConfigMutation.isPending}
                       onClick={saveQueueConfig}
                     >
-                      <Check className="mr-2 h-4 w-4" />
+                      {updateConfigMutation.isPending ? (
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="mr-2 h-4 w-4" />
+                      )}
                       Save Changes
                     </Button>
                   </div>

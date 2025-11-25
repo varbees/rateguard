@@ -23,14 +23,15 @@ import {
   Shield,
 } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
-import { apiClient } from "@/lib/api";
+import { useSignup } from "@/lib/hooks/use-api";
 
 export default function SignUpForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  
+  const signupMutation = useSignup();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,25 +55,24 @@ export default function SignUpForm() {
       return;
     }
 
-    setLoading(true);
-
-    try {
-      // Use API client signup method - JWT tokens set automatically in cookies
-      await apiClient.signup({
+    signupMutation.mutate(
+      {
         email,
         password,
         plan: "free",
-      });
-
-      toasts.auth.signupSuccess();
-
-      // Redirect to dashboard using window.location for full page reload
-      window.location.href = "/dashboard";
-    } catch (error) {
-      setError((error as Error).message || "Sign up failed");
-      handleApiError(error, "Sign up failed");
-      setLoading(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          toasts.auth.signupSuccess();
+          // Redirect to dashboard using window.location for full page reload
+          window.location.href = "/dashboard";
+        },
+        onError: (err) => {
+          setError((err as Error).message || "Sign up failed");
+          handleApiError(err, "Sign up failed");
+        },
+      }
+    );
   };
 
   return (
@@ -117,7 +117,7 @@ export default function SignUpForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
                 required
-                disabled={loading}
+                disabled={signupMutation.isPending}
               />
             </div>
           </div>
@@ -136,7 +136,7 @@ export default function SignUpForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
                 required
-                disabled={loading}
+                disabled={signupMutation.isPending}
                 minLength={8}
               />
             </div>
@@ -161,7 +161,7 @@ export default function SignUpForm() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
                 required
-                disabled={loading}
+                disabled={signupMutation.isPending}
               />
               {confirmPassword && password === confirmPassword && (
                 <CheckCircle2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-primary w-5 h-5" />
@@ -182,9 +182,9 @@ export default function SignUpForm() {
           <Button
             type="submit"
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-            disabled={loading}
+            disabled={signupMutation.isPending}
           >
-            {loading ? (
+            {signupMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Creating account...

@@ -16,13 +16,14 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Mail, Lock, AlertCircle, Shield } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
-import { apiClient } from "@/lib/api";
+import { useLogin } from "@/lib/hooks/use-api";
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  
+  const loginMutation = useLogin();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,22 +36,21 @@ export default function LoginForm() {
       return;
     }
 
-    setLoading(true);
-
-    try {
-      // Use API client login method - JWT tokens set automatically in cookies
-      await apiClient.login({ email, password });
-
-      toasts.auth.loginSuccess();
-
-      // Redirect to dashboard using window.location for full page reload
-      // This ensures cookies are properly set and user context is loaded
-      window.location.href = "/dashboard";
-    } catch (error) {
-      setError((error as Error).message || "Login failed");
-      handleApiError(error, "Login failed");
-      setLoading(false);
-    }
+    loginMutation.mutate(
+      { email, password },
+      {
+        onSuccess: () => {
+          toasts.auth.loginSuccess();
+          // Redirect to dashboard using window.location for full page reload
+          // This ensures cookies are properly set and user context is loaded
+          window.location.href = "/dashboard";
+        },
+        onError: (err) => {
+          setError((err as Error).message || "Login failed");
+          handleApiError(err, "Login failed");
+        },
+      }
+    );
   };
 
   return (
@@ -95,7 +95,7 @@ export default function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
                 required
-                disabled={loading}
+                disabled={loginMutation.isPending}
               />
             </div>
           </div>
@@ -114,7 +114,7 @@ export default function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
                 required
-                disabled={loading}
+                disabled={loginMutation.isPending}
               />
             </div>
           </div>
@@ -131,9 +131,9 @@ export default function LoginForm() {
           <Button
             type="submit"
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-            disabled={loading}
+            disabled={loginMutation.isPending}
           >
-            {loading ? (
+            {loginMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Signing in...

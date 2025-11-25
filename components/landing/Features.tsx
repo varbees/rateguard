@@ -1,91 +1,121 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { FEATURES } from "@/lib/constants";
-import { fadeIn, staggerContainer, cardHover } from "@/lib/animations";
+import { 
+  Shield, 
+  Zap, 
+  CreditCard, 
+  Lock, 
+  Globe, 
+  BarChart3,
+  Bot,
+  AlertTriangle
+} from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-/**
- * Features Section
- * 6 feature cards with glassmorphism design and animations
- */
+const features = [
+  {
+    title: "Transparent Proxy",
+    description: "Drop-in replacement for your current setup. No code changes needed.",
+    icon: Shield,
+    joke: "That's what she said (about the drop-in part).",
+  },
+  {
+    title: "5-Tier Rate Limiting",
+    description: "Fixed window, sliding window, token bucket, leaky bucket, and 'panic mode'.",
+    icon: Zap,
+    joke: "More buckets than a KFC family feast.",
+  },
+  {
+    title: "Automated Billing",
+    description: "Stripe & Razorpay integration. We count the requests, you get the money.",
+    icon: CreditCard,
+    joke: "Making it rain, digitally speaking.",
+  },
+  {
+    title: "End-to-End Encryption",
+    description: "Your keys are encrypted at rest, in transit, and in our dreams.",
+    icon: Lock,
+    joke: "Sealed tighter than a pickle jar.",
+  },
+  {
+    title: "Geo-Currency Detection",
+    description: "Charge users in their local currency. Global domination made easy.",
+    icon: Globe,
+    joke: "Mr. Worldwide.",
+  },
+  {
+    title: "Usage Analytics",
+    description: "Real-time charts that make you look smart in board meetings.",
+    icon: BarChart3,
+    joke: "Stonks only go up.",
+  },
+  {
+    title: "Quirky Support Bot",
+    description: "Dwight Schrute, API Assistant. He takes his job very seriously.",
+    icon: Bot,
+    joke: "Identity theft is not a joke, Jim!",
+  },
+  {
+    title: "Plan Enforcement",
+    description: "Strict limits for free users, VIP treatment for enterprise.",
+    icon: AlertTriangle,
+    joke: "You shall not pass!",
+  },
+];
 
 export function Features() {
   return (
-    <section id="features" className="py-24 bg-background">
-      <div className="container mx-auto px-4">
-        {/* Section Header */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-16"
-        >
-          <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
-            Everything You Need to Scale
+    <section id="features" className="py-24">
+      <div className="container px-4 md:px-6">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
+            Everything You Need
+            <span className="block text-primary mt-2">Nothing You Don't.</span>
           </h2>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
-            Production-grade features designed for developers who build at scale
+          <p className="mt-4 text-muted-foreground md:text-xl max-w-2xl mx-auto">
+            We stripped away the enterprise bloat and kept the stuff that actually matters.
           </p>
-        </motion.div>
+        </div>
 
-        {/* Features Grid */}
-        <motion.div
-          variants={staggerContainer(0.1, 0.2)}
-          initial="hidden"
-          whileInView="show"
-          viewport={{ once: true, amount: 0.1 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
-        >
-          {FEATURES.map((feature, i) => {
-            const Icon = feature.icon;
-            return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <TooltipProvider>
+            {features.map((feature, index) => (
               <motion.div
                 key={feature.title}
-                variants={fadeIn("up", i * 0.1)}
-                whileHover="hover"
-                initial="rest"
-                className="group"
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1 }}
+                viewport={{ once: true }}
+                className="group relative p-6 bg-card rounded-xl border hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
               >
-                <motion.div
-                  variants={cardHover}
-                  className="relative h-full p-8 rounded-2xl bg-card/50 backdrop-blur-md border border-border hover:border-primary/50 transition-colors"
-                >
-                  {/* Gradient background on hover */}
-                  <div
-                    className={`absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-10 transition-opacity duration-500 bg-gradient-to-br ${feature.gradient}`}
-                  />
-
-                  {/* Icon */}
-                  <div
-                    className={`relative mb-6 w-14 h-14 rounded-xl bg-gradient-to-br ${feature.gradient} p-3 shadow-lg`}
-                  >
-                    <Icon className="w-full h-full text-primary-foreground" />
-                  </div>
-
-                  {/* Content */}
-                  <div className="relative">
-                    <h3 className="text-xl font-bold text-foreground mb-3">
-                      {feature.title}
-                    </h3>
-                    <p className="text-muted-foreground leading-relaxed mb-4">
-                      {feature.description}
-                    </p>
-                    {/* Monetization Value */}
-                    <div className="pt-4 border-t border-border/50">
-                      <p className="text-sm text-primary font-medium">
-                        💰 {feature.monetizationValue}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Hover glow effect */}
-                  <div className="absolute -inset-px rounded-2xl bg-gradient-to-br from-primary/20 to-chart-2/20 opacity-0 group-hover:opacity-100 blur transition-opacity duration-500 -z-10" />
-                </motion.div>
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+                  <feature.icon className="w-6 h-6 text-primary" />
+                </div>
+                <h3 className="text-lg font-bold mb-2">{feature.title}</h3>
+                <p className="text-muted-foreground text-sm mb-4">
+                  {feature.description}
+                </p>
+                
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="text-xs text-muted-foreground/50 hover:text-primary transition-colors italic">
+                      Wait, what?
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{feature.joke}</p>
+                  </TooltipContent>
+                </Tooltip>
               </motion.div>
-            );
-          })}
-        </motion.div>
+            ))}
+          </TooltipProvider>
+        </div>
       </div>
     </section>
   );

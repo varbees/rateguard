@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, AlertCircle, Loader2 } from "lucide-react";
-import { apiClient } from "@/lib/api";
+import { useDashboardStats } from "@/lib/hooks/use-api";
 
 export default function SuccessPage() {
   const router = useRouter();
@@ -20,11 +20,7 @@ export default function SuccessPage() {
     data: dashboardData,
     isLoading,
     error,
-  } = useQuery({
-    queryKey: ["dashboard", "success"],
-    queryFn: () => apiClient.getDashboardStats(),
-    staleTime: 0, // Always fresh
-  });
+  } = useDashboardStats();
 
   const plan = dashboardData?.plan;
   const planName = plan?.tier

@@ -132,7 +132,7 @@ export default function UsagePage() {
                 <p className="text-2xl font-bold text-foreground mt-2">
                   {isLoading
                     ? "..."
-                    : (stats?.total_requests || 0).toLocaleString()}
+                    : (stats?.stats.total_requests || 0).toLocaleString()}
                 </p>
                 <p className="text-xs text-primary mt-1">
                   +12% from last month
@@ -155,7 +155,7 @@ export default function UsagePage() {
                 <p className="text-2xl font-bold text-foreground mt-2">
                   {isLoading
                     ? "..."
-                    : `${(stats?.success_rate || 0).toFixed(1)}%`}
+                    : `${(stats?.stats.success_rate || 0).toFixed(1)}%`}
                 </p>
                 <p className="text-xs text-primary mt-1">
                   +2.1% from last month
@@ -178,7 +178,7 @@ export default function UsagePage() {
                 <p className="text-2xl font-bold text-foreground mt-2">
                   {isLoading
                     ? "..."
-                    : `${(stats?.avg_response_time_ms || 0).toFixed(0)}ms`}
+                    : `${(stats?.stats.avg_response_time_ms || 0).toFixed(0)}ms`}
                 </p>
                 <p className="text-xs text-destructive mt-1">
                   +5ms from last month
@@ -201,7 +201,7 @@ export default function UsagePage() {
                 <p className="text-2xl font-bold text-foreground mt-2">
                   {isLoading
                     ? "..."
-                    : `${(100 - (stats?.success_rate || 0)).toFixed(1)}%`}
+                    : `${(100 - (stats?.stats.success_rate || 0)).toFixed(1)}%`}
                 </p>
                 <p className="text-xs text-primary mt-1">
                   -0.8% from last month
@@ -216,7 +216,7 @@ export default function UsagePage() {
       </div>
 
       {/* Usage Over Time */}
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="text-card-foreground">
             Usage Over Time
@@ -375,7 +375,7 @@ export default function UsagePage() {
       </div>
 
       {/* Recent Activity */}
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="text-card-foreground">
             Recent Activity
@@ -383,8 +383,8 @@ export default function UsagePage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {stats?.usage_by_api && stats.usage_by_api.length > 0 ? (
-              stats.usage_by_api.map((api, index) => (
+            {stats?.stats.usage_by_api && stats.stats.usage_by_api.length > 0 ? (
+              stats.stats.usage_by_api.map((api, index) => (
                 <div
                   key={index}
                   className="flex items-center justify-between p-4 bg-muted rounded-lg"

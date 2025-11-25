@@ -2,13 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Menu, X } from "lucide-react";
+import { Shield, Menu, X, LayoutDashboard } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useDashboardStore } from "@/lib/store";
+import { useRouter } from "next/navigation";
+import { useUser } from "@/lib/hooks/use-api";
 
 /**
  * Header/Navbar Component
- * Sticky header with smooth scroll and mobile menu
+ * Sticky header with smooth scroll, mobile menu, and intelligent auth detection
  */
 
 const navLinks = [
@@ -19,8 +23,21 @@ const navLinks = [
 ];
 
 export function Header() {
+  const router = useRouter();
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const setUser = useDashboardStore((state) => state.setUser);
+  const isAuthenticated = useDashboardStore((state) => state.isAuthenticated);
+  
+  // Check auth using React Query
+  const { data: user, isLoading: isAuthCheckLoading } = useUser();
+
+  // Update store when user data is available
+  useEffect(() => {
+    if (user) {
+      setUser(user);
+    }
+  }, [user, setUser]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -30,6 +47,96 @@ export function Header() {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
+
+  const AuthButtons = () => {
+    if (isAuthCheckLoading) {
+      // Skeleton loader
+      return (
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-10 w-20" />
+          <Skeleton className="h-10 w-28" />
+        </div>
+      );
+    }
+
+    if (isAuthenticated) {
+      // Authenticated user - show Dashboard button
+      return (
+        <Button
+          onClick={() => router.push("/dashboard")}
+          className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/30"
+        >
+          <LayoutDashboard className="w-4 h-4 mr-2" />
+          Dashboard
+        </Button>
+      );
+    }
+
+    // Guest user - show Sign In / Get Started
+    return (
+      <>
+        <Link href="/login">
+          <Button
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground hover:bg-accent"
+          >
+            Sign In
+          </Button>
+        </Link>
+        <Link href="/signup">
+          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/30">
+            Get Started
+          </Button>
+        </Link>
+      </>
+    );
+  };
+
+  const MobileAuthButtons = () => {
+    if (isAuthCheckLoading) {
+      return (
+        <div className="flex flex-col gap-3 pt-4 border-t border-border">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      );
+    }
+
+    if (isAuthenticated) {
+      return (
+        <div className="flex flex-col gap-3 pt-4 border-t border-border">
+          <Button
+            onClick={() => {
+              router.push("/dashboard");
+              setIsMobileMenuOpen(false);
+            }}
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+          >
+            <LayoutDashboard className="w-4 h-4 mr-2" />
+            Dashboard
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col gap-3 pt-4 border-t border-border">
+        <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
+          <Button
+            variant="ghost"
+            className="w-full text-muted-foreground hover:text-foreground hover:bg-accent"
+          >
+            Sign In
+          </Button>
+        </Link>
+        <Link href="/signup" onClick={() => setIsMobileMenuOpen(false)}>
+          <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+            Get Started
+          </Button>
+        </Link>
+      </div>
+    );
+  };
 
   return (
     <motion.header
@@ -69,19 +176,7 @@ export function Header() {
 
           {/* Desktop CTAs */}
           <div className="hidden md:flex items-center gap-4">
-            <Link href="/login">
-              <Button
-                variant="ghost"
-                className="text-muted-foreground hover:text-foreground hover:bg-accent"
-              >
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/30">
-                Get Started
-              </Button>
-            </Link>
+            <AuthButtons />
           </div>
 
           {/* Mobile Menu Button */}
@@ -123,21 +218,7 @@ export function Header() {
                   {link.label}
                 </motion.a>
               ))}
-              <div className="flex flex-col gap-3 pt-4 border-t border-border">
-                <Link href="/login" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button
-                    variant="ghost"
-                    className="w-full text-muted-foreground hover:text-foreground hover:bg-accent"
-                  >
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/signup" onClick={() => setIsMobileMenuOpen(false)}>
-                  <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                    Get Started
-                  </Button>
-                </Link>
-              </div>
+              <MobileAuthButtons />
             </nav>
           </motion.div>
         )}

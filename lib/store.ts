@@ -22,6 +22,10 @@ interface DashboardStore {
   addAPI: (api: APIConfig) => void;
   updateAPI: (api: APIConfig) => void;
   removeAPI: (id: string) => void;
+  // UI State
+  isSidebarCollapsed: boolean;
+  toggleSidebar: () => void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 export const useDashboardStore = create<DashboardStore>((set) => ({
@@ -31,6 +35,7 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
   stats: null,
   usage: null,
   apis: [],
+  isSidebarCollapsed: true, // Default to collapsed for icon-only view
 
   // Auth Actions
   setUser: (user: User) => {
@@ -45,6 +50,10 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
       apis: [],
     });
   },
+
+  // UI Actions
+  toggleSidebar: () => set((state) => ({ isSidebarCollapsed: !state.isSidebarCollapsed })),
+  setSidebarCollapsed: (collapsed: boolean) => set({ isSidebarCollapsed: collapsed }),
 
   // Data Actions
   setStats: (stats: DashboardStats) => set({ stats }),

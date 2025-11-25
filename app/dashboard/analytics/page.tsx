@@ -63,6 +63,7 @@ import {
 } from "@/components/ui/tooltip";
 import { analyticsAPI, apiClient, type AnalyticsData } from "@/lib/api";
 import { FeatureGate } from "@/components/dashboard/FeatureGate";
+import { useDashboardStats } from "@/lib/hooks/use-api";
 
 type DateRange = "today" | "7d" | "30d" | "custom";
 type SortField = "path" | "requests" | "avgResponseTime" | "errorRate";
@@ -77,10 +78,7 @@ export default function AnalyticsPage() {
   const [sortOrder, setSortOrder] = React.useState<SortOrder>("desc");
 
   // Check user plan features
-  const { data: dashboardData } = useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => apiClient.getDashboardStats(),
-  });
+  const { data: dashboardData } = useDashboardStats();
 
   // Fetch analytics data
   const { data, isLoading, error, refetch } = useQuery({
