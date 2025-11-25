@@ -15,6 +15,7 @@ import {
   BasicInfoSection,
   RateLimitsSection,
   AdvancedSection,
+  AuthenticationSection,
   PreviewPanel,
   TemplatesDialog,
   getDefaultConfig,
@@ -57,6 +58,8 @@ export default function EditAPIPage() {
           retryAttempts: api.retry_attempts,
           corsOrigins: api.allowed_origins?.join("\n") || "",
           enabled: api.enabled,
+          authType: api.auth_type || "none",
+          authCredentials: api.auth_credentials || {},
         });
       } catch {
         toast({
@@ -101,6 +104,8 @@ export default function EditAPIPage() {
       ...template.config,
       corsOrigins: "",
       enabled: formData.enabled, // Keep current enabled state
+      authType: "none",
+      authCredentials: {},
     });
     toast({
       title: "Template applied",
@@ -202,6 +207,11 @@ export default function EditAPIPage() {
           .map((s) => s.trim())
           .filter(Boolean),
         enabled: formData.enabled,
+        auth_type: formData.authType,
+        auth_credentials:
+          Object.keys(formData.authCredentials).length > 0
+            ? formData.authCredentials
+            : undefined,
         custom_headers: formData.description
           ? { description: formData.description }
           : undefined,
@@ -364,6 +374,22 @@ export default function EditAPIPage() {
               onPerHourChange={handlePerHourChange}
               onPerDayChange={handlePerDayChange}
               onPerMonthChange={handlePerMonthChange}
+            />
+
+            <AuthenticationSection
+              authType={formData.authType}
+              authCredentials={formData.authCredentials}
+              onAuthTypeChange={(value) => {
+                // Clear credentials when changing auth type
+                setFormData({
+                  ...formData,
+                  authType: value,
+                  authCredentials: {},
+                });
+              }}
+              onAuthCredentialsChange={(value) =>
+                setFormData({ ...formData, authCredentials: value })
+              }
             />
 
             <AdvancedSection

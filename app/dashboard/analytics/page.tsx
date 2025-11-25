@@ -61,7 +61,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { analyticsAPI, type AnalyticsData } from "@/lib/api";
+import { analyticsAPI, apiClient, type AnalyticsData } from "@/lib/api";
+import { FeatureGate } from "@/components/dashboard/FeatureGate";
 
 type DateRange = "today" | "7d" | "30d" | "custom";
 type SortField = "path" | "requests" | "avgResponseTime" | "errorRate";
@@ -75,11 +76,18 @@ export default function AnalyticsPage() {
   const [sortField, setSortField] = React.useState<SortField>("requests");
   const [sortOrder, setSortOrder] = React.useState<SortOrder>("desc");
 
+  // Check user plan features
+  const { data: dashboardData } = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: () => apiClient.getDashboardStats(),
+  });
+
   // Fetch analytics data
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["analytics", dateRange],
-    queryFn: () => analyticsAPI.get({ dateRange }),
+    queryFn: () => analyticsAPI.get(),
     refetchInterval: 60000, // Refresh every minute
+    enabled: dashboardData?.plan?.features?.advanced_analytics || false,
   });
 
   const handleRefresh = () => {
@@ -131,6 +139,19 @@ export default function AnalyticsPage() {
       setSortOrder("desc");
     }
   };
+
+  // Show feature gate if user doesn't have advanced analytics
+  if (dashboardData && !dashboardData.plan?.features?.advanced_analytics) {
+    return (
+      <div className="min-h-screen bg-background">
+        <FeatureGate
+          featureName="Advanced Analytics"
+          requiredPlan="pro"
+          description="Get detailed insights into your API performance, request patterns, and cost optimization opportunities."
+        />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

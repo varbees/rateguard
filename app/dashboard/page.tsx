@@ -10,6 +10,9 @@ import {
   UsageGraphSection,
   APIListTable,
   RecentActivity,
+  AlertBanner,
+  CostEstimateCard,
+  PlanLimitsCard,
 } from "@/components/dashboard";
 import { LogOut } from "lucide-react";
 
@@ -51,7 +54,7 @@ function generateMockRequests() {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { isAuthenticated, clearAuth } = useDashboardStore();
+  const { user, clearAuth } = useDashboardStore();
 
   const [stats, setStats] = React.useState<DashboardStats | null>(null);
   const [apiList, setApiList] = React.useState<APIConfig[]>([]);
@@ -83,19 +86,19 @@ export default function DashboardPage() {
   }, []);
 
   React.useEffect(() => {
-    if (!isAuthenticated) {
-      router.push("/login");
-      return;
-    }
-
     fetchDashboardData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, fetchDashboardData]);
+  }, [fetchDashboardData]);
 
-  const handleLogout = () => {
-    apiClient.clearApiKey();
-    clearAuth();
-    router.push("/login");
+  const handleLogout = async () => {
+    try {
+      await apiClient.logout();
+      clearAuth();
+      window.location.href = "/login";
+    } catch (error) {
+      console.error("Logout failed:", error);
+      // Force redirect even if logout fails
+      window.location.href = "/login";
+    }
   };
 
   const handleRefreshData = () => {
@@ -198,6 +201,15 @@ export default function DashboardPage() {
         </div>
 
         <div className="space-y-8">
+          {/* Alert Banners */}
+          <AlertBanner />
+
+          {/* Plan Limits Card */}
+          {stats && <PlanLimitsCard plan={stats.plan} stats={stats.stats} />}
+
+          {/* Cost Estimate */}
+          <CostEstimateCard />
+
           {/* Section 1: Metric Cards */}
           <MetricCards data={metricData} loading={loading} />
 
