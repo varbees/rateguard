@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -26,8 +26,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useDashboardStore } from "@/lib/store";
 import { toasts, copyToClipboard } from "@/lib/toast";
+import { settingsAPI } from "@/lib/api";
 import { ButtonLoading } from "@/components/loading";
 import {
   User,
@@ -37,19 +37,17 @@ import {
   Shield,
   Copy,
   Trash2,
-  Plus,
   Upload,
   Lock,
   ExternalLink,
 } from "lucide-react";
 
 export default function SettingsPage() {
-  const apiKey = useDashboardStore((state) => state.apiKey);
   const [activeTab, setActiveTab] = useState("profile");
 
   // Profile state
-  const [name, setName] = useState("John Doe");
-  const [email] = useState("john@example.com");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -61,7 +59,7 @@ export default function SettingsPage() {
     {
       id: "1",
       name: "Production Key",
-      key: apiKey || "rg_xxxxxxxxxxxxxxxxxxxx",
+      key: "rg_xxxxxxxxxxxxxxxxxxxx",
       lastUsed: "2 hours ago",
       createdAt: "Nov 15, 2025",
     },
@@ -73,7 +71,6 @@ export default function SettingsPage() {
       createdAt: "Nov 10, 2025",
     },
   ]);
-  const [newKeyName, setNewKeyName] = useState("");
   const [isCreatingKey, setIsCreatingKey] = useState(false);
   const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
 
@@ -83,6 +80,30 @@ export default function SettingsPage() {
   const [errorAlerts, setErrorAlerts] = useState(true);
   const [weeklyReport, setWeeklyReport] = useState(false);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+
+  // Load settings on mount
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const data = await settingsAPI.get();
+
+        // Set user data
+        setEmail(data.user.email);
+        setName(data.user.name || data.user.email);
+
+        // Set notification preferences
+        setEmailAlerts(data.notifications.email_alerts);
+        setUsageThreshold([data.notifications.usage_threshold_percent]);
+        setErrorAlerts(data.notifications.error_alerts);
+        setWeeklyReport(data.notifications.weekly_report);
+      } catch (error) {
+        console.error("Failed to load settings:", error);
+        toasts.config.importFailed();
+      }
+    };
+
+    loadSettings();
+  }, []);
 
   // Profile handlers
   const handleSaveProfile = async () => {
@@ -109,13 +130,17 @@ export default function SettingsPage() {
 
     setIsChangingPassword(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await settingsAPI.changePassword({
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
       toasts.config.saved();
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    } catch {
+    } catch (error) {
       toasts.config.importFailed();
+      console.error("Password change failed:", error);
     } finally {
       setIsChangingPassword(false);
     }
@@ -123,28 +148,23 @@ export default function SettingsPage() {
 
   // API Keys handlers
   const handleCreateKey = async () => {
-    if (!newKeyName.trim()) {
-      toasts.validation.required("key name");
-      return;
-    }
-
     setIsCreatingKey(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const result = await settingsAPI.regenerateAPIKey();
       const newKey = {
         id: Date.now().toString(),
-        name: newKeyName,
-        key: `rg_${Math.random().toString(36).substring(2, 24)}`,
-        lastUsed: "Never",
+        name: "Primary API Key",
+        key: result.api_key,
+        lastUsed: "Just now",
         createdAt: new Date().toLocaleDateString("en-US", {
           month: "short",
           day: "numeric",
           year: "numeric",
         }),
       };
-      setApiKeys([...apiKeys, newKey]);
-      setNewKeyName("");
-      toasts.api.created(newKeyName);
+      // Replace existing keys (users have one primary key)
+      setApiKeys([newKey]);
+      toasts.api.created("API Key");
     } catch {
       toasts.api.createFailed();
     } finally {
@@ -170,7 +190,12 @@ export default function SettingsPage() {
   const handleSaveNotifications = async () => {
     setIsSavingNotifications(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await settingsAPI.update({
+        email_alerts: emailAlerts,
+        usage_threshold_percent: usageThreshold[0],
+        error_alerts: errorAlerts,
+        weekly_report: weeklyReport,
+      });
       toasts.config.saved();
     } catch {
       toasts.config.importFailed();
@@ -222,7 +247,9 @@ export default function SettingsPage() {
         <TabsContent value="profile" className="space-y-6">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">Personal Information</CardTitle>
+              <CardTitle className="text-foreground">
+                Personal Information
+              </CardTitle>
               <CardDescription>
                 Update your account details and profile
               </CardDescription>
@@ -350,23 +377,19 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  placeholder="Key name (e.g., Production Key)"
-                  className="bg-accent border-slate-700"
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateKey()}
-                />
+              <div className="space-y-3">
                 <ButtonLoading
                   loading={isCreatingKey}
-                  loadingText="Creating..."
+                  loadingText="Regenerating..."
                   onClick={handleCreateKey}
                   className="gap-2"
                 >
-                  <Plus className="w-4 h-4" />
-                  Create
+                  <Key className="w-4 h-4" />
+                  Regenerate API Key
                 </ButtonLoading>
+                <p className="text-xs text-yellow-400">
+                  ⚠️ Regenerating will invalidate your current API key
+                </p>
               </div>
 
               <Separator className="bg-accent" />
@@ -379,7 +402,9 @@ export default function SettingsPage() {
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium text-foreground">{key.name}</p>
+                        <p className="font-medium text-foreground">
+                          {key.name}
+                        </p>
                         {key.lastUsed === "Never" && (
                           <Badge variant="outline" className="text-xs">
                             New
@@ -446,12 +471,14 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-6 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-lg">
+              <div className="flex items-center justify-between p-6 bg-linear-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-lg">
                 <div>
                   <h3 className="text-2xl font-bold text-foreground mb-1">
                     Free Plan
                   </h3>
-                  <p className="text-muted-foreground">Perfect for getting started</p>
+                  <p className="text-muted-foreground">
+                    Perfect for getting started
+                  </p>
                 </div>
                 <Badge className="bg-blue-500 text-foreground px-4 py-2 text-lg">
                   $0/mo
@@ -461,7 +488,9 @@ export default function SettingsPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label>API Requests This Month</Label>
-                  <span className="text-sm text-muted-foreground">2,450 / 10,000</span>
+                  <span className="text-sm text-muted-foreground">
+                    2,450 / 10,000
+                  </span>
                 </div>
                 <div className="w-full bg-accent rounded-full h-2">
                   <div
@@ -477,10 +506,14 @@ export default function SettingsPage() {
               <Separator className="bg-accent" />
 
               <div className="space-y-3">
-                <h4 className="font-semibold text-foreground">Upgrade Options</h4>
+                <h4 className="font-semibold text-foreground">
+                  Upgrade Options
+                </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 bg-accent border border-slate-700 rounded-lg">
-                    <h5 className="font-semibold text-foreground mb-2">Pro Plan</h5>
+                    <h5 className="font-semibold text-foreground mb-2">
+                      Pro Plan
+                    </h5>
                     <p className="text-2xl font-bold text-blue-500 mb-3">
                       $29/mo
                     </p>
@@ -525,14 +558,16 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between p-4 bg-accent border border-slate-700 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded flex items-center justify-center text-foreground text-xs font-bold">
+                  <div className="w-12 h-8 bg-linear-to-r from-blue-500 to-purple-500 rounded flex items-center justify-center text-foreground text-xs font-bold">
                     VISA
                   </div>
                   <div>
                     <p className="text-foreground font-medium">
                       •••• •••• •••• 4242
                     </p>
-                    <p className="text-sm text-muted-foreground">Expires 12/2025</p>
+                    <p className="text-sm text-muted-foreground">
+                      Expires 12/2025
+                    </p>
                   </div>
                 </div>
                 <Button variant="outline" size="sm">
@@ -640,7 +675,9 @@ export default function SettingsPage() {
         <TabsContent value="security" className="space-y-6">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">Security Settings</CardTitle>
+              <CardTitle className="text-foreground">
+                Security Settings
+              </CardTitle>
               <CardDescription>Enhance your account security</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -716,7 +753,7 @@ export default function SettingsPage() {
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDeleteKey}
-              className="bg-destructive/100 hover:bg-red-600 text-foreground"
+              className="bg-destructive hover:bg-red-600 text-foreground"
             >
               Revoke Key
             </AlertDialogAction>
