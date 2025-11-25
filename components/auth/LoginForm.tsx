@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,12 +17,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Mail, Lock, AlertCircle, Shield } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
 import { apiClient } from "@/lib/api";
-import { useDashboardStore } from "@/lib/store";
 
 export default function LoginForm() {
-  const router = useRouter();
-  const setApiKey = useDashboardStore((state) => state.setApiKey);
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -43,22 +38,17 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      // Use API client login method
-      const data = await apiClient.login({ email, password });
-
-      // Store API key from login response
-      if (data.api_key) {
-        setApiKey(data.api_key);
-      }
+      // Use API client login method - JWT tokens set automatically in cookies
+      await apiClient.login({ email, password });
 
       toasts.auth.loginSuccess();
 
-      // Redirect to dashboard
-      router.push("/dashboard");
+      // Redirect to dashboard using window.location for full page reload
+      // This ensures cookies are properly set and user context is loaded
+      window.location.href = "/dashboard";
     } catch (error) {
       setError((error as Error).message || "Login failed");
       handleApiError(error, "Login failed");
-    } finally {
       setLoading(false);
     }
   };

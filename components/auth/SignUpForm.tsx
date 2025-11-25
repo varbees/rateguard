@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,12 +24,8 @@ import {
 } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
 import { apiClient } from "@/lib/api";
-import { useDashboardStore } from "@/lib/store";
 
 export default function SignUpForm() {
-  const router = useRouter();
-  const setApiKey = useDashboardStore((state) => state.setApiKey);
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -62,24 +57,20 @@ export default function SignUpForm() {
     setLoading(true);
 
     try {
-      // Use API client signup method
-      const data = await apiClient.signup({
+      // Use API client signup method - JWT tokens set automatically in cookies
+      await apiClient.signup({
         email,
         password,
         plan: "free",
       });
 
-      if (data.api_key) {
-        setApiKey(data.api_key);
-      }
-
       toasts.auth.signupSuccess();
 
-      router.push("/dashboard");
+      // Redirect to dashboard using window.location for full page reload
+      window.location.href = "/dashboard";
     } catch (error) {
       setError((error as Error).message || "Sign up failed");
       handleApiError(error, "Sign up failed");
-    } finally {
       setLoading(false);
     }
   };
