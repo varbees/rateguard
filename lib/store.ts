@@ -1,23 +1,14 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
-import { APIConfig, DashboardStats, UsageStats, apiClient } from "./api";
-
-interface User {
-  email?: string;
-  id?: string;
-}
+import { User, APIConfig, DashboardStats, UsageStats } from "./api";
 
 interface DashboardStore {
-  // Auth State
-  apiKey: string | null;
+  // Auth State (JWT in cookies - no localStorage persistence)
   user: User | null;
   isAuthenticated: boolean;
-  _hasHydrated: boolean;
 
   // Actions
-  setApiKey: (key: string, user?: User) => void;
+  setUser: (user: User) => void;
   clearAuth: () => void;
-  setHasHydrated: (state: boolean) => void;
 
   // Dashboard Data
   stats: DashboardStats | null;
@@ -33,68 +24,39 @@ interface DashboardStore {
   removeAPI: (id: string) => void;
 }
 
-export const useDashboardStore = create<DashboardStore>()(
-  persist(
-    (set) => ({
-      // Initial State
-      apiKey: null,
+export const useDashboardStore = create<DashboardStore>((set) => ({
+  // Initial State (no localStorage - auth via JWT cookies)
+  user: null,
+  isAuthenticated: false,
+  stats: null,
+  usage: null,
+  apis: [],
+
+  // Auth Actions
+  setUser: (user: User) => {
+    set({ user, isAuthenticated: true });
+  },
+  clearAuth: () => {
+    set({
       user: null,
       isAuthenticated: false,
-      _hasHydrated: false,
       stats: null,
       usage: null,
       apis: [],
+    });
+  },
 
-      // Auth Actions
-      setApiKey: (key: string, user?: User) => {
-        // Sync with APIClient
-        apiClient.setApiKey(key);
-        set({ apiKey: key, user: user || null, isAuthenticated: true });
-      },
-      clearAuth: () => {
-        // Sync with APIClient
-        apiClient.clearApiKey();
-        set({
-          apiKey: null,
-          user: null,
-          isAuthenticated: false,
-          stats: null,
-          usage: null,
-          apis: [],
-        });
-      },
-      setHasHydrated: (state: boolean) => set({ _hasHydrated: state }),
-
-      // Data Actions
-      setStats: (stats: DashboardStats) => set({ stats }),
-      setUsage: (usage: UsageStats) => set({ usage }),
-      setAPIs: (apis: APIConfig[]) => set({ apis }),
-      addAPI: (api: APIConfig) =>
-        set((state) => ({ apis: [...state.apis, api] })),
-      updateAPI: (api: APIConfig) =>
-        set((state) => ({
-          apis: state.apis.map((a) => (a.id === api.id ? api : a)),
-        })),
-      removeAPI: (id: string) =>
-        set((state) => ({
-          apis: state.apis.filter((a) => a.id !== id),
-        })),
-    }),
-    {
-      name: "rateguard-dashboard",
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        apiKey: state.apiKey,
-        user: state.user,
-        isAuthenticated: state.isAuthenticated,
-      }),
-      onRehydrateStorage: () => (state) => {
-        // Sync API client with persisted state after hydration
-        if (state?.apiKey) {
-          apiClient.setApiKey(state.apiKey);
-        }
-        state?.setHasHydrated(true);
-      },
-    }
-  )
-);
+  // Data Actions
+  setStats: (stats: DashboardStats) => set({ stats }),
+  setUsage: (usage: UsageStats) => set({ usage }),
+  setAPIs: (apis: APIConfig[]) => set({ apis }),
+  addAPI: (api: APIConfig) => set((state) => ({ apis: [...state.apis, api] })),
+  updateAPI: (api: APIConfig) =>
+    set((state) => ({
+      apis: state.apis.map((a) => (a.id === api.id ? api : a)),
+    })),
+  removeAPI: (id: string) =>
+    set((state) => ({
+      apis: state.apis.filter((a) => a.id !== id),
+    })),
+}));
