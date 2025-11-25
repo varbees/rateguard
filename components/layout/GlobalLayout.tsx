@@ -1,55 +1,75 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useDashboardStore } from "@/lib/store";
 import { LoadingPage } from "@/components/loading";
 import FloatingSidebar from "./FloatingSidebar";
+import { apiClient } from "@/lib/api";
 
 export function GlobalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const isAuthenticated = useDashboardStore((state) => state.isAuthenticated);
-  const hasHydrated = useDashboardStore((state) => state._hasHydrated);
+  const { user, isAuthenticated, setUser } = useDashboardStore();
+  const [loading, setLoading] = useState(true);
 
-  // Exclude sidebar for the main landing page - no sidebar at all
-  if (pathname === "/") {
-    return <>{children}</>;
-  }
-
-  // Exclude floating sidebar for docs (has own layout)
-  const isDocsPage = pathname.startsWith("/docs");
-
-  // Auth logic, moved from the old dashboard layout
-  useEffect(() => {
-    // We only want to redirect if the store has been hydrated and the user is not authenticated.
-    // Also, we don't want to redirect on public auth pages or docs.
-    const isAuthPage =
-      pathname.startsWith("/login") ||
-      pathname.startsWith("/signup") ||
-      pathname.startsWith("/forgot-password") ||
-      pathname.startsWith("/reset-password");
-
-    const isPublicPage = isAuthPage || isDocsPage;
-
-    if (hasHydrated && !isAuthenticated && !isPublicPage) {
-      router.push("/login");
-    }
-  }, [hasHydrated, isAuthenticated, pathname, router, isDocsPage]);
-
-  // While the Zustand store is rehydrating, show a loading state to prevent flicker
-  if (!hasHydrated) {
-    return <LoadingPage text="Initializing..." />;
-  }
-
-  // Don't render the floating sidebar for public auth pages, just the page content
+  // Check if current page is a public auth page
   const isAuthPage =
     pathname.startsWith("/login") ||
     pathname.startsWith("/signup") ||
     pathname.startsWith("/forgot-password") ||
     pathname.startsWith("/reset-password");
 
+  // Exclude floating sidebar for docs (has own layout)
+  const isDocsPage = pathname.startsWith("/docs");
+
+  const isPublicPage = isAuthPage || isDocsPage;
+  const isHomePage = pathname === "/";
+
+  // Auth logic - load user data if needed
+  useEffect(() => {
+    async function loadUser() {
+      // Skip loading for public pages
+      if (isPublicPage) {
+        setLoading(false);
+        return;
+      }
+
+      // If user is already loaded, skip
+      if (user && isAuthenticated) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Try to get current user from JWT cookie
+        const userData = await apiClient.getCurrentUser();
+        setUser(userData);
+        setLoading(false);
+      } catch (error) {
+        console.error("Failed to load user:", error);
+        // Only redirect to login if not on a public page
+        if (!isPublicPage) {
+          window.location.href = "/login";
+        } else {
+          setLoading(false);
+        }
+      }
+    }
+
+    loadUser();
+  }, [pathname, isPublicPage, user, isAuthenticated, setUser]);
+
+  // Show loading state while checking authentication
+  if (loading) {
+    return <LoadingPage text="Loading..." />;
+  }
+
+  // Exclude sidebar for the main landing page - no sidebar at all
+  if (isHomePage) {
+    return <>{children}</>;
+  }
+
+  // Don't render the floating sidebar for public auth pages, just the page content
   if (isAuthPage) {
     return <>{children}</>;
   }
