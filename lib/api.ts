@@ -54,7 +54,27 @@ export interface UsageByAPI {
   last_used: string;
 }
 
-export interface DashboardStats {
+export interface PlanFeatures {
+  max_apis: number;
+  max_requests_per_day: number;
+  max_requests_per_month: number;
+  advanced_analytics: boolean;
+  priority_support: boolean;
+  custom_rate_limits: boolean;
+  webhooks: boolean;
+  api_access: boolean;
+}
+
+export interface PlanInfo {
+  tier: string;
+  features: PlanFeatures;
+  limits: {
+    apis: { used: number; max: number };
+    requests: { used: number; max: number };
+  };
+}
+
+export interface DashboardStatsData {
   total_requests: number;
   requests_today: number;
   active_apis: number;
@@ -70,6 +90,11 @@ export interface DashboardStats {
   timestamp: string;
 }
 
+export interface DashboardStats {
+  stats: DashboardStatsData;
+  plan: PlanInfo;
+}
+
 export interface UsageStats {
   user_id: string;
   total_requests: number;
@@ -80,6 +105,45 @@ export interface UsageStats {
   period: string;
   period_start: string;
   period_end: string;
+}
+
+// Alert Types
+export type AlertType = "critical" | "warning" | "info";
+
+export interface Alert {
+  id: string;
+  type: AlertType;
+  title: string;
+  message: string;
+  api_id?: string;
+  api_name?: string;
+  metric?: string;
+  metric_value?: number;
+  detected_at: string;
+  dismissible: boolean;
+}
+
+export interface AlertsResponse {
+  alerts: Alert[];
+  count: number;
+}
+
+// Cost Estimate Types
+export interface APICost {
+  api_id: string;
+  api_name: string;
+  request_count: number;
+  cost_per_request: number;
+  total_cost: number;
+}
+
+export interface CostEstimate {
+  today_cost: number;
+  monthly_projection: number;
+  mtd_cost: number;
+  mtd_requests: number;
+  api_costs: APICost[];
+  calculated_at: string;
 }
 
 // Analytics Types
@@ -153,8 +217,10 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   user: User;
-  api_key: string;
-  token?: string;
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  api_key?: string; // Deprecated - for backward compatibility
 }
 
 export interface RequestPasswordResetRequest {
@@ -203,25 +269,17 @@ export class APIError extends Error {
 // API Client Class
 class APIClient {
   private baseURL: string;
-  private apiKey: string | null = null;
+  private isRefreshing = false;
+  private refreshPromise: Promise<void> | null = null;
 
   constructor() {
     this.baseURL = API_BASE_URL;
-    // Try to load API key from localStorage on client side
-    if (typeof window !== "undefined") {
-      this.apiKey = localStorage.getItem("apiKey");
-    }
   }
 
-  setApiKey(apiKey: string) {
-    this.apiKey = apiKey;
-    if (typeof window !== "undefined") {
-      localStorage.setItem("apiKey", apiKey);
-    }
-  }
-
-  clearApiKey() {
-    this.apiKey = null;
+  // JWT tokens are stored in httpOnly cookies - no localStorage!
+  clearAuth() {
+    // Cookies will be cleared by logout endpoint
+    // Just remove any legacy API keys from localStorage
     if (typeof window !== "undefined") {
       localStorage.removeItem("apiKey");
     }
@@ -236,16 +294,31 @@ class APIClient {
       ...(options.headers as Record<string, string>),
     };
 
-    // Backend expects X-API-Key header for authentication
-    if (this.apiKey) {
-      headers["X-API-Key"] = this.apiKey;
-    }
-
     try {
       const response = await fetch(`${this.baseURL}${endpoint}`, {
         ...options,
         headers,
+        credentials: "include", // IMPORTANT: Send cookies with every request
       });
+
+      // Handle 401 (token expired) - attempt to refresh
+      if (
+        response.status === 401 &&
+        endpoint !== "/api/v1/auth/refresh" &&
+        endpoint !== "/api/v1/auth/login"
+      ) {
+        try {
+          await this.refreshAccessToken();
+          // Retry the original request
+          return this.request<T>(endpoint, options);
+        } catch {
+          // Refresh failed - redirect to login
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+          throw new APIError("Session expired. Please log in again.", 401);
+        }
+      }
 
       if (!response.ok) {
         // Try to parse error response
@@ -285,6 +358,36 @@ class APIClient {
     }
   }
 
+  // Refresh access token using refresh token from cookie
+  private async refreshAccessToken(): Promise<void> {
+    // Prevent multiple simultaneous refresh attempts
+    if (this.isRefreshing) {
+      return this.refreshPromise!;
+    }
+
+    this.isRefreshing = true;
+    this.refreshPromise = (async () => {
+      try {
+        const response = await fetch(`${this.baseURL}/api/v1/auth/refresh`, {
+          method: "POST",
+          credentials: "include", // Send refresh token cookie
+        });
+
+        if (!response.ok) {
+          throw new Error("Token refresh failed");
+        }
+
+        // New access token is set in cookie by backend
+        await response.json();
+      } finally {
+        this.isRefreshing = false;
+        this.refreshPromise = null;
+      }
+    })();
+
+    return this.refreshPromise;
+  }
+
   // Health Check
   async healthCheck() {
     return this.request<{ status: string; healthy: boolean }>("/health");
@@ -292,17 +395,39 @@ class APIClient {
 
   // Authentication
   async signup(data: SignupRequest): Promise<LoginResponse> {
-    return this.request<LoginResponse>("/api/v1/auth/signup", {
+    const response = await this.request<LoginResponse>("/api/v1/auth/signup", {
       method: "POST",
       body: JSON.stringify(data),
     });
+    // Tokens are stored in httpOnly cookies by backend
+    return response;
   }
 
   async login(data: LoginRequest): Promise<LoginResponse> {
-    return this.request<LoginResponse>("/api/v1/auth/login", {
+    const response = await this.request<LoginResponse>("/api/v1/auth/login", {
       method: "POST",
       body: JSON.stringify(data),
     });
+    // Tokens are stored in httpOnly cookies by backend
+    return response;
+  }
+
+  async logout(): Promise<void> {
+    await this.request("/api/v1/auth/logout", {
+      method: "POST",
+    });
+    this.clearAuth();
+  }
+
+  // Get current authenticated user
+  async getCurrentUser(): Promise<User> {
+    const response = await this.request<{ user: User }>("/api/v1/auth/me");
+    return response.user;
+  }
+
+  // Manual token refresh (usually automatic via 401 handler)
+  async refreshToken(): Promise<void> {
+    return this.refreshAccessToken();
   }
 
   // Password Reset
@@ -332,6 +457,16 @@ class APIClient {
   // Usage Stats
   async getUsageStats(): Promise<UsageStats> {
     return this.request<UsageStats>("/api/v1/dashboard/usage");
+  }
+
+  // Alerts
+  async getAlerts(): Promise<AlertsResponse> {
+    return this.request<AlertsResponse>("/api/v1/dashboard/alerts");
+  }
+
+  // Cost Estimates
+  async getCostEstimate(): Promise<CostEstimate> {
+    return this.request<CostEstimate>("/api/v1/dashboard/costs");
   }
 
   // API Configurations
@@ -399,27 +534,18 @@ class APIClient {
   }
 
   // Analytics - Get comprehensive analytics data
-  async getAnalytics(params?: {
-    dateRange?: "today" | "7d" | "30d" | "custom";
-    startDate?: string;
-    endDate?: string;
-    apiId?: string;
-  }): Promise<AnalyticsData> {
+  async getAnalytics(): Promise<AnalyticsData> {
     // This will transform the existing dashboard stats into analytics format
-    const stats = await this.getDashboardStats();
-    const usage = await this.getUsageStats();
+    const dashboardData = await this.getDashboardStats();
 
     // Transform backend data into analytics format
     // For now, we'll use mock data structure but call real endpoints
     // You can enhance this to aggregate multiple endpoint responses
-    return this.transformToAnalytics(stats, usage);
+    return this.transformToAnalytics(dashboardData.stats);
   }
 
   // Transform backend stats to analytics format
-  private transformToAnalytics(
-    stats: DashboardStats,
-    usage: UsageStats
-  ): AnalyticsData {
+  private transformToAnalytics(stats: DashboardStatsData): AnalyticsData {
     // Calculate metrics
     const errorCount = Math.round(
       stats.total_requests * (1 - stats.success_rate / 100)
@@ -445,8 +571,8 @@ class APIClient {
         },
       },
       requestsOverTime: this.generateTimeSeriesData(stats),
-      requestsPerAPI: stats.usage_by_api.map((api, index) => ({
-        apiId: `api-${index}`,
+      requestsPerAPI: stats.usage_by_api.map((api: UsageByAPI) => ({
+        apiId: `api-${api.api_name}`,
         apiName: api.api_name,
         requests: api.requests,
         percentage: (api.requests / stats.total_requests) * 100,
@@ -475,7 +601,7 @@ class APIClient {
           ),
         },
       ],
-      topEndpoints: stats.usage_by_api.map((api) => ({
+      topEndpoints: stats.usage_by_api.map((api: UsageByAPI) => ({
         path: `/api/v1/${api.api_name.toLowerCase().replace(/\s+/g, "-")}`,
         method: "GET",
         requests: api.requests,
@@ -486,7 +612,9 @@ class APIClient {
   }
 
   // Generate time series data from dashboard stats
-  private generateTimeSeriesData(stats: DashboardStats): RequestsOverTime[] {
+  private generateTimeSeriesData(
+    stats: DashboardStatsData
+  ): RequestsOverTime[] {
     // Generate last 7 days of data
     const result: RequestsOverTime[] = [];
     const now = new Date();
@@ -509,6 +637,112 @@ class APIClient {
 
     return result;
   }
+
+  // Settings API methods
+  async getSettings(): Promise<{
+    user: {
+      id: string;
+      email: string;
+      name: string;
+      plan: string;
+      email_verified: boolean;
+      country_code?: string;
+      detected_currency?: string;
+      created_at: string;
+      last_login_at?: string;
+    };
+    notifications: {
+      email_alerts: boolean;
+      usage_threshold_percent: number;
+      error_alerts: boolean;
+      weekly_report: boolean;
+    };
+  }> {
+    const response = await fetch(`${this.baseURL}/dashboard/settings`, {
+      method: "GET",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get settings: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  async updateSettings(settings: {
+    email_alerts?: boolean;
+    usage_threshold_percent?: number;
+    error_alerts?: boolean;
+    weekly_report?: boolean;
+  }): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(`${this.baseURL}/dashboard/settings`, {
+      method: "PUT",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(settings),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update settings: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
+  async changePassword(data: {
+    current_password: string;
+    new_password: string;
+  }): Promise<{ success: boolean; message: string }> {
+    const response = await fetch(
+      `${this.baseURL}/dashboard/settings/password`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(
+        error.message || `Failed to change password: ${response.statusText}`
+      );
+    }
+
+    return response.json();
+  }
+
+  async regenerateAPIKey(): Promise<{
+    success: boolean;
+    message: string;
+    api_key: string;
+  }> {
+    const response = await fetch(
+      `${this.baseURL}/dashboard/api-key/regenerate`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to regenerate API key: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
 }
 
 // Export singleton instance
@@ -518,15 +752,12 @@ export const apiClient = new APIClient();
 export const dashboardAPI = {
   stats: () => apiClient.getDashboardStats(),
   usage: () => apiClient.getUsageStats(),
+  alerts: () => apiClient.getAlerts(),
+  costs: () => apiClient.getCostEstimate(),
 };
 
 export const analyticsAPI = {
-  get: (params?: {
-    dateRange?: "today" | "7d" | "30d" | "custom";
-    startDate?: string;
-    endDate?: string;
-    apiId?: string;
-  }) => apiClient.getAnalytics(params),
+  get: () => apiClient.getAnalytics(),
 };
 
 export const apiConfigAPI = {
@@ -536,6 +767,19 @@ export const apiConfigAPI = {
   update: (id: string, data: Partial<APIConfig>) =>
     apiClient.updateAPIConfig(id, data),
   delete: (id: string) => apiClient.deleteAPIConfig(id),
+};
+
+export const settingsAPI = {
+  get: () => apiClient.getSettings(),
+  update: (settings: {
+    email_alerts?: boolean;
+    usage_threshold_percent?: number;
+    error_alerts?: boolean;
+    weekly_report?: boolean;
+  }) => apiClient.updateSettings(settings),
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    apiClient.changePassword(data),
+  regenerateAPIKey: () => apiClient.regenerateAPIKey(),
 };
 
 // Query Client Configuration
