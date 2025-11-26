@@ -5,7 +5,7 @@ import { Check, X, Minus } from "lucide-react";
 export function Comparison() {
   return (
     <section className="py-24 bg-muted/30">
-      <div className="container px-4 md:px-6">
+      <div className="container max-w-7xl mx-auto px-4 md:px-6">
         <div className="text-center mb-16">
           <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
             RateGuard vs. The Other Guys
@@ -21,7 +21,9 @@ export function Comparison() {
               <tr>
                 <th className="p-4 text-left w-1/3">Feature</th>
                 <th className="p-4 text-center w-1/3 bg-primary/5 rounded-t-xl border-t border-x border-primary/20">
-                  <span className="text-primary font-bold text-xl">RateGuard</span>
+                  <span className="text-primary font-bold text-xl">
+                    RateGuard
+                  </span>
                 </th>
                 <th className="p-4 text-center w-1/3 text-muted-foreground">
                   Other SaaS
@@ -30,14 +32,47 @@ export function Comparison() {
             </thead>
             <tbody>
               {[
-                { feature: "Real Billing Integration", us: true, them: false, note: "They just count requests" },
-                { feature: "True Concurrency Limits", us: true, them: false, note: "They guess based on avg latency" },
-                { feature: "Queue Analytics", us: true, them: false, note: "Black box" },
-                { feature: "API Key Vault", us: true, them: true, note: "But ours is encrypted better" },
-                { feature: "Dwight Schrute Bot", us: true, them: false, note: "They have a boring chatbot" },
-                { feature: "Vaporware Modules", us: false, them: true, note: "Coming soon™" },
+                {
+                  feature: "Real Billing Integration",
+                  us: true,
+                  them: false,
+                  note: "They just count requests",
+                },
+                {
+                  feature: "True Concurrency Limits",
+                  us: true,
+                  them: false,
+                  note: "They guess based on avg latency",
+                },
+                {
+                  feature: "Queue Analytics",
+                  us: true,
+                  them: false,
+                  note: "Black box",
+                },
+                {
+                  feature: "API Key Vault",
+                  us: true,
+                  them: true,
+                  note: "But ours is encrypted better",
+                },
+                {
+                  feature: "Dwight Schrute Bot",
+                  us: true,
+                  them: false,
+                  note: "They have a boring chatbot",
+                },
+                {
+                  feature: "Vaporware Modules",
+                  us: false,
+                  them: true,
+                  note: "Coming soon™",
+                },
               ].map((row, i) => (
-                <tr key={i} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                <tr
+                  key={i}
+                  className="border-b last:border-0 hover:bg-muted/50 transition-colors"
+                >
                   <td className="p-4 font-medium">{row.feature}</td>
                   <td className="p-4 text-center bg-primary/5 border-x border-primary/20">
                     {row.us ? (

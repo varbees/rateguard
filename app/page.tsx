@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { Toaster } from "sonner";
-import { useDashboardStore } from "@/lib/store";
 import dynamic from "next/dynamic";
 import { Header } from "@/components/landing/Header";
-const Hero = dynamic(() => import("@/components/landing/Hero").then((mod) => mod.Hero), { ssr: false });
+import { PageLoader } from "@/components/PageLoader";
+const Hero = dynamic(
+  () => import("@/components/landing/Hero").then((mod) => mod.Hero),
+  { ssr: false }
+);
 import { Features } from "@/components/landing/Features";
 import { HowItWorks } from "@/components/landing/HowItWorks";
 import { Pricing } from "@/components/landing/Pricing";
@@ -18,16 +19,17 @@ import { FAQ } from "@/components/landing/FAQ";
 import { DwightBot } from "@/components/landing/DwightBot";
 
 export default function LandingPage() {
-  const router = useRouter();
-  const isAuthenticated = useDashboardStore((state) => state.isAuthenticated);
-
   return (
     <>
+      <PageLoader />
       <div className="min-h-screen bg-background font-sans selection:bg-primary/20">
         <Header />
-        
+
         <main className="overflow-hidden">
-          <Hero />
+          {/* Fixed height Hero container to prevent CLS */}
+          <div className="h-screen min-h-[600px] max-h-[1200px] flex flex-col justify-center">
+            <Hero />
+          </div>
           <HowItWorks />
           <Features />
           <Comparison />

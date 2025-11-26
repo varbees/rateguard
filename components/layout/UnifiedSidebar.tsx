@@ -91,7 +91,7 @@ export default function UnifiedSidebar() {
   const NavLink = ({
     item,
   }: {
-    item: { title: string; href: string; icon: React.ElementType };
+    item: { title: string; href: string; icon: React.ComponentType<any> };
   }) => {
     const Icon = item.icon;
     const isActive =

@@ -36,7 +36,7 @@ interface RateLimitTier {
   limit: number;
   remaining: number;
   window: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
   color: string;
 }
 
@@ -50,7 +50,7 @@ interface RateLimitConfig {
 
 interface TierPreset {
   name: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<any>;
   description: string;
   config: RateLimitConfig;
 }

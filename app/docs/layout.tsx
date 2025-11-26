@@ -97,7 +97,7 @@ export default function DocsLayout({
   const NavItem = ({
     item,
   }: {
-    item: { title: string; href: string; icon?: React.ElementType };
+    item: { title: string; href: string; icon?: React.ComponentType<any> };
   }) => {
     const Icon = item.icon;
     const isActive = pathname === item.href;

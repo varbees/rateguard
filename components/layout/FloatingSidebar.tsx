@@ -86,7 +86,7 @@ export default function FloatingSidebar() {
     item,
     collapsed = false,
   }: {
-    item: { title: string; href: string; icon: React.ElementType };
+    item: { title: string; href: string; icon: React.ComponentType<any> };
     collapsed?: boolean;
   }) => {
     const Icon = item.icon;
