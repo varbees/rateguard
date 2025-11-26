@@ -44,25 +44,75 @@ const docsNav = [
     ],
   },
   {
-    title: "Features",
+    title: "Core Features",
     items: [
+      {
+        title: "Transparent Proxy",
+        href: "/docs/features/transparent-proxy",
+        icon: Globe,
+      },
+      {
+        title: "Multi-Tier Rate Limiting",
+        href: "/docs/features/distributed-rate-limiting",
+        icon: Zap,
+      },
+      {
+        title: "Intelligent Queuing",
+        href: "/docs/features/queue-management",
+        icon: Layers,
+      },
+      {
+        title: "Real-Time Analytics",
+        href: "/docs/features/real-time-analytics",
+        icon: BarChart,
+      },
+      {
+        title: "Secure Credentials",
+        href: "/docs/features/secure-credentials",
+        icon: Lock,
+      },
+      {
+        title: "Automatic Retry",
+        href: "/docs/features/automatic-retry",
+        icon: Activity,
+      },
+    ],
+  },
+  {
+    title: "Advanced Features",
+    items: [
+      {
+        title: "Circuit Breaker",
+        href: "/docs/features/circuit-breaker",
+        icon: Shield,
+      },
+      {
+        title: "Health Checks",
+        href: "/docs/features/health-checks",
+        icon: Activity,
+      },
       {
         title: "Rate Limit Discovery",
         href: "/docs/features/rate-limit-discovery",
         icon: TrendingUp,
       },
       {
-        title: "Queue Management",
-        href: "/docs/features/queue-management",
-        icon: Layers,
+        title: "Queue Observability",
+        href: "/docs/features/queue-observability",
+        icon: BarChart,
+      },
+    ],
+  },
+  {
+    title: "Business Features",
+    items: [
+      {
+        title: "Plan Enforcement",
+        href: "/docs/features/plan-enforcement",
+        icon: Lock,
       },
       {
-        title: "Transparent Proxy",
-        href: "/docs/features/transparent-proxy",
-        icon: Activity,
-      },
-      {
-        title: "Geo-Currency",
+        title: "Geo-Currency Detection",
         href: "/docs/features/geo-currency",
         icon: Globe,
       },
@@ -70,16 +120,6 @@ const docsNav = [
         title: "Payment Gateways",
         href: "/docs/features/payment-gateways",
         icon: CreditCard,
-      },
-      {
-        title: "Plan Enforcement",
-        href: "/docs/features/plan-enforcement",
-        icon: Lock,
-      },
-      {
-        title: "Queue Observability",
-        href: "/docs/features/queue-observability",
-        icon: BarChart,
       },
     ],
   },

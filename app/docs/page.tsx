@@ -12,6 +12,9 @@ import {
   BarChart,
   ArrowRight,
   BookOpen,
+  Server,
+  CircuitBoard,
+  HeartPulse,
 } from "lucide-react";
 import {
   Card,
@@ -36,8 +39,9 @@ export default function DocsIntroductionPage() {
           RateGuard Documentation
         </h1>
         <p className="text-xl text-muted-foreground max-w-3xl leading-relaxed">
-          Welcome to the comprehensive guide for RateGuard. Learn how to integrate,
-          configure, and optimize your API rate limiting and proxy service.
+          Welcome to the comprehensive guide for RateGuard. Learn how to
+          integrate, configure, and optimize your API rate limiting and proxy
+          service.
         </p>
         <div className="flex gap-4 pt-4">
           <Button asChild size="lg">
@@ -59,7 +63,46 @@ export default function DocsIntroductionPage() {
               <Activity className="h-8 w-8 text-primary mb-2" />
               <CardTitle>Transparent Proxy</CardTitle>
               <CardDescription>
-                Seamlessly forward requests with intelligent rate limiting and analytics.
+                Seamlessly forward requests with intelligent rate limiting and
+                analytics.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        <Link href="/docs/features/distributed-rate-limiting">
+          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50">
+            <CardHeader>
+              <Server className="h-8 w-8 text-primary mb-2" />
+              <CardTitle>Distributed Rate Limiting</CardTitle>
+              <CardDescription>
+                Redis-backed coordination across unlimited instances for
+                consistent limits.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        <Link href="/docs/features/circuit-breaker">
+          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50">
+            <CardHeader>
+              <CircuitBoard className="h-8 w-8 text-primary mb-2" />
+              <CardTitle>Circuit Breaker</CardTitle>
+              <CardDescription>
+                Automatic failover when upstream APIs fail with graceful
+                recovery.
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </Link>
+
+        <Link href="/docs/features/health-checks">
+          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer border-2 hover:border-primary/50">
+            <CardHeader>
+              <HeartPulse className="h-8 w-8 text-primary mb-2" />
+              <CardTitle>Health Checks</CardTitle>
+              <CardDescription>
+                Kubernetes-native health probes and zero-downtime deployments.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -83,7 +126,8 @@ export default function DocsIntroductionPage() {
               <Layers className="h-8 w-8 text-primary mb-2" />
               <CardTitle>Queue Management</CardTitle>
               <CardDescription>
-                Intelligent request queuing to prevent 429 errors and smooth traffic.
+                Intelligent request queuing to prevent 429 errors and smooth
+                traffic.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -95,7 +139,8 @@ export default function DocsIntroductionPage() {
               <Globe className="h-8 w-8 text-primary mb-2" />
               <CardTitle>Geo-Currency</CardTitle>
               <CardDescription>
-                Automatic IP-based country and currency detection for localized pricing.
+                Automatic IP-based country and currency detection for localized
+                pricing.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -119,7 +164,8 @@ export default function DocsIntroductionPage() {
               <Lock className="h-8 w-8 text-primary mb-2" />
               <CardTitle>Plan Enforcement</CardTitle>
               <CardDescription>
-                Strict enforcement of API limits, request quotas, and feature access.
+                Strict enforcement of API limits, request quotas, and feature
+                access.
               </CardDescription>
             </CardHeader>
           </Card>
@@ -129,7 +175,7 @@ export default function DocsIntroductionPage() {
       {/* Getting Started Section */}
       <div className="space-y-6">
         <h2 className="text-3xl font-bold tracking-tight">Getting Started</h2>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <Card className="bg-muted/50 border-none">
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -137,12 +183,19 @@ export default function DocsIntroductionPage() {
                 <CardTitle className="text-xl">Authentication</CardTitle>
               </div>
               <CardDescription>
-                Secure your API requests with API keys and learn about our authentication methods.
+                Secure your API requests with API keys and learn about our
+                authentication methods.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button asChild variant="secondary" className="w-full justify-start">
-                <Link href="/docs/authentication">Read Authentication Guide</Link>
+              <Button
+                asChild
+                variant="secondary"
+                className="w-full justify-start"
+              >
+                <Link href="/docs/authentication">
+                  Read Authentication Guide
+                </Link>
               </Button>
             </CardContent>
           </Card>
@@ -150,16 +203,51 @@ export default function DocsIntroductionPage() {
           <Card className="bg-muted/50 border-none">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-primary" />
-                <CardTitle className="text-xl">Rate Limiting Guide</CardTitle>
+                <Server className="h-5 w-5 text-primary" />
+                <CardTitle className="text-xl">
+                  Distributed Rate Limiting
+                </CardTitle>
               </div>
               <CardDescription>
-                Understand how our multi-tier rate limiting works and how to configure it.
+                Learn how our Redis-backed distributed rate limiting works
+                across instances.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button asChild variant="secondary" className="w-full justify-start">
-                <Link href="/docs/guides/rate-limiting">Read Rate Limiting Guide</Link>
+              <Button
+                asChild
+                variant="secondary"
+                className="w-full justify-start"
+              >
+                <Link href="/docs/features/distributed-rate-limiting">
+                  Read Distributed Guide
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-muted/50 border-none">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <CircuitBoard className="h-5 w-5 text-primary" />
+                <CardTitle className="text-xl">
+                  Circuit Breaker Pattern
+                </CardTitle>
+              </div>
+              <CardDescription>
+                Protect your systems with automatic failover and recovery
+                mechanisms.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                asChild
+                variant="secondary"
+                className="w-full justify-start"
+              >
+                <Link href="/docs/features/circuit-breaker">
+                  Read Circuit Breaker Guide
+                </Link>
               </Button>
             </CardContent>
           </Card>
