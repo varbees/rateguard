@@ -16,6 +16,7 @@ import {
   RateLimitsSection,
   AdvancedSection,
   AuthenticationSection,
+  CustomHeadersSection,
   PreviewPanel,
   TemplatesDialog,
   getDefaultConfig,
@@ -66,7 +67,7 @@ export default function NewAPIPage() {
     if (draft && !draftToastShown.current) {
       try {
         const parsed = JSON.parse(draft);
-        setFormData(parsed);
+        setFormData({ ...getDefaultConfig(), ...parsed });
 
         // Only show toast once
         toast({
@@ -112,6 +113,7 @@ export default function NewAPIPage() {
     setFormData({
       ...template.config,
       corsOrigins: "",
+      customHeaders: {},
       enabled: true,
       authType: "none",
       authCredentials: {},
@@ -201,7 +203,8 @@ export default function NewAPIPage() {
     setIsSaving(true);
 
     try {
-      await apiClient.createAPIConfig({
+      // Prepare data in the format expected by the backend
+      const apiConfig = {
         name: formData.name,
         target_url: formData.targetUrl,
         rate_limit_per_second: formData.perSecond,
@@ -218,13 +221,18 @@ export default function NewAPIPage() {
         enabled: formData.enabled,
         auth_type: formData.authType,
         auth_credentials:
-          Object.keys(formData.authCredentials).length > 0
+          formData.authCredentials && Object.keys(formData.authCredentials).length > 0
             ? formData.authCredentials
             : undefined,
-        custom_headers: formData.description
-          ? { description: formData.description }
-          : undefined,
-      });
+        custom_headers: {
+          ...formData.customHeaders,
+          ...(formData.description
+            ? { description: formData.description }
+            : {}),
+        },
+      };
+
+      await apiClient.createAPIConfig(apiConfig);
 
       // Clear draft after successful submission
       clearDraft();
@@ -351,7 +359,7 @@ export default function NewAPIPage() {
 
             <AuthenticationSection
               authType={formData.authType}
-              authCredentials={formData.authCredentials}
+              authCredentials={formData.authCredentials || {}}
               onAuthTypeChange={(value) => {
                 // Clear credentials when changing auth type
                 setFormData({
@@ -362,6 +370,13 @@ export default function NewAPIPage() {
               }}
               onAuthCredentialsChange={(value) =>
                 setFormData({ ...formData, authCredentials: value })
+              }
+            />
+
+            <CustomHeadersSection
+              customHeaders={formData.customHeaders || {}}
+              onCustomHeadersChange={(value) =>
+                setFormData({ ...formData, customHeaders: value })
               }
             />
 

@@ -145,6 +145,7 @@ export function getDefaultConfig() {
     timeoutSeconds: 30,
     retryAttempts: 1,
     corsOrigins: "",
+    customHeaders: {} as Record<string, string>,
     enabled: true,
     authType: "none" as AuthType,
     authCredentials: {} as Record<string, string>,
