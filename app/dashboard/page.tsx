@@ -20,6 +20,7 @@ import {
   AlertBanner,
   CostEstimateCard,
   PlanLimitsCard,
+  CircuitBreakerMonitor,
 } from "@/components/dashboard";
 import { LogOut } from "lucide-react";
 
@@ -64,18 +65,18 @@ export default function DashboardPage() {
   const { clearAuth } = useDashboardStore();
 
   // Data Fetching Hooks
-  const { 
-    data: stats, 
-    isLoading: statsLoading, 
+  const {
+    data: stats,
+    isLoading: statsLoading,
     error: statsError,
-    refetch: refetchStats 
+    refetch: refetchStats,
   } = useDashboardStats();
 
-  const { 
-    data: apiList = [], 
-    isLoading: apisLoading, 
+  const {
+    data: apiList = [],
+    isLoading: apisLoading,
     error: apisError,
-    refetch: refetchApis 
+    refetch: refetchApis,
   } = useAPIConfigs();
 
   // Mutation Hooks
@@ -125,9 +126,9 @@ export default function DashboardPage() {
   };
 
   const handleToggleStatus = (api: APIConfig) => {
-    updateApiMutation.mutate({ 
-      id: api.id, 
-      data: { enabled: !api.enabled } 
+    updateApiMutation.mutate({
+      id: api.id,
+      data: { enabled: !api.enabled },
     });
   };
 
@@ -220,7 +221,10 @@ export default function DashboardPage() {
             onRefresh={handleRefreshData}
           />
 
-          {/* Section 3: API List */}
+          {/* Section 3: Circuit Breaker Monitor */}
+          <CircuitBreakerMonitor />
+
+          {/* Section 4: API List */}
           <APIListTable
             apis={apiList}
             loading={loading}
@@ -231,7 +235,7 @@ export default function DashboardPage() {
             onDelete={handleDeleteAPI}
           />
 
-          {/* Section 4: Recent Activity */}
+          {/* Section 5: Recent Activity */}
           <RecentActivity
             requests={recentRequests}
             loading={loading}

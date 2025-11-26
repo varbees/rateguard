@@ -1,18 +1,19 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { 
-  apiClient, 
-  User, 
-  DashboardStats, 
-  UsageStats, 
-  AlertsResponse, 
-  APIConfig, 
+import {
+  apiClient,
+  User,
+  DashboardStats,
+  UsageStats,
+  AlertsResponse,
+  APIConfig,
   CostEstimate,
   AnalyticsData,
   QueueStats,
   QueuedRequest,
-  QueueConfig
+  QueueConfig,
+  CircuitBreakerStatsResponse,
+  CircuitBreakerMetricsResponse,
 } from "@/lib/api";
-
 
 // Query Keys
 export const queryKeys = {
@@ -28,6 +29,8 @@ export const queryKeys = {
   activeQueues: ["activeQueues"],
   queueConfig: ["queueConfig"],
   settings: ["settings"],
+  circuitBreakerStats: ["circuitBreakerStats"],
+  circuitBreakerMetrics: ["circuitBreakerMetrics"],
 };
 
 // User Hooks
@@ -180,11 +183,13 @@ export function useCreateAPIConfig() {
 export function useUpdateAPIConfig() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<APIConfig> }) => 
+    mutationFn: ({ id, data }: { id: string; data: Partial<APIConfig> }) =>
       apiClient.updateAPIConfig(id, data),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.apiConfigs });
-      queryClient.invalidateQueries({ queryKey: queryKeys.apiConfig(variables.id) });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.apiConfig(variables.id),
+      });
     },
   });
 }
@@ -263,6 +268,39 @@ export function useUpdateSettings() {
     }) => apiClient.updateSettings(settings),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings });
+    },
+  });
+}
+
+// Circuit Breaker Hooks
+export function useCircuitBreakerStats() {
+  return useQuery({
+    queryKey: queryKeys.circuitBreakerStats,
+    queryFn: () => apiClient.getCircuitBreakerStats(),
+    refetchInterval: 5000, // Refresh every 5 seconds for real-time monitoring
+  });
+}
+
+export function useCircuitBreakerMetrics() {
+  return useQuery({
+    queryKey: queryKeys.circuitBreakerMetrics,
+    queryFn: () => apiClient.getCircuitBreakerMetrics(),
+    refetchInterval: 5000, // Refresh every 5 seconds for real-time monitoring
+  });
+}
+
+export function useResetCircuitBreaker() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (apiId: string) => apiClient.resetCircuitBreaker(apiId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.circuitBreakerStats,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.circuitBreakerMetrics,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
     },
   });
 }

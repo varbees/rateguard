@@ -7,7 +7,6 @@ import {
   CreditCard,
   Lock,
   Globe,
-  BarChart3,
   Bot,
   AlertTriangle,
   Layers,
@@ -86,6 +85,27 @@ const features = [
     joke: "You shall not pass!",
   },
   {
+    title: "Distributed Rate Limiting",
+    description:
+      "Redis-backed coordination across unlimited instances. Scale horizontally without multiplying rate limits.",
+    icon: Layers,
+    joke: "One limit to rule them all.",
+  },
+  {
+    title: "Circuit Breaker Protection",
+    description:
+      "Automatic failover when upstream APIs fail. Stop hammering failing services and recover gracefully.",
+    icon: Activity,
+    joke: "We break circuits, not promises.",
+  },
+  {
+    title: "Zero-Downtime Deployments",
+    description:
+      "Kubernetes-native health checks and graceful shutdown. Deploy fearlessly with /health and /ready probes.",
+    icon: Shield,
+    joke: "Sleep well, ops team.",
+  },
+  {
     title: "AI Support Assistant",
     description:
       "Intelligent chatbot for instant API troubleshooting and documentation.",
@@ -102,7 +122,9 @@ export function Features() {
         <div className="text-center mb-16">
           <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
             Everything You Need
-            <span className="block text-primary mt-2">Nothing You Don't.</span>
+            <span className="block text-primary mt-2">
+              Nothing You Don&apos;t.
+            </span>
           </h2>
           <p className="mt-4 text-muted-foreground md:text-xl max-w-3xl mx-auto">
             We stripped away the enterprise bloat and kept the stuff that

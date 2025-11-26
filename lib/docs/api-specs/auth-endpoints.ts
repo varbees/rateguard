@@ -14,7 +14,7 @@ export const AUTH_SIGNUP: EndpointSpec = {
     schema: {
       email: "string (required) - Valid email address",
       password: "string (required) - Minimum 8 characters",
-      plan: "string (optional) - 'free', 'pro', or 'enterprise'. Default: 'free'",
+      plan: "string (optional) - 'free', 'pro', or 'business'. Default: 'free'",
     },
     example: {
       email: "user@example.com",

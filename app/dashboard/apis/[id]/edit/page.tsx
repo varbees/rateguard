@@ -16,6 +16,7 @@ import {
   RateLimitsSection,
   AdvancedSection,
   AuthenticationSection,
+  CustomHeadersSection,
   PreviewPanel,
   TemplatesDialog,
   getDefaultConfig,
@@ -60,6 +61,10 @@ export default function EditAPIPage() {
         timeoutSeconds: api.timeout_seconds,
         retryAttempts: api.retry_attempts,
         corsOrigins: api.allowed_origins?.join("\n") || "",
+        customHeaders: (() => {
+          const { description, ...headers } = api.custom_headers || {};
+          return headers;
+        })(),
         enabled: api.enabled,
         authType: api.auth_type || "none",
         authCredentials: api.auth_credentials || {},
@@ -105,6 +110,7 @@ export default function EditAPIPage() {
     setFormData({
       ...template.config,
       corsOrigins: "",
+      customHeaders: {},
       enabled: formData.enabled, // Keep current enabled state
       authType: "none",
       authCredentials: {},
@@ -214,9 +220,10 @@ export default function EditAPIPage() {
             Object.keys(formData.authCredentials).length > 0
               ? formData.authCredentials
               : undefined,
-          custom_headers: formData.description
-            ? { description: formData.description }
-            : undefined,
+          custom_headers: {
+            ...formData.customHeaders,
+            ...(formData.description ? { description: formData.description } : {}),
+          },
         },
       },
       {
@@ -393,6 +400,13 @@ export default function EditAPIPage() {
               }}
               onAuthCredentialsChange={(value) =>
                 setFormData({ ...formData, authCredentials: value })
+              }
+            />
+
+            <CustomHeadersSection
+              customHeaders={formData.customHeaders}
+              onCustomHeadersChange={(value) =>
+                setFormData({ ...formData, customHeaders: value })
               }
             />
 

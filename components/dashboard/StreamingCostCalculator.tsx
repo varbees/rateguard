@@ -12,23 +12,54 @@ export function StreamingCostCalculator({
 }: CostCalculatorProps) {
   const [monthlyStreams, setMonthlyStreams] = useState<number>(10000);
   const [avgResponseKB, setAvgResponseKB] = useState<number>(50);
-  const [plan, setPlan] = useState<"free" | "pro" | "enterprise">("pro");
+  const [plan, setPlan] = useState<"free" | "pro" | "business">("pro");
+  const [requests, setRequests] = useState(10000);
+  const [streamingPercent, setStreamingPercent] = useState(30);
+
+  // Pricing per 1000 requests
+  const basePricing = {
+    free: 0,
+    pro: 2.5,
+    business: 1.8, // Volume discount
+  };
+
+  const streamingMultiplier = {
+    free: 1.5,
+    pro: 1.3,
+    business: 1.2, // Better rates for businesscing (example: $0.10 per GB)
+  };
 
   const calculations = useMemo(() => {
     // Calculate total data transferred
     const totalBytes = monthlyStreams * avgResponseKB * 1024;
     const totalMB = totalBytes / (1024 * 1024);
-    const totalGB = totalBytes / (1024 * 1024 * 1024);
+    const totalDataGB = (monthlyStreams * avgResponseKB) / (1024 * 1024);
 
-    // Bandwidth pricing (example: $0.10 per GB)
-    const bandwidthCostPerGB = 0.1;
-    const bandwidthCost = totalGB * bandwidthCostPerGB;
+    // Base pricing (example: $0.10 per GB)
+    const baseCostPerGB = {
+      free: 0.15, // Higher cost
+      pro: 0.10, // Standard
+      business: 0.08, // Volume discount
+    };
+
+    // Extra cost for streaming (higher overhead)
+    const streamingCostPerGB = {
+      free: 0.05,
+      pro: 0.03,
+      business: 0.02,
+    };
+
+    const totalGB = totalBytes / (1024 * 1024 * 1024); // Keep for display consistency
+
+    // Calculate bandwidth cost based on plan
+    const bandwidthCost =
+      totalDataGB * baseCostPerGB[plan] + totalDataGB * streamingCostPerGB[plan];
 
     // RateGuard plan costs
     const planCosts = {
       free: 0,
       pro: 19,
-      enterprise: 99,
+      business: 99, // Changed from enterprise to business
     };
     const rateGuardCost = planCosts[plan];
 
@@ -125,7 +156,7 @@ export function StreamingCostCalculator({
             Your Plan
           </label>
           <div className="grid grid-cols-3 gap-2">
-            {(["free", "pro", "enterprise"] as const).map((planType) => (
+            {(["free", "pro", "business"] as const).map((planType) => (
               <button
                 key={planType}
                 onClick={() => setPlan(planType)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X, Minus } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 export function Comparison() {
   return (
@@ -11,7 +11,8 @@ export function Comparison() {
             RateGuard vs. The Other Guys
           </h2>
           <p className="mt-4 text-muted-foreground md:text-xl">
-            Don't settle for "good enough" when you can have "actually works."
+            Don&apos;t settle for &quot;good enough&quot; when you can have
+            &quot;actually works.&quot;
           </p>
         </div>
 
@@ -33,28 +34,46 @@ export function Comparison() {
             <tbody>
               {[
                 {
+                  feature: "Distributed Rate Limiting",
+                  us: true,
+                  them: false,
+                  note: "They multiply limits per-instance",
+                },
+                {
+                  feature: "Circuit Breaker Pattern",
+                  us: true,
+                  them: false,
+                  note: "No fault tolerance",
+                },
+                {
+                  feature: "Zero-Downtime Deployments",
+                  us: true,
+                  them: false,
+                  note: "Drops in-flight requests",
+                },
+                {
                   feature: "Real Billing Integration",
                   us: true,
                   them: false,
                   note: "They just count requests",
                 },
                 {
-                  feature: "True Concurrency Limits",
+                  feature: "Kubernetes Health Checks",
                   us: true,
                   them: false,
-                  note: "They guess based on avg latency",
+                  note: "Not K8s-native",
+                },
+                {
+                  feature: "Horizontal Scaling",
+                  us: true,
+                  them: true,
+                  note: "But with inconsistent limits",
                 },
                 {
                   feature: "Queue Analytics",
                   us: true,
                   them: false,
                   note: "Black box",
-                },
-                {
-                  feature: "API Key Vault",
-                  us: true,
-                  them: true,
-                  note: "But ours is encrypted better",
                 },
                 {
                   feature: "Dwight Schrute Bot",

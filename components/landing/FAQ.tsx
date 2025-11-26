@@ -59,6 +59,30 @@ const faqs = [
       "We only store metadata (counts, keys). Your actual request payloads pass through our transparent proxy and are never stored. We don't want your data, we have enough of our own.",
     category: "Security",
   },
+  {
+    question: "How does horizontal scaling work?",
+    answer:
+      "Our Redis-backed distributed rate limiting coordinates limits across all your instances. Whether you run 3 pods or 300, your users see consistent rate limits. No more '3x instances = 3x limits' problems.",
+    category: "Technical",
+  },
+  {
+    question: "What happens when an upstream API fails?",
+    answer:
+      "Circuit breakers automatically open after 5 consecutive failures, failing fast to protect your infrastructure. After 60 seconds, we test recovery with limited requests. If successful, the circuit closes automatically. No hammering dead APIs.",
+    category: "Technical",
+  },
+  {
+    question: "Can I deploy without downtime?",
+    answer:
+      "Absolutely. We have Kubernetes-native /health and /ready endpoints. During deployments, we gracefully drain in-flight requests (30s timeout) before shutting down. Zero dropped requests guaranteed.",
+    category: "Technical",
+  },
+  {
+    question: "Do you support Kubernetes?",
+    answer:
+      "Yes! We're Kubernetes-native with proper liveness and readiness probes. Health checks monitor database and Redis connectivity. Rolling updates work seamlessly with our graceful shutdown.",
+    category: "Technical",
+  },
 ];
 
 export function FAQ() {

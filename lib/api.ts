@@ -6,7 +6,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008";
 export interface User {
   id: string;
   email: string;
-  plan: "free" | "pro" | "enterprise";
+  plan: "free" | "pro" | "business"; // Backend uses "business" not "enterprise"
   api_key: string;
   active: boolean;
   email_verified: boolean;
@@ -15,6 +15,7 @@ export interface User {
   updated_at: string;
 }
 
+// Matches backend RateLimits struct
 export interface PlanLimits {
   plan: string;
   requests_per_second: number;
@@ -54,10 +55,11 @@ export interface UsageByAPI {
   last_used: string;
 }
 
+// Matches backend PlanFeatures struct exactly
 export interface PlanFeatures {
   max_apis: number;
-  max_requests_per_day: number;
-  max_requests_per_month: number;
+  max_requests_per_day: number; // int64 in backend
+  max_requests_per_month: number; // int64 in backend
   advanced_analytics: boolean;
   priority_support: boolean;
   custom_rate_limits: boolean;
@@ -146,6 +148,54 @@ export interface CostEstimate {
   calculated_at: string;
 }
 
+// Circuit Breaker Types
+export type CircuitBreakerState = "closed" | "open" | "half-open";
+
+export interface CircuitBreakerMetrics {
+  state: CircuitBreakerState;
+  state_string: string;
+  api_name: string;
+  total_requests: number;
+  total_successes: number;
+  total_failures: number;
+  total_rejections: number;
+  consecutive_failures: number;
+  consecutive_successes: number;
+  state_transitions: number;
+  time_in_state: string;
+  last_state_change: string;
+}
+
+export interface CircuitBreakerStats {
+  timestamp: string;
+  total_circuit_breakers: number;
+  closed_count: number;
+  open_count: number;
+  half_open_count: number;
+  open_apis: string[];
+  total_requests: number;
+  total_successes: number;
+  total_failures: number;
+  total_rejections: number;
+}
+
+export interface CircuitBreakerStatsResponse {
+  circuit_breaker_stats: CircuitBreakerStats;
+  timestamp: string;
+}
+
+export interface CircuitBreakerMetricsResponse {
+  metrics: Record<string, CircuitBreakerMetrics>;
+  count: number;
+  timestamp: string;
+}
+
+export interface CircuitBreakerResetResponse {
+  message: string;
+  api_id: string;
+  timestamp: string;
+}
+
 // Analytics Types
 export interface AnalyticsMetrics {
   totalRequests: number;
@@ -207,7 +257,7 @@ export interface AnalyticsData {
 export interface SignupRequest {
   email: string;
   password: string;
-  plan?: "free" | "pro" | "enterprise";
+  plan?: "free" | "pro" | "business";
 }
 
 export interface LoginRequest {
@@ -222,6 +272,16 @@ export interface LoginResponse {
   expires_in: number;
   api_key?: string; // Deprecated - for backward compatibility
 }
+
+// TODO: OAuth Support - Future Enhancement
+// Consider adding OAuth 2.0 providers (Google, GitHub, etc.) for authentication
+// This would require:
+// - New OAuth provider interfaces
+// - OAuth callback handlers
+// - Provider-specific configuration (client_id, client_secret, redirect_uri)
+// - Token exchange endpoints
+// - Provider account linking to existing users
+
 
 export interface RequestPasswordResetRequest {
   email: string;
@@ -359,12 +419,28 @@ class APIClient {
           return this.request<T>(endpoint, options);
         } catch {
           // Refresh failed - redirect to login ONLY from protected pages
-          const publicPaths = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/pricing', '/docs'];
-          const isPublicPage = typeof window !== "undefined" && publicPaths.some(path => 
-            window.location.pathname === path || window.location.pathname.startsWith('/docs')
-          );
-          
-          if (typeof window !== "undefined" && !isPublicPage && !window.location.pathname.startsWith("/login")) {
+          const publicPaths = [
+            "/",
+            "/login",
+            "/signup",
+            "/forgot-password",
+            "/reset-password",
+            "/pricing",
+            "/docs",
+          ];
+          const isPublicPage =
+            typeof window !== "undefined" &&
+            publicPaths.some(
+              (path) =>
+                window.location.pathname === path ||
+                window.location.pathname.startsWith("/docs")
+            );
+
+          if (
+            typeof window !== "undefined" &&
+            !isPublicPage &&
+            !window.location.pathname.startsWith("/login")
+          ) {
             window.location.href = "/login";
           }
           throw new APIError("Session expired. Please log in again.", 401);
@@ -530,9 +606,27 @@ class APIClient {
   }
 
   async createAPIConfig(data: Partial<APIConfig>): Promise<APIConfig> {
+    // Ensure all field names are in snake_case format as expected by the backend
+    const formattedData = {
+      name: data.name,
+      target_url: data.target_url,
+      rate_limit_per_second: data.rate_limit_per_second,
+      burst_size: data.burst_size,
+      rate_limit_per_hour: data.rate_limit_per_hour,
+      rate_limit_per_day: data.rate_limit_per_day,
+      rate_limit_per_month: data.rate_limit_per_month,
+      allowed_origins: data.allowed_origins,
+      custom_headers: data.custom_headers,
+      auth_type: data.auth_type,
+      auth_credentials: data.auth_credentials,
+      timeout_seconds: data.timeout_seconds,
+      retry_attempts: data.retry_attempts,
+      enabled: data.enabled,
+    };
+
     return this.request<APIConfig>(`/api/v1/apis`, {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify(formattedData),
     });
   }
 
@@ -589,10 +683,15 @@ class APIClient {
     });
   }
 
-  async cancelQueuedRequest(requestId: string): Promise<{ cancelled: boolean }> {
-    return this.request<{ cancelled: boolean }>(`/api/v1/dashboard/queues/${requestId}`, {
-      method: "DELETE",
-    });
+  async cancelQueuedRequest(
+    requestId: string
+  ): Promise<{ cancelled: boolean }> {
+    return this.request<{ cancelled: boolean }>(
+      `/api/v1/dashboard/queues/${requestId}`,
+      {
+        method: "DELETE",
+      }
+    );
   }
 
   // Proxy Request
@@ -820,6 +919,30 @@ class APIClient {
 
     return response.json();
   }
+
+  // Circuit Breaker Methods
+  async getCircuitBreakerStats(): Promise<CircuitBreakerStatsResponse> {
+    return this.request<CircuitBreakerStatsResponse>(
+      "/api/v1/proxy/circuit-breakers/stats"
+    );
+  }
+
+  async getCircuitBreakerMetrics(): Promise<CircuitBreakerMetricsResponse> {
+    return this.request<CircuitBreakerMetricsResponse>(
+      "/api/v1/proxy/circuit-breakers/metrics"
+    );
+  }
+
+  async resetCircuitBreaker(
+    apiId: string
+  ): Promise<CircuitBreakerResetResponse> {
+    return this.request<CircuitBreakerResetResponse>(
+      `/api/v1/proxy/circuit-breakers/${apiId}/reset`,
+      {
+        method: "POST",
+      }
+    );
+  }
 }
 
 // Export singleton instance
@@ -857,6 +980,12 @@ export const settingsAPI = {
   changePassword: (data: { current_password: string; new_password: string }) =>
     apiClient.changePassword(data),
   regenerateAPIKey: () => apiClient.regenerateAPIKey(),
+};
+
+export const circuitBreakerAPI = {
+  stats: () => apiClient.getCircuitBreakerStats(),
+  metrics: () => apiClient.getCircuitBreakerMetrics(),
+  reset: (apiId: string) => apiClient.resetCircuitBreaker(apiId),
 };
 
 // Query Client Configuration

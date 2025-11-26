@@ -13,9 +13,10 @@ const plans = [
     description: "For hobbyists and people who break things.",
     features: [
       "10k requests/month",
-      "Basic rate limiting",
+      "10 req/s throughput",
+      "3 APIs",
       "Community support",
-      "1 API Key",
+      "All core features*",
     ],
     cta: "Start Breaking Things",
     popular: false,
@@ -26,10 +27,10 @@ const plans = [
     description: "For devs who deploy at midnight.",
     features: [
       "1M requests/month",
-      "Advanced rate limiting",
+      "100 req/s throughput",
+      "20 APIs",
       "Priority support",
-      "Unlimited API Keys",
-      "Billing Integration",
+      "All core features*",
     ],
     cta: "Deploy at Midnight",
     popular: true,
@@ -40,7 +41,8 @@ const plans = [
     description: "For when your CTO starts asking questions.",
     features: [
       "Unlimited requests",
-      "Custom contracts",
+      "1000 req/s throughput",
+      "Unlimited APIs",
       "Dedicated support",
       "SLA 99.99%",
       "On-premise option",
@@ -138,6 +140,21 @@ export function Pricing() {
               </Button>
             </motion.div>
           ))}
+        </div>
+
+        {/* Core Features Footnote */}
+        <div className="mt-12 text-center text-sm text-muted-foreground max-w-2xl mx-auto">
+          <p>
+            <span className="font-semibold">*All plans include:</span>{" "}
+            Distributed rate limiting (Redis-backed), circuit breaker
+            protection, multi-tier limits (per-second/hour/day/month),
+            zero-downtime deployments, Kubernetes health checks, and graceful
+            shutdown.
+          </p>
+          <p className="mt-2">
+            Plans differ by throughput, monthly quota, and number of APIs you
+            can configure.
+          </p>
         </div>
       </div>
     </section>

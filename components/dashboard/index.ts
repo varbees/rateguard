@@ -7,6 +7,7 @@ export { AlertBanner } from "./AlertBanner";
 export { CostEstimateCard } from "./CostEstimateCard";
 export { PlanLimitsCard } from "./PlanLimitsCard";
 export { FeatureGate } from "./FeatureGate";
+export { CircuitBreakerMonitor } from "./CircuitBreakerMonitor";
 
 // Legacy components (keep for backward compatibility)
 export { default as DashboardNav } from "./DashboardNav";
