@@ -37,9 +37,9 @@ const features = [
     joke: "More time windows than a DeLorean.",
   },
   {
-    title: "Intelligent Queue Management",
+    title: "Priority Queue Management",
     description:
-      "Never see a 429 error again. Requests queue automatically when limits are hit, maximizing API throughput.",
+      "Redis-backed priority queue. VIP users jump the line, ensuring critical traffic always gets through during congestion.",
     icon: Layers,
     joke: "Like a bouncer for your APIs, but polite.",
   },
@@ -49,6 +49,13 @@ const features = [
       "Automatically learns upstream API limits from responses. Self-tuning system that optimizes over time.",
     icon: TrendingUp,
     joke: "It's like having a psychic for your rate limits.",
+  },
+  {
+    title: "Webhook Relay & Retries",
+    description:
+      "Reliable event delivery with automatic retries, dead letter queues, and full delivery history. Never miss a webhook.",
+    icon: Activity,
+    joke: "We deliver better than your local pizza place.",
   },
   {
     title: "Real-Time Analytics",
@@ -104,6 +111,13 @@ const features = [
       "Kubernetes-native health checks and graceful shutdown. Deploy fearlessly with /health and /ready probes.",
     icon: Shield,
     joke: "Sleep well, ops team.",
+  },
+  {
+    title: "Dual Concurrency Model",
+    description:
+      "Unbounded proxying for high throughput, bounded worker pools for heavy aggregation. Best of both worlds.",
+    icon: Zap,
+    joke: "We walk and chew gum at the same time.",
   },
   {
     title: "AI Support Assistant",

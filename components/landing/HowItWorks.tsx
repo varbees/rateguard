@@ -38,8 +38,8 @@ const steps = [
   },
   {
     id: 4,
-    title: "Smart Queuing",
-    description: "Rate limited? Queued intelligently via FIFO. Never see 429s.",
+    title: "Priority Queuing",
+    description: "Rate limited? Queued by priority (1-10). VIPs go first.",
     icon: Timer,
   },
   {
@@ -196,39 +196,39 @@ export function HowItWorks() {
         {/* Technical Deep Dive - Clean Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start max-w-6xl mx-auto">
           <div className="space-y-6">
-            <h3 className="text-3xl font-bold">The Multi-Tier Architecture</h3>
+            <h3 className="text-3xl font-bold">Dual Concurrency Architecture</h3>
             <p className="text-muted-foreground leading-relaxed">
-              Traditional rate limiters check one limit and call it a day.
-              RateGuard runs{" "}
-              <strong className="text-foreground">4 concurrent checks</strong>{" "}
-              across different time scales — per-second for burst protection,
-              hourly for traffic shaping, daily for quota enforcement, and
-              monthly for billing accuracy.
+              RateGuard isn&apos;t just a proxy; it&apos;s a smart traffic manager. We use a 
+              <strong className="text-foreground"> Dual Concurrency Model</strong> to optimize performance:
             </p>
+            <ul className="space-y-4 text-muted-foreground">
+              <li className="flex gap-3">
+                <Zap className="w-5 h-5 text-primary shrink-0 mt-1" />
+                <div>
+                  <strong className="text-foreground block">Unbounded Proxying</strong>
+                  For standard API calls, we use lightweight goroutines (one per request). This allows us to handle 
+                  <strong className="text-foreground"> 50,000+ req/s</strong> with sub-millisecond overhead, limited only by your hardware.
+                </div>
+              </li>
+              <li className="flex gap-3">
+                <Cpu className="w-5 h-5 text-primary shrink-0 mt-1" />
+                <div>
+                  <strong className="text-foreground block">Bounded Aggregation</strong>
+                  For resource-heavy scatter-gather operations, we use a fixed-size 
+                  <strong className="text-foreground"> Worker Pool</strong>. This prevents resource exhaustion and ensures your backend stays stable even under massive load.
+                </div>
+              </li>
+            </ul>
             <p className="text-muted-foreground leading-relaxed">
-              Our{" "}
-              <strong className="text-foreground">
-                Redis-backed distributed system
-              </strong>{" "}
-              coordinates rate limits across unlimited instances. Whether
-              you&apos;re running 3 pods or 300, users see consistent limits
-              across all nodes. Atomic Lua scripts prevent race conditions while
-              maintaining sub-5ms latency.
-            </p>
-            <p className="text-muted-foreground leading-relaxed">
-              When limits are hit, requests don&apos;t fail — they{" "}
-              <strong className="text-foreground">queue intelligently</strong>{" "}
-              using FIFO with configurable timeouts. Circuit breakers protect
-              against cascade failures when upstream APIs go down, automatically
-              recovering when services heal. Kubernetes-native health checks
-              ensure zero-downtime deployments with graceful shutdown.
+              Combined with our Redis-backed distributed rate limiting, this architecture ensures 
+              predictable performance at any scale.
             </p>
 
             <div className="grid grid-cols-2 gap-4 pt-4">
               <div className="p-4 bg-card border rounded-xl">
                 <div className="flex items-center gap-2 mb-2">
                   <Zap className="w-4 h-4 text-primary" />
-                  <span className="font-semibold text-sm">Latency</span>
+                  <span className="font-semibold text-sm">Proxy Latency</span>
                 </div>
                 <p className="text-2xl font-mono font-bold">&lt; 2ms</p>
               </div>
@@ -261,9 +261,9 @@ export function HowItWorks() {
               },
               {
                 icon: Activity,
-                title: "Circuit Breaker Protection",
+                title: "Webhook Relay & Retries",
                 description:
-                  "Auto-failover when upstream APIs fail, graceful recovery",
+                  "Guaranteed delivery with exponential backoff and dead letter queues",
               },
               {
                 icon: Timer,
