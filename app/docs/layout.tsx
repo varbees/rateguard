@@ -76,6 +76,16 @@ const docsNav = [
         href: "/docs/features/automatic-retry",
         icon: Activity,
       },
+      {
+        title: "Webhook Relay",
+        href: "/docs/features/webhooks",
+        icon: Activity,
+      },
+      {
+        title: "Dual Concurrency",
+        href: "/docs/features/concurrency",
+        icon: Layers,
+      },
     ],
   },
   {
@@ -206,7 +216,7 @@ export default function DocsLayout({
 
         {/* Center Content - Scrollable */}
         <main className="flex-1 min-w-0">
-          <div className="max-w-5xl mx-auto px-6 lg:px-8 py-12">{children}</div>
+          <div className="max-w-5xl mx-auto px-4 md:px-6 lg:px-8 py-12">{children}</div>
         </main>
 
         {/* Right Sidebar - Table of Contents (Desktop Only) */}

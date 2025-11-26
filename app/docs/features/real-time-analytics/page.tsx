@@ -22,6 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/docs/Callout";
 import { CodeTabs } from "@/components/docs/CodeTabs";
+import { PlanBadge } from "@/components/docs/PlanBadge";
 
 // export const metadata: Metadata = {
 //   title: "Real-Time Analytics & Monitoring | RateGuard Documentation",
@@ -35,19 +36,29 @@ export default function RealTimeAnalyticsPage() {
       {/* Hero Section */}
       <div className="border-b bg-linear-to-b from-muted/50 to-background">
         <div className="container max-w-5xl mx-auto px-6 py-16">
-          <div className="flex items-start gap-4 mb-6">
-            <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
-              <BarChart3 className="size-8 text-primary" />
-            </div>
+          <div className="flex items-start justify-between mb-6">
             <div className="flex-1">
-              <h1 className="text-4xl font-bold tracking-tight mb-3">
-                Real-Time Analytics & Monitoring
-              </h1>
-              <p className="text-xl text-muted-foreground leading-relaxed">
-                Monitor your APIs with streaming metrics, intelligent alert detection,
-                and comprehensive analytics. Track performance, detect issues, and
-                optimize usage in real-time.
-              </p>
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                  <BarChart3 className="size-8 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h1 className="text-4xl font-bold tracking-tight mb-3">
+                    Real-Time Analytics & Monitoring
+                  </h1>
+                  <p className="text-xl text-muted-foreground leading-relaxed">
+                    Monitor your APIs with streaming metrics, intelligent alert detection,
+                    and comprehensive analytics. Track performance, detect issues, and
+                    optimize usage in real-time.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 items-end ml-4">
+              <PlanBadge plans={["free", "pro", "business"]} />
+              <span className="text-xs text-muted-foreground">
+                SSE Streaming: Pro/Business
+              </span>
             </div>
           </div>
 
@@ -629,6 +640,42 @@ func (c *CostEstimator) EstimateMonthlyCost(
                 <p className="text-sm text-muted-foreground mb-2">
                   Returns all active alerts including 429 rate alerts, approaching
                   limit warnings, and circuit breaker status.
+                </p>
+                <Badge>Authenticated</Badge>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-mono">
+                  GET /api/v1/dashboard/usage/history
+                </CardTitle>
+                <CardDescription>
+                  Get hourly usage history for graphing
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Returns aggregated time-series data (requests, success rate, latency)
+                  for 24h, 7d, or 30d periods.
+                </p>
+                <Badge>Authenticated</Badge>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-mono">
+                  GET /api/v1/dashboard/requests/recent
+                </CardTitle>
+                <CardDescription>
+                  Get detailed logs of recent requests
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Returns a paginated list of recent API requests with full metadata,
+                  filtering options, and error details.
                 </p>
                 <Badge>Authenticated</Badge>
               </CardContent>
