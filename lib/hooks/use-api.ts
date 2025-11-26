@@ -304,3 +304,67 @@ export function useResetCircuitBreaker() {
     },
   });
 }
+
+// Usage History Hooks
+export function useUsageHistory(period: '24h' | '7d' | '30d' = '7d') {
+  return useQuery({
+    queryKey: ['usageHistory', period],
+    queryFn: () => apiClient.getUsageHistory(period),
+    refetchInterval: 60000, // Refresh every minute
+  });
+}
+
+// Recent Requests Hooks
+export function useRecentRequests(params?: {
+  limit?: number;
+  api_id?: string;
+  status_code?: number;
+}) {
+  return useQuery({
+    queryKey: ['recentRequests', params],
+    queryFn: () => apiClient.getRecentRequests(params || { limit: 10 }),
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+}
+
+// Webhook Hooks
+export function useWebhookStatus(params?: {
+  page?: number;
+  page_size?: number;
+  status?: string;
+  source?: string;
+}) {
+  return useQuery({
+    queryKey: ['webhookStatus', params],
+    queryFn: () => apiClient.getWebhookStatus(params),
+    refetchInterval: 10000, // Refresh every 10 seconds
+  });
+}
+
+export function useWebhookStats() {
+  return useQuery({
+    queryKey: ['webhookStats'],
+    queryFn: () => apiClient.getWebhookStats(),
+    refetchInterval: 30000,
+  });
+}
+
+export function useWebhookEvent(eventId: string) {
+  return useQuery({
+    queryKey: ['webhookEvent', eventId],
+    queryFn: () => apiClient.getWebhookEvent(eventId),
+    enabled: !!eventId,
+  });
+}
+
+export function useCreateWebhookEvent() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: Parameters<typeof apiClient.createWebhookEvent>[0]) =>
+      apiClient.createWebhookEvent(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['webhookStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['webhookStats'] });
+    },
+  });
+}

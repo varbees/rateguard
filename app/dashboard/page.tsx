@@ -16,7 +16,6 @@ import {
   MetricCards,
   UsageGraphSection,
   APIListTable,
-  RecentActivity,
   AlertBanner,
   CostEstimateCard,
   PlanLimitsCard,
@@ -40,24 +39,6 @@ function generateMockUsageData() {
     });
   }
   return data;
-}
-
-function generateMockRequests() {
-  const methods = ["GET", "POST", "PUT", "DELETE"];
-  const apis = ["stripe-api", "github-api", "openai-api", "twilio-api"];
-  const paths = ["/users", "/payments", "/webhooks", "/messages", "/auth"];
-  const statuses = [200, 200, 200, 201, 400, 429, 500];
-
-  return Array.from({ length: 10 }, (_, i) => ({
-    id: `req-${i}`,
-    api_name: apis[Math.floor(Math.random() * apis.length)],
-    method: methods[Math.floor(Math.random() * methods.length)],
-    path: paths[Math.floor(Math.random() * paths.length)],
-    status_code: statuses[Math.floor(Math.random() * statuses.length)],
-    response_time_ms: Math.floor(Math.random() * 300) + 50,
-    timestamp: new Date(Date.now() - i * 5 * 60 * 1000).toISOString(),
-    error_message: Math.random() > 0.8 ? "Rate limit exceeded" : undefined,
-  }));
 }
 
 export default function DashboardPage() {
@@ -85,9 +66,6 @@ export default function DashboardPage() {
   const logoutMutation = useLogout();
 
   const [usageData, setUsageData] = React.useState(generateMockUsageData());
-  const [recentRequests, setRecentRequests] = React.useState(
-    generateMockRequests()
-  );
 
   const loading = statsLoading || apisLoading;
   const error = statsError || apisError;
@@ -110,7 +88,6 @@ export default function DashboardPage() {
     refetchStats();
     refetchApis();
     setUsageData(generateMockUsageData());
-    setRecentRequests(generateMockRequests());
   };
 
   const handleAddAPI = () => {
@@ -136,20 +113,6 @@ export default function DashboardPage() {
     if (confirm(`Are you sure you want to delete ${api.name}?`)) {
       deleteApiMutation.mutate(api.id);
     }
-  };
-
-  const handleViewRequestDetails = (request: {
-    id: string;
-    api_name: string;
-    method: string;
-    path: string;
-    status_code: number;
-    response_time_ms: number;
-    timestamp: string;
-    error_message?: string;
-  }) => {
-    console.log("View request details:", request);
-    // Implement request details modal
   };
 
   // Transform stats for MetricCards
@@ -233,14 +196,6 @@ export default function DashboardPage() {
             onViewStats={handleViewStats}
             onToggleStatus={handleToggleStatus}
             onDelete={handleDeleteAPI}
-          />
-
-          {/* Section 5: Recent Activity */}
-          <RecentActivity
-            requests={recentRequests}
-            loading={loading}
-            onRefresh={handleRefreshData}
-            onViewDetails={handleViewRequestDetails}
           />
         </div>
       </div>

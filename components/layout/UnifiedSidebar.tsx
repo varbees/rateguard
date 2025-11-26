@@ -50,6 +50,7 @@ const loggedInNavItems: NavItem[] = [
   { title: "Streaming", href: "/dashboard/streaming", icon: Zap },
   { title: "Analytics", href: "/dashboard/analytics", icon: PieChart },
   { title: "Billing", href: "/dashboard/billing", icon: CreditCard },
+  { title: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 const docsNavItems: NavItem[] = [
@@ -336,35 +337,67 @@ function SidebarContent({
 
         {/* User Profile / Logout */}
         {isAuthenticated && (
-          <div
-            className={cn(
-              "flex items-center gap-2 p-1 rounded-lg transition-colors hover:bg-white/5",
-              isSidebarCollapsed ? "justify-center" : ""
-            )}
-          >
-            <Link href="/dashboard/settings" className="shrink-0">
-              <Image
-                src="/avatar.svg"
-                width={24}
-                height={24}
-                alt="User Avatar"
-                className="w-6 h-6 rounded-full border border-white/10 bg-background"
-              />
-            </Link>
-            {!isSidebarCollapsed && (
-              <div className="flex flex-col overflow-hidden">
-                <span className="text-xs font-medium truncate max-w-[120px]">
-                  {user?.email}
-                </span>
-                <button
-                  onClick={onLogout}
-                  className="text-[10px] text-muted-foreground hover:text-destructive text-left transition-colors flex items-center gap-1"
-                >
-                  Sign out
-                </button>
+          <TooltipProvider delayDuration={0}>
+            {isSidebarCollapsed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link href="/dashboard/settings" className="block w-full">
+                    <div className="flex items-center justify-center p-2 rounded-lg transition-colors hover:bg-white/5">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="w-6 h-6 rounded-full border border-white/10 bg-background p-0.5"
+                      >
+                        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                    </div>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="ml-2">
+                  Settings
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <div className="flex items-center gap-2 p-1 rounded-lg transition-colors hover:bg-white/5">
+                <Link href="/dashboard/settings" className="shrink-0">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="w-6 h-6 rounded-full border border-white/10 bg-background p-0.5"
+                  >
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </Link>
+                <div className="flex flex-col overflow-hidden">
+                  <span className="text-xs font-medium truncate max-w-[120px]">
+                    {user?.email}
+                  </span>
+                  <button
+                    onClick={onLogout}
+                    className="text-[10px] text-muted-foreground hover:text-destructive text-left transition-colors flex items-center gap-1"
+                  >
+                    Sign out
+                  </button>
+                </div>
               </div>
             )}
-          </div>
+          </TooltipProvider>
         )}
       </div>
     </div>
@@ -514,9 +547,14 @@ export default function UnifiedSidebar() {
                   {isAuthenticated ? (
                     <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/50">
                       <Image
-                        src={`https://api.dicebear.com/7.x/initials/svg?seed=${
-                          user?.email || "U"
-                        }`}
+                        src={`data:image/svg+xml,${encodeURIComponent(
+                          `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+                            <rect width="32" height="32" fill="#e0e0e0"/>
+                            <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="16" fill="#333" font-family="Arial, sans-serif">
+                              ${(user?.email?.[0] || "U").toUpperCase()}
+                            </text>
+                          </svg>`
+                        )}`}
                         width={32}
                         height={32}
                         alt="User Avatar"

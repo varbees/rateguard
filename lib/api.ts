@@ -292,6 +292,103 @@ export interface ResetPasswordRequest {
   password: string;
 }
 
+// Usage History Types
+export interface UsageHistoryPoint {
+  timestamp: string;
+  requests: number;
+  success_rate: number;
+  avg_response_time_ms: number;
+}
+
+export interface UsageHistoryResponse {
+  period: string;
+  data: UsageHistoryPoint[];
+}
+
+// Recent Requests Types
+export interface RecentRequest {
+  id: string;
+  user_id: string;
+  api_id: string;
+  api_name: string;
+  method: string;
+  path: string;
+  status_code: number;
+  response_time_ms: number;
+  timestamp: string;
+  error_message?: string;
+}
+
+export interface RecentRequestsResponse {
+  requests: RecentRequest[];
+  total: number;
+}
+
+// Webhook Types
+export interface WebhookEvent {
+  id: string;
+  user_id: string;
+  source: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  headers?: Record<string, string>;
+  target_url: string;
+  status: 'pending' | 'processing' | 'delivered' | 'failed' | 'dead_letter';
+  retries: number;
+  max_retries: number;
+  next_attempt_at?: string;
+  last_error?: string;
+  last_attempt_at?: string;
+  delivered_at?: string;
+  response_status_code?: number;
+  response_body?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookStatusResponse {
+  events: WebhookEvent[];
+  total_count: number;
+  page: number;
+  page_size: number;
+  timestamp: string;
+}
+
+export interface WebhookStats {
+  database_stats: {
+    total: number;
+    pending: number;
+    processing: number;
+    delivered: number;
+    failed: number;
+    dead_letter: number;
+    last_24h: number;
+    last_hour: number;
+  };
+  worker_metrics: {
+    delivery_attempts: number;
+    successful_deliveries: number;
+    failed_deliveries: number;
+    worker_count: number;
+    poll_interval_seconds: number;
+  };
+  config: {
+    max_retries: number;
+    base_retry_delay: string;
+    max_retry_delay: string;
+    delivery_timeout: string;
+  };
+  timestamp: string;
+}
+
+export interface WebhookInboxRequest {
+  source: string;
+  event_type: string;
+  payload: Record<string, unknown>;
+  target_url: string;
+  headers?: Record<string, string>;
+}
+
 // Queue Types
 export interface QueuedRequest {
   request_id: string;
@@ -943,6 +1040,74 @@ class APIClient {
       }
     );
   }
+
+  // Usage History Methods
+  async getUsageHistory(period: '24h' | '7d' | '30d' = '7d'): Promise<UsageHistoryResponse> {
+    return this.request<UsageHistoryResponse>(
+      `/api/v1/dashboard/usage/history?period=${period}`
+    );
+  }
+
+  // Recent Requests Methods
+  async getRecentRequests(params?: {
+    limit?: number;
+    api_id?: string;
+    status_code?: number;
+  }): Promise<RecentRequestsResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.limit) queryParams.append('limit', String(params.limit));
+    if (params?.api_id) queryParams.append('api_id', params.api_id);
+    if (params?.status_code) queryParams.append('status_code', String(params.status_code));
+    
+    const query = queryParams.toString();
+    return this.request<RecentRequestsResponse>(
+      `/api/v1/dashboard/requests/recent${query ? `?${query}` : ''}`
+    );
+  }
+
+  // Webhook Methods
+  async getWebhookStatus(params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+    source?: string;
+  }): Promise<WebhookStatusResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', String(params.page));
+    if (params?.page_size) queryParams.append('page_size', String(params.page_size));
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.source) queryParams.append('source', params.source);
+    
+    const query = queryParams.toString();
+    return this.request<WebhookStatusResponse>(
+      `/api/v1/webhook/status${query ? `?${query}` : ''}`
+    );
+  }
+
+  async getWebhookStats(): Promise<WebhookStats> {
+    return this.request<WebhookStats>('/api/v1/webhook/stats');
+  }
+
+  async getWebhookEvent(eventId: string): Promise<WebhookEvent> {
+    return this.request<WebhookEvent>(`/api/v1/webhook/events/${eventId}`);
+  }
+
+  async createWebhookEvent(data: WebhookInboxRequest): Promise<WebhookEvent> {
+    return this.request<WebhookEvent>('/api/v1/webhook/inbox', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async retryWebhookEvent(eventId: string): Promise<{ 
+    success: boolean; 
+    message: string; 
+    next_attempt_at: string;
+  }> {
+    return this.request(`/api/v1/webhook/events/${eventId}/retry`, {
+      method: 'POST',
+    });
+  }
 }
 
 // Export singleton instance
@@ -986,6 +1151,15 @@ export const circuitBreakerAPI = {
   stats: () => apiClient.getCircuitBreakerStats(),
   metrics: () => apiClient.getCircuitBreakerMetrics(),
   reset: (apiId: string) => apiClient.resetCircuitBreaker(apiId),
+};
+
+export const webhookAPI = {
+  status: (params?: { page?: number; page_size?: number; status?: string; source?: string }) =>
+    apiClient.getWebhookStatus(params),
+  stats: () => apiClient.getWebhookStats(),
+  get: (eventId: string) => apiClient.getWebhookEvent(eventId),
+  create: (data: WebhookInboxRequest) => apiClient.createWebhookEvent(data),
+  retry: (eventId: string) => apiClient.retryWebhookEvent(eventId),
 };
 
 // Query Client Configuration
