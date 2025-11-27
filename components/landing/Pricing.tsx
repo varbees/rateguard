@@ -12,9 +12,8 @@ const plans = [
     price: "$0",
     description: "For hobbyists and people who break things.",
     features: [
-      "10k requests/month",
-      "10 req/s throughput",
-      "3 APIs",
+      "50K requests/month",
+      "2 APIs",
       "Community support",
       "All core features*",
     ],
@@ -23,12 +22,11 @@ const plans = [
   },
   {
     name: "Pro",
-    price: "$49",
+    price: "$19",
     description: "For devs who deploy at midnight.",
     features: [
       "1M requests/month",
-      "100 req/s throughput",
-      "20 APIs",
+      "5 APIs",
       "Priority support",
       "All core features*",
     ],
@@ -37,11 +35,10 @@ const plans = [
   },
   {
     name: "Business",
-    price: "$199",
+    price: "$59",
     description: "For when your CTO starts asking questions.",
     features: [
-      "Unlimited requests",
-      "1000 req/s throughput",
+      "10M requests/month",
       "Unlimited APIs",
       "Dedicated support",
       "SLA 99.99%",

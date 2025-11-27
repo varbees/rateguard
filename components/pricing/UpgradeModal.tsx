@@ -36,7 +36,7 @@ const planDetails = {
     price: { monthly: 0, annual: 0 },
     features: [
       "2 APIs",
-      "10K requests/day",
+      "50K requests/month",
       "Basic analytics",
       "Community support",
     ],
@@ -45,8 +45,8 @@ const planDetails = {
     name: "Pro",
     price: { monthly: 19, annual: 15.2 },
     features: [
-      "10 APIs",
-      "100K requests/day",
+      "5 APIs",
+      "1M requests/month",
       "Advanced analytics",
       "Email support",
       "Priority queue",
@@ -55,10 +55,10 @@ const planDetails = {
   },
   business: {
     name: "Business",
-    price: { monthly: 49, annual: 39.2 },
+    price: { monthly: 59, annual: 47.2 },
     features: [
-      "50 APIs",
-      "1M requests/day",
+      "Unlimited APIs",
+      "10M requests/month",
       "Custom rate limits",
       "Dedicated support",
       "99.9% uptime SLA",
@@ -195,16 +195,16 @@ export function UpgradeModal({
             <div className="space-y-3">
               {selectedPlan === "pro" && (
                 <>
-                  <ComparisonRow label="APIs" from="2" to="10" />
-                  <ComparisonRow label="Requests/day" from="10K" to="100K" />
+                  <ComparisonRow label="APIs" from="2" to="5" />
+                  <ComparisonRow label="Requests/month" from="50K" to="1M" />
                   <ComparisonRow label="Analytics" from="Basic" to="Advanced" />
                   <ComparisonRow label="Support" from="Community" to="Email" />
                 </>
               )}
               {selectedPlan === "business" && (
                 <>
-                  <ComparisonRow label="APIs" from="2" to="50" />
-                  <ComparisonRow label="Requests/day" from="10K" to="1M" />
+                  <ComparisonRow label="APIs" from="2" to="Unlimited" />
+                  <ComparisonRow label="Requests/month" from="50K" to="10M" />
                   <ComparisonRow
                     label="Support"
                     from="Community"
