@@ -25,33 +25,93 @@ import {
 import { toasts, handleApiError } from "@/lib/toast";
 import { useSignup } from "@/lib/hooks/use-api";
 
+// Email validation regex
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Password strength checker
+const getPasswordStrength = (password: string): { strength: number; label: string; color: string } => {
+  if (!password) return { strength: 0, label: "", color: "" };
+  
+  let strength = 0;
+  if (password.length >= 8) strength++;
+  if (password.length >= 12) strength++;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) strength++;
+  if (/\d/.test(password)) strength++;
+  if (/[^a-zA-Z0-9]/.test(password)) strength++;
+
+  if (strength <= 2) return { strength, label: "Weak", color: "text-destructive" };
+  if (strength <= 3) return { strength, label: "Fair", color: "text-yellow-600" };
+  if (strength <= 4) return { strength, label: "Good", color: "text-blue-600" };
+  return { strength, label: "Strong", color: "text-green-600" };
+};
+
 export default function SignUpForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
   
   const signupMutation = useSignup();
+
+  // Validate email format
+  const validateEmail = (email: string): boolean => {
+    if (!email) {
+      setEmailError("Email is required");
+      return false;
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      setEmailError("Please enter a valid email address");
+      return false;
+    }
+    setEmailError("");
+    return true;
+  };
+
+  // Validate password
+  const validatePassword = (password: string): boolean => {
+    if (!password) {
+      setPasswordError("Password is required");
+      return false;
+    }
+    if (password.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
+      return false;
+    }
+    setPasswordError("");
+    return true;
+  };
+
+  // Validate confirm password
+  const validateConfirmPassword = (confirmPwd: string): boolean => {
+    if (!confirmPwd) {
+      setConfirmPasswordError("Please confirm your password");
+      return false;
+    }
+    if (confirmPwd !== password) {
+      setConfirmPasswordError("Passwords do not match");
+      return false;
+    }
+    setConfirmPasswordError("");
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setEmailError("");
+    setPasswordError("");
+    setConfirmPasswordError("");
 
-    if (!email || !password) {
-      setError("Please fill in all fields");
+    // Validate all fields
+    const isEmailValid = validateEmail(email);
+    const isPasswordValid = validatePassword(password);
+    const isConfirmPasswordValid = validateConfirmPassword(confirmPassword);
+
+    if (!isEmailValid || !isPasswordValid || !isConfirmPasswordValid) {
       toasts.validation.failed();
-      return;
-    }
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters long");
-      toasts.validation.invalidFormat("Password (min 8 characters)");
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      toasts.validation.invalidFormat("Passwords");
       return;
     }
 
@@ -68,7 +128,8 @@ export default function SignUpForm() {
           window.location.href = "/dashboard";
         },
         onError: (err) => {
-          setError((err as Error).message || "Sign up failed");
+          const errorMessage = (err as Error).message || "Sign up failed";
+          setError(errorMessage);
           handleApiError(err, "Sign up failed");
         },
       }
@@ -114,12 +175,25 @@ export default function SignUpForm() {
                 type="email"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError("");
+                  if (error) setError("");
+                }}
+                onBlur={() => validateEmail(email)}
+                className={`pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring ${
+                  emailError ? "border-destructive focus-visible:ring-destructive" : ""
+                }`}
                 required
                 disabled={signupMutation.isPending}
               />
             </div>
+            {emailError && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {emailError}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -133,17 +207,53 @@ export default function SignUpForm() {
                 type="password"
                 placeholder="Create a strong password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError("");
+                  if (error) setError("");
+                }}
+                onBlur={() => validatePassword(password)}
+                className={`pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring ${
+                  passwordError ? "border-destructive focus-visible:ring-destructive" : ""
+                }`}
                 required
                 disabled={signupMutation.isPending}
                 minLength={8}
               />
             </div>
-            {password && password.length > 0 && password.length < 8 && (
-              <p className="text-xs text-destructive">
-                Password must be at least 8 characters
-              </p>
+            {password && password.length > 0 && (
+              <div className="space-y-1">
+                {passwordError ? (
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {passwordError}
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all ${
+                            getPasswordStrength(password).strength <= 2
+                              ? "bg-destructive w-1/3"
+                              : getPasswordStrength(password).strength <= 3
+                              ? "bg-yellow-600 w-2/3"
+                              : getPasswordStrength(password).strength <= 4
+                              ? "bg-blue-600 w-5/6"
+                              : "bg-green-600 w-full"
+                          }`}
+                        />
+                      </div>
+                      <span className={`text-xs font-medium ${getPasswordStrength(password).color}`}>
+                        {getPasswordStrength(password).label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Use 8+ characters with mix of letters, numbers & symbols
+                    </p>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -158,15 +268,28 @@ export default function SignUpForm() {
                 type="password"
                 placeholder="Confirm your password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (confirmPasswordError) setConfirmPasswordError("");
+                  if (error) setError("");
+                }}
+                onBlur={() => validateConfirmPassword(confirmPassword)}
+                className={`pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring ${
+                  confirmPasswordError ? "border-destructive focus-visible:ring-destructive" : ""
+                }`}
                 required
                 disabled={signupMutation.isPending}
               />
-              {confirmPassword && password === confirmPassword && (
+              {confirmPassword && password === confirmPassword && !confirmPasswordError && (
                 <CheckCircle2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-primary w-5 h-5" />
               )}
             </div>
+            {confirmPasswordError && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {confirmPasswordError}
+              </p>
+            )}
           </div>
 
           <div className="bg-primary/10 border border-primary/30 rounded-lg p-3">

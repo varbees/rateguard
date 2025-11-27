@@ -18,20 +18,53 @@ import { Loader2, Mail, Lock, AlertCircle, Shield } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
 import { useLogin } from "@/lib/hooks/use-api";
 
+// Email validation regex
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   
   const loginMutation = useLogin();
+
+  // Validate email format
+  const validateEmail = (email: string): boolean => {
+    if (!email) {
+      setEmailError("Email is required");
+      return false;
+    }
+    if (!EMAIL_REGEX.test(email)) {
+      setEmailError("Please enter a valid email address");
+      return false;
+    }
+    setEmailError("");
+    return true;
+  };
+
+  // Validate password
+  const validatePassword = (password: string): boolean => {
+    if (!password) {
+      setPasswordError("Password is required");
+      return false;
+    }
+    setPasswordError("");
+    return true;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setEmailError("");
+    setPasswordError("");
 
-    if (!email || !password) {
-      const errorMsg = "Please fill in all fields";
-      setError(errorMsg);
+    // Validate all fields
+    const isEmailValid = validateEmail(email);
+    const isPasswordValid = validatePassword(password);
+
+    if (!isEmailValid || !isPasswordValid) {
       toasts.validation.failed();
       return;
     }
@@ -46,7 +79,8 @@ export default function LoginForm() {
           window.location.href = "/dashboard";
         },
         onError: (err) => {
-          setError((err as Error).message || "Login failed");
+          const errorMessage = (err as Error).message || "Login failed";
+          setError(errorMessage);
           handleApiError(err, "Login failed");
         },
       }
@@ -92,12 +126,25 @@ export default function LoginForm() {
                 type="email"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (emailError) setEmailError("");
+                  if (error) setError("");
+                }}
+                onBlur={() => validateEmail(email)}
+                className={`pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring ${
+                  emailError ? "border-destructive focus-visible:ring-destructive" : ""
+                }`}
                 required
                 disabled={loginMutation.isPending}
               />
             </div>
+            {emailError && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {emailError}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -111,12 +158,25 @@ export default function LoginForm() {
                 type="password"
                 placeholder="Enter your password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring"
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (passwordError) setPasswordError("");
+                  if (error) setError("");
+                }}
+                onBlur={() => validatePassword(password)}
+                className={`pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring ${
+                  passwordError ? "border-destructive focus-visible:ring-destructive" : ""
+                }`}
                 required
                 disabled={loginMutation.isPending}
               />
             </div>
+            {passwordError && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {passwordError}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center justify-between text-sm">

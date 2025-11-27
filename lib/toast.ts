@@ -380,7 +380,7 @@ export const toasts = {
   validation: {
     failed: () =>
       toast.error(`❌ Validation failed`, {
-        description: "Please fix the errors before saving",
+        description: "Please fix the errors before submitting",
       }),
 
     required: (fieldName: string) =>
@@ -396,6 +396,21 @@ export const toasts = {
     invalidUrl: () =>
       toast.error(`❌ Invalid URL format`, {
         description: "Please enter a valid HTTP or HTTPS URL",
+      }),
+
+    invalidEmail: () =>
+      toast.error(`❌ Invalid email address`, {
+        description: "Please enter a valid email address",
+      }),
+
+    passwordTooShort: (minLength: number = 8) =>
+      toast.error(`❌ Password too short`, {
+        description: `Password must be at least ${minLength} characters`,
+      }),
+
+    passwordMismatch: () =>
+      toast.error(`❌ Passwords don't match`, {
+        description: "Please make sure both passwords are identical",
       }),
   },
 
