@@ -1,6 +1,10 @@
 import { QueryClient } from "@tanstack/react-query";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008";
+// In production, we use Next.js Rewrites (proxy) to avoid CORS/Cookie issues.
+// This makes requests relative (e.g. /api/v1/...) which Vercel forwards to Render.
+// In development, we use the direct URL or localhost.
+const isProduction = process.env.NODE_ENV === "production";
+const API_BASE_URL = isProduction ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008");
 
 // API Response Types (matching backend models exactly)
 export interface User {
