@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useDashboardStore } from "@/lib/store";
 import { useLogout } from "@/lib/hooks/use-api";
+import { useWebSocket } from "@/lib/websocket/context";
 import {
   LayoutDashboard,
   Settings,
@@ -12,6 +13,8 @@ import {
   LogOut,
   Activity,
   BarChart3,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -53,6 +56,7 @@ export default function DashboardNav() {
   const router = useRouter();
   const clearAuth = useDashboardStore((state) => state.clearAuth);
   const logoutMutation = useLogout();
+  const { isConnected, connectionStatus } = useWebSocket();
 
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
@@ -98,6 +102,25 @@ export default function DashboardNav() {
           );
         })}
       </nav>
+
+      {/* Connection Status */}
+      <div className="px-4 py-2">
+        <div className={cn(
+          "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
+          isConnected 
+            ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
+            : "bg-rose-500/10 text-rose-500 border-rose-500/20"
+        )}>
+          {isConnected ? (
+            <Wifi className="w-4 h-4" />
+          ) : (
+            <WifiOff className="w-4 h-4" />
+          )}
+          <span>
+            {isConnected ? "Connected" : connectionStatus === "connecting" ? "Connecting..." : "Offline"}
+          </span>
+        </div>
+      </div>
 
       {/* Logout Button */}
       <div className="p-4 border-t border-slate-700">

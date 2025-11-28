@@ -12,34 +12,17 @@ import {
   useDeleteAPIConfig,
   useLogout,
 } from "@/lib/hooks/use-api";
+import { useQuery } from "@tanstack/react-query";
 import {
   MetricCards,
   UsageGraphSection,
   APIListTable,
   AlertBanner,
-  CostEstimateCard,
-  PlanLimitsCard,
+  // CostEstimateCard,
   CircuitBreakerMonitor,
+  SystemHealthIndicator,
 } from "@/components/dashboard";
 import { LogOut } from "lucide-react";
-
-// Mock data generators for demo
-function generateMockUsageData() {
-  const data = [];
-  const now = Date.now();
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date(now - i * 24 * 60 * 60 * 1000);
-    data.push({
-      date: date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-      }),
-      requests: Math.floor(Math.random() * 5000) + 1000,
-      timestamp: date.getTime(),
-    });
-  }
-  return data;
-}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -65,7 +48,24 @@ export default function DashboardPage() {
   const deleteApiMutation = useDeleteAPIConfig();
   const logoutMutation = useLogout();
 
-  const [usageData, setUsageData] = React.useState(generateMockUsageData());
+  // Fetch real-time usage data from backend
+  const { data: usageResponse } = useQuery({
+    queryKey: ["usage-history"],
+    queryFn: () => apiClient.getUsageHistory("7d"),
+  });
+
+  // Transform API response to component format
+  const usageData = React.useMemo(() => {
+    if (!usageResponse?.data) return [];
+    return usageResponse.data.map((point) => ({
+      date: new Date(point.timestamp).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      }),
+      requests: point.requests,
+      timestamp: new Date(point.timestamp).getTime(),
+    }));
+  }, [usageResponse]);
 
   const loading = statsLoading || apisLoading;
   const error = statsError || apisError;
@@ -87,7 +87,6 @@ export default function DashboardPage() {
   const handleRefreshData = () => {
     refetchStats();
     refetchApis();
-    setUsageData(generateMockUsageData());
   };
 
   const handleAddAPI = () => {
@@ -121,7 +120,9 @@ export default function DashboardPage() {
         totalRequests24h: stats.stats.total_requests || 0,
         successRate: stats.stats.success_rate || 0,
         activeApis: stats.stats.active_apis || apiList.length,
-        avgResponseTime: stats.stats.avg_response_time_ms || 0,
+        avgResponseTime: stats.stats.avg_response_time_ms
+          ? Number(stats.stats.avg_response_time_ms)
+          : 0,
       }
     : null;
 
@@ -165,29 +166,29 @@ export default function DashboardPage() {
         </div>
 
         <div className="space-y-8">
-          {/* Alert Banners */}
+          {/* Alert Banners - Real-time WebSocket updates */}
           <AlertBanner />
+          
+          {/* System Health Indicator - Real-time WebSocket updates */}
+          <SystemHealthIndicator />
 
-          {/* Plan Limits Card */}
-          {stats && <PlanLimitsCard plan={stats.plan} stats={stats.stats} />}
-
-          {/* Cost Estimate */}
-          <CostEstimateCard />
+          {/* Cost Estimate - Real-time data */}
+          {/* <CostEstimateCard /> */}
 
           {/* Section 1: Metric Cards */}
           <MetricCards data={metricData} loading={loading} />
 
-          {/* Section 2: Usage Graph */}
+          {/* Section 2: Usage Graph - Real-time WebSocket metrics */}
           <UsageGraphSection
             data={usageData}
             loading={loading}
             onRefresh={handleRefreshData}
           />
 
-          {/* Section 3: Circuit Breaker Monitor */}
+          {/* Section 3: Circuit Breaker Monitor - Real-time WebSocket updates */}
           <CircuitBreakerMonitor />
 
-          {/* Section 4: API List */}
+          {/* Section 4: API List - Real-time data */}
           <APIListTable
             apis={apiList}
             loading={loading}
