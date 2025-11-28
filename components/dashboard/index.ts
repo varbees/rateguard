@@ -8,6 +8,10 @@ export { CostEstimateCard } from "./CostEstimateCard";
 export { PlanLimitsCard } from "./PlanLimitsCard";
 export { FeatureGate } from "./FeatureGate";
 export { CircuitBreakerMonitor } from "./CircuitBreakerMonitor";
+export { SystemHealthIndicator } from "./SystemHealthIndicator";
+export { SkeletonAPITable } from "./SkeletonAPITable";
+export { SkeletonAPIDetail } from "./SkeletonAPIDetail";
+export { APIUsageChart } from "./APIUsageChart";
 
 // Legacy components (keep for backward compatibility)
 export { default as DashboardNav } from "./DashboardNav";

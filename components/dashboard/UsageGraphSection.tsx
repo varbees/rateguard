@@ -78,15 +78,18 @@ export function UsageGraphSection({
   onRefresh,
 }: UsageGraphSectionProps) {
   const [timeRange, setTimeRange] = React.useState<TimeRange>("7d");
+  const [currentTime, setCurrentTime] = React.useState(() => Date.now());
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
-  const handleRefresh = async () => {
+  const handleRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     await onRefresh?.();
     setTimeout(() => setIsRefreshing(false), 1000);
-  };
+  }, [onRefresh]);
 
-  const [currentTime] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    setCurrentTime(Date.now());
+  }, [timeRange]);
 
   const filteredData = React.useMemo(() => {
     if (!data || data.length === 0) return [];

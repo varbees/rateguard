@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { UsageProgressBar } from "@/components/dashboard/UsageProgressBar";
 import { useAPIConfig, useDashboardStats } from "@/lib/hooks/use-api";
+import { SkeletonAPIDetail, APIUsageChart } from "@/components/dashboard";
+import { useAPIMetricsWebSocket } from "@/lib/hooks/use-api-metrics-websocket";
 
 interface RateLimitSuggestion {
   api_id: string;
@@ -245,15 +247,38 @@ export default function APIDetailPage() {
 
   // Fetch dashboard stats for usage percentages
   const { data: dashboardStats } = useDashboardStats();
+  
+  // Subscribe to real-time WebSocket updates for this API
+  const { liveMetrics, lastUpdate, isLive } = useAPIMetricsWebSocket(apiId);
+  
+  // Fetch usage history for chart
+  const { data: usageResponse } = useQuery({
+    queryKey: ["usage-history", apiId],
+    queryFn: () => apiClient.getUsageHistory("30d"), // Get 30 days of data
+  });
+
+  // Transform usage data for chart
+  const usageData = React.useMemo(() => {
+    if (!usageResponse?.data) return [];
+    
+    return usageResponse.data.map((point: any, index: number) => {
+      const timestamp = new Date(point.timestamp).getTime();
+      
+      return {
+        timestamp,
+        date: new Date(point.timestamp).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        }),
+        requests: Number(point.requests) || 0,
+        // Add unique id for recharts key
+        id: `${timestamp}-${index}`,
+      };
+    }).sort((a: any, b: any) => a.timestamp - b.timestamp);
+  }, [usageResponse]);
 
   if (isLoading) {
-    return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </div>
-    );
+    return <SkeletonAPIDetail />;
   }
 
   if (!api) {
@@ -305,12 +330,23 @@ export default function APIDetailPage() {
           <Badge variant={api.enabled ? "default" : "secondary"}>
             {api.enabled ? "Enabled" : "Disabled"}
           </Badge>
+          {isLive && (
+            <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                Live {lastUpdate && `• ${lastUpdate.toLocaleTimeString()}`}
+              </span>
+            </div>
+          )}
           <Button onClick={() => router.push(`/dashboard/apis/${apiId}/edit`)}>
             <Edit className="h-4 w-4 mr-2" />
             Edit
           </Button>
         </div>
       </div>
+
+      {/* Usage History Chart */}
+      <APIUsageChart data={usageData} loading={!usageResponse} isLive={true} />
 
       {/* Usage Progress Bars */}
       {dashboardStats && (

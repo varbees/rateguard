@@ -11,7 +11,6 @@ export function CostEstimateCard() {
   const { data, isLoading } = useQuery({
     queryKey: ["cost-estimate"],
     queryFn: dashboardAPI.costs,
-    refetchInterval: 60000, // Refresh every minute
   });
 
   if (isLoading) {

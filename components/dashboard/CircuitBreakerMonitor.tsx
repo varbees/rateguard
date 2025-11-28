@@ -213,11 +213,47 @@ function CircuitBreakerCard({
   );
 }
 
+import { useQueryClient } from "@tanstack/react-query";
+import { useWebSocket } from "@/lib/websocket/context";
+import { toast } from "sonner";
+import { queryKeys } from "@/lib/hooks/use-api";
+
 export function CircuitBreakerMonitor() {
+  const queryClient = useQueryClient();
+  const { subscribe } = useWebSocket();
   const { data: stats, isLoading: statsLoading } = useCircuitBreakerStats();
   const { data: metricsData, isLoading: metricsLoading } =
     useCircuitBreakerMetrics();
   const resetMutation = useResetCircuitBreaker();
+
+  // Subscribe to real-time updates
+  React.useEffect(() => {
+    const unsubscribe = subscribe("circuit_breaker.state_change", (event) => {
+      // Invalidate queries to fetch fresh data
+      queryClient.invalidateQueries({ queryKey: queryKeys.circuitBreakerStats });
+      queryClient.invalidateQueries({ queryKey: queryKeys.circuitBreakerMetrics });
+      
+      const data = event.data as any;
+      const state = data.state;
+      const apiName = data.api_name;
+      
+      if (state === "open") {
+        toast.error(`Circuit Breaker Opened: ${apiName}`, {
+          description: "API is failing and requests are being rejected.",
+        });
+      } else if (state === "half-open") {
+        toast.warning(`Circuit Breaker Half-Open: ${apiName}`, {
+          description: "Testing API recovery with limited requests.",
+        });
+      } else if (state === "closed") {
+        toast.success(`Circuit Breaker Closed: ${apiName}`, {
+          description: "API has recovered and is operating normally.",
+        });
+      }
+    });
+    
+    return unsubscribe;
+  }, [subscribe, queryClient]);
 
   const handleReset = (apiId: string) => {
     resetMutation.mutate(apiId);

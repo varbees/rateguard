@@ -1,12 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useRealtimeMetrics } from "@/lib/hooks/useRealtimeMetrics";
 import {
-  fetchStreamingStats,
   formatBytes,
   formatDuration,
   type TimePeriod,
-  type StreamingStats,
 } from "@/lib/api/streaming";
 import {
   Activity,
@@ -14,6 +12,8 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
 interface StreamingMetricsProps {
@@ -25,12 +25,8 @@ export function StreamingMetrics({
   period = "30d",
   className = "",
 }: StreamingMetricsProps) {
-  const { data, error, isLoading } = useQuery<StreamingStats>({
-    queryKey: [`/api/v1/dashboard/stats/streaming`, period],
-    queryFn: () => fetchStreamingStats(period),
-    refetchInterval: 5000, // Poll every 5 seconds
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
+  const { data, error, isLoading, isConnected } = useRealtimeMetrics({
+    period,
   });
 
   if (isLoading) {
@@ -125,17 +121,20 @@ export function StreamingMetrics({
       {/* Streaming Status */}
       <MetricCard
         title="Streaming Status"
-        value={metrics.streaming_enabled ? "Enabled" : "Disabled"}
+        value={isConnected ? "Live" : metrics.streaming_enabled ? "Enabled" : "Disabled"}
         icon={
-          metrics.streaming_enabled ? (
+          isConnected ? (
+            <Wifi className="w-5 h-5" />
+          ) : metrics.streaming_enabled ? (
             <CheckCircle2 className="w-5 h-5" />
           ) : (
             <AlertCircle className="w-5 h-5" />
           )
         }
-        iconColor={metrics.streaming_enabled ? "text-chart-4" : "text-muted-foreground"}
-        iconBg={metrics.streaming_enabled ? "bg-chart-4/20" : "bg-muted/50"}
-        tooltip="Current streaming feature status"
+        iconColor={isConnected ? "text-green-500" : metrics.streaming_enabled ? "text-chart-4" : "text-muted-foreground"}
+        iconBg={isConnected ? "bg-green-500/20" : metrics.streaming_enabled ? "bg-chart-4/20" : "bg-muted/50"}
+        tooltip={isConnected ? "Real-time updates active via WebSocket" : "Current streaming feature status"}
+        pulse={isConnected}
       />
     </div>
   );

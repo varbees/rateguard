@@ -121,7 +121,7 @@ export function useAlerts() {
   return useQuery({
     queryKey: queryKeys.alerts,
     queryFn: () => apiClient.getAlerts(),
-    refetchInterval: 60000,
+    // No polling - WebSocket provides real-time alert updates
   });
 }
 
@@ -277,7 +277,7 @@ export function useCircuitBreakerStats() {
   return useQuery({
     queryKey: queryKeys.circuitBreakerStats,
     queryFn: () => apiClient.getCircuitBreakerStats(),
-    refetchInterval: 5000, // Refresh every 5 seconds for real-time monitoring
+    // No polling - WebSocket provides real-time circuit breaker updates
   });
 }
 
@@ -285,7 +285,7 @@ export function useCircuitBreakerMetrics() {
   return useQuery({
     queryKey: queryKeys.circuitBreakerMetrics,
     queryFn: () => apiClient.getCircuitBreakerMetrics(),
-    refetchInterval: 5000, // Refresh every 5 seconds for real-time monitoring
+    // No polling - WebSocket provides real-time circuit breaker updates
   });
 }
 
@@ -306,9 +306,9 @@ export function useResetCircuitBreaker() {
 }
 
 // Usage History Hooks
-export function useUsageHistory(period: '24h' | '7d' | '30d' = '7d') {
+export function useUsageHistory(period: "24h" | "7d" | "30d" = "7d") {
   return useQuery({
-    queryKey: ['usageHistory', period],
+    queryKey: ["usageHistory", period],
     queryFn: () => apiClient.getUsageHistory(period),
     refetchInterval: 60000, // Refresh every minute
   });
@@ -321,7 +321,7 @@ export function useRecentRequests(params?: {
   status_code?: number;
 }) {
   return useQuery({
-    queryKey: ['recentRequests', params],
+    queryKey: ["recentRequests", params],
     queryFn: () => apiClient.getRecentRequests(params || { limit: 10 }),
     refetchInterval: 30000, // Refresh every 30 seconds
   });
@@ -335,7 +335,7 @@ export function useWebhookStatus(params?: {
   source?: string;
 }) {
   return useQuery({
-    queryKey: ['webhookStatus', params],
+    queryKey: ["webhookStatus", params],
     queryFn: () => apiClient.getWebhookStatus(params),
     refetchInterval: 10000, // Refresh every 10 seconds
   });
@@ -343,7 +343,7 @@ export function useWebhookStatus(params?: {
 
 export function useWebhookStats() {
   return useQuery({
-    queryKey: ['webhookStats'],
+    queryKey: ["webhookStats"],
     queryFn: () => apiClient.getWebhookStats(),
     refetchInterval: 30000,
   });
@@ -351,7 +351,7 @@ export function useWebhookStats() {
 
 export function useWebhookEvent(eventId: string) {
   return useQuery({
-    queryKey: ['webhookEvent', eventId],
+    queryKey: ["webhookEvent", eventId],
     queryFn: () => apiClient.getWebhookEvent(eventId),
     enabled: !!eventId,
   });
@@ -363,8 +363,8 @@ export function useCreateWebhookEvent() {
     mutationFn: (data: Parameters<typeof apiClient.createWebhookEvent>[0]) =>
       apiClient.createWebhookEvent(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['webhookStatus'] });
-      queryClient.invalidateQueries({ queryKey: ['webhookStats'] });
+      queryClient.invalidateQueries({ queryKey: ["webhookStatus"] });
+      queryClient.invalidateQueries({ queryKey: ["webhookStats"] });
     },
   });
 }

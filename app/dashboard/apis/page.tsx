@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Edit, Power, ExternalLink, Eye } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
 import APIProxyInfo from "@/components/dashboard/APIProxyInfo";
+import { SkeletonAPITable } from "@/components/dashboard";
 
 export default function APIsPage() {
   const router = useRouter();
@@ -82,7 +83,7 @@ export default function APIsPage() {
         </CardHeader>
         <CardContent>
           {isLoading ? (
-            <p className="text-muted-foreground">Loading...</p>
+            <SkeletonAPITable />
           ) : apis && apis.length > 0 ? (
             <Table>
               <TableHeader>
