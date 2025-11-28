@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
   CardContent,
@@ -16,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,8 +28,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toasts, copyToClipboard } from "@/lib/toast";
-import { settingsAPI } from "@/lib/api";
+import { settingsAPI, apiClient } from "@/lib/api";
+import type { APIKey } from "@/lib/api";
 import { ButtonLoading } from "@/components/loading";
 import {
   User,
@@ -40,6 +51,11 @@ import {
   Upload,
   Lock,
   ExternalLink,
+  Plus,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -54,25 +70,17 @@ export default function SettingsPage() {
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // API Keys state
-  const [apiKeys, setApiKeys] = useState([
-    {
-      id: "1",
-      name: "Production Key",
-      key: "rg_xxxxxxxxxxxxxxxxxxxx",
-      lastUsed: "2 hours ago",
-      createdAt: "Nov 15, 2025",
-    },
-    {
-      id: "2",
-      name: "Development Key",
-      key: "rg_yyyyyyyyyyyyyyyyyyyy",
-      lastUsed: "5 days ago",
-      createdAt: "Nov 10, 2025",
-    },
-  ]);
-  const [isCreatingKey, setIsCreatingKey] = useState(false);
-  const [keyToDelete, setKeyToDelete] = useState<string | null>(null);
+  // API Keys state (NEW - TanStack Query + multiple keys)
+  const queryClient = useQueryClient();
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [createdKey, setCreatedKey] = useState<{
+    api_key: string;
+    key_name: string;
+  } | null>(null);
+  const [showKeyDialog, setShowKeyDialog] = useState(false);
+  const [hasAcknowledged, setHasAcknowledged] = useState(false);
+  const [keyToRevoke, setKeyToRevoke] = useState<APIKey | null>(null);
 
   // Notifications state
   const [emailAlerts, setEmailAlerts] = useState(true);
@@ -146,44 +154,79 @@ export default function SettingsPage() {
     }
   };
 
-  // API Keys handlers
-  const handleCreateKey = async () => {
-    setIsCreatingKey(true);
-    try {
-      const result = await settingsAPI.regenerateAPIKey();
-      const newKey = {
-        id: Date.now().toString(),
-        name: "Primary API Key",
-        key: result.api_key,
-        lastUsed: "Just now",
-        createdAt: new Date().toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }),
-      };
-      // Replace existing keys (users have one primary key)
-      setApiKeys([newKey]);
-      toasts.api.created("API Key");
-    } catch {
-      toasts.api.createFailed();
-    } finally {
-      setIsCreatingKey(false);
+  // API Keys TanStack Query hooks
+  const { data: apiKeysData, isLoading: isLoadingKeys } = useQuery({
+    queryKey: ["api-keys"],
+    queryFn: () => apiClient.listAPIKeys(),
+    refetchOnWindowFocus: false,
+  });
+
+  const createKeyMutation = useMutation({
+    mutationFn: (keyName: string) => apiClient.createAPIKey(keyName),
+    onSuccess: (data) => {
+      setCreatedKey({
+        api_key: data.api_key,
+        key_name: data.key_name,
+      });
+      setShowKeyDialog(true);
+      setShowCreateDialog(false);
+      setNewKeyName("");
+      toasts.generic.success("🔑 API key created", "Save it now - you won't see it again");
+    },
+    onError: (error: Error) => {
+      toasts.generic.error("❌ Failed to create API key", error.message);
+    },
+  });
+
+  const revokeKeyMutation = useMutation({
+    mutationFn: (keyId: string) => apiClient.revokeAPIKey(keyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+      toasts.generic.success("🗑️ API key revoked", "This key can no longer be used");
+      setKeyToRevoke(null);
+    },
+    onError: (error: Error) => {
+      toasts.generic.error("❌ Failed to revoke key", error.message);
+    },
+  });
+
+  const handleCreateKey = () => {
+    if (!newKeyName.trim()) {
+      toasts.validation.required("Key name");
+      return;
+    }
+    createKeyMutation.mutate(newKeyName.trim());
+  };
+
+  const handleCloseKeyDialog = () => {
+    if (!hasAcknowledged) {
+      toasts.generic.warning(
+        "⚠️ Please acknowledge",
+        "Confirm that you've saved your API key"
+      );
+      return;
+    }
+    setShowKeyDialog(false);
+    setCreatedKey(null);
+    setHasAcknowledged(false);
+    queryClient.invalidateQueries({ queryKey: ["api-keys"] });
+  };
+
+  const handleCopyKey = async () => {
+    if (createdKey) {
+      await copyToClipboard(createdKey.api_key, "API key");
     }
   };
 
-  const handleDeleteKey = async () => {
-    if (!keyToDelete) return;
-
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const keyName = apiKeys.find((k) => k.id === keyToDelete)?.name || "Key";
-      setApiKeys(apiKeys.filter((k) => k.id !== keyToDelete));
-      setKeyToDelete(null);
-      toasts.api.deleted(keyName);
-    } catch {
-      toasts.api.deleteFailed();
-    }
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return "Never";
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   // Notifications handlers
@@ -371,94 +414,266 @@ export default function SettingsPage() {
         <TabsContent value="apikeys" className="space-y-6">
           <Card className="bg-card border-border">
             <CardHeader>
-              <CardTitle className="text-foreground">API Keys</CardTitle>
-              <CardDescription>
-                Manage your API keys for authentication
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-foreground">API Keys</CardTitle>
+                  <CardDescription>
+                    Create and manage multiple API keys for zero-downtime rotation
+                  </CardDescription>
+                </div>
+                <Button onClick={() => setShowCreateDialog(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Key
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <ButtonLoading
-                  loading={isCreatingKey}
-                  loadingText="Regenerating..."
-                  onClick={handleCreateKey}
-                  className="gap-2"
-                >
-                  <Key className="w-4 h-4" />
-                  Regenerate API Key
-                </ButtonLoading>
-                <p className="text-xs text-yellow-400">
-                  ⚠️ Regenerating will invalidate your current API key
-                </p>
-              </div>
-
-              <Separator className="bg-accent" />
-
-              <div className="space-y-3">
-                {apiKeys.map((key) => (
-                  <div
-                    key={key.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-accent border border-slate-700 rounded-lg"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium text-foreground">
-                          {key.name}
-                        </p>
-                        {key.lastUsed === "Never" && (
-                          <Badge variant="outline" className="text-xs">
-                            New
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground font-mono truncate">
-                        {key.key}
-                      </p>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
-                        <span>Last used: {key.lastUsed}</span>
-                        <span>Created: {key.createdAt}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyToClipboard(key.key, "API Key")}
-                        className="gap-2"
-                      >
-                        <Copy className="w-3 h-3" />
-                        <span className="hidden sm:inline">Copy</span>
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setKeyToDelete(key.id)}
-                        className="gap-2"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        <span className="hidden sm:inline">Revoke</span>
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {apiKeys.length === 0 && (
+            <CardContent>
+              {isLoadingKeys ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <Key className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No API keys yet. Create one to get started.</p>
+                  Loading API keys...
+                </div>
+              ) : apiKeysData?.api_keys && apiKeysData.api_keys.length > 0 ? (
+                <div className="space-y-4">
+                  {apiKeysData.api_keys.map((key) => (
+                    <div
+                      key={key.id}
+                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-accent border border-slate-700 rounded-lg"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-2">
+                          <h3 className="font-semibold text-foreground">{key.key_name}</h3>
+                          {key.is_active ? (
+                            <Badge variant="default" className="gap-1 bg-green-500/10 text-green-500 hover:bg-green-500/20 border-green-500/20">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Active
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="gap-1">
+                              <XCircle className="w-3 h-3" />
+                              Revoked
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm space-y-1">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <code className="font-mono bg-background/50 px-2 py-1 rounded text-xs border border-border">
+                              {key.masked_key}
+                            </code>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => copyToClipboard(key.masked_key, "Masked key")}
+                              className="h-6 w-6 p-0 hover:bg-background/50"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </Button>
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground mt-2">
+                            <span>Created: {formatDate(key.created_at)}</span>
+                            {key.last_used_at && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Last used: {formatDate(key.last_used_at)}
+                              </span>
+                            )}
+                            {key.revoked_at && (
+                              <span className="text-destructive">
+                                Revoked: {formatDate(key.revoked_at)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {key.is_active && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setKeyToRevoke(key)}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Revoke
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 border-2 border-dashed border-border rounded-lg">
+                  <Key className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <h3 className="font-semibold mb-2 text-foreground">No API keys yet</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Create your first API key to start using the proxy
+                  </p>
+                  <Button onClick={() => setShowCreateDialog(true)}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create API Key
+                  </Button>
                 </div>
               )}
+
+              <Separator className="my-6 bg-border" />
+
+              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+                <div className="flex gap-3">
+                  <AlertTriangle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm space-y-2">
+                    <p className="font-medium text-blue-100">
+                      Zero-downtime key rotation
+                    </p>
+                    <ul className="text-blue-200/80 space-y-1 list-disc list-inside">
+                      <li>Create a new key before revoking the old one</li>
+                      <li>Update your services with the new key</li>
+                      <li>Revoke the old key once migration is complete</li>
+                      <li>API keys are shown only once during creation</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
 
-          <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-            <p className="text-yellow-400 text-sm">
-              <strong>Security Note:</strong> API keys grant full access to your
-              account. Keep them secure and never share them publicly or commit
-              them to version control.
-            </p>
-          </div>
+          {/* Create API Key Dialog */}
+          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New API Key</DialogTitle>
+                <DialogDescription>
+                  Give your API key a descriptive name to identify its purpose
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="key-name">Key Name</Label>
+                  <Input
+                    id="key-name"
+                    placeholder="e.g., Production Server, Development, iOS App"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleCreateKey()}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Choose a name that helps you identify where this key is used
+                  </p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowCreateDialog(false);
+                    setNewKeyName("");
+                  }}
+                >
+                  Cancel
+                </Button>
+                <ButtonLoading
+                  onClick={handleCreateKey}
+                  loading={createKeyMutation.isPending}
+                  disabled={!newKeyName.trim()}
+                >
+                  Create Key
+                </ButtonLoading>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Show API Key Dialog (Show Once) */}
+          <AlertDialog open={showKeyDialog} onOpenChange={() => {}}>
+            <AlertDialogContent className="max-w-2xl">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2 text-green-500">
+                  <CheckCircle2 className="w-5 h-5" />
+                  API Key Created Successfully
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  This is the only time you'll see this key. Copy it now and store it securely.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+
+              {createdKey && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Key Name</Label>
+                    <Input value={createdKey.key_name} readOnly className="font-semibold bg-accent" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>API Key</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        value={createdKey.api_key}
+                        readOnly
+                        className="font-mono text-xs bg-accent"
+                      />
+                      <Button onClick={handleCopyKey} className="flex-shrink-0">
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copy
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
+                    <div className="flex gap-3">
+                      <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                      <div className="text-sm text-amber-200/90 space-y-1">
+                        <p className="font-semibold text-amber-500">Important Security Notice</p>
+                        <ul className="list-disc list-inside space-y-0.5">
+                          <li>This key will not be shown again</li>
+                          <li>Store it in a secure password manager or environment variables</li>
+                          <li>Never commit it to version control</li>
+                          <li>If lost, create a new key and revoke this one</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2 pt-2">
+                    <Checkbox
+                      id="acknowledge"
+                      checked={hasAcknowledged}
+                      onCheckedChange={(checked) => setHasAcknowledged(checked as boolean)}
+                    />
+                    <label
+                      htmlFor="acknowledge"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      I have safely saved my API key
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              <AlertDialogFooter>
+                <AlertDialogAction onClick={handleCloseKeyDialog} disabled={!hasAcknowledged}>
+                  I've Saved My Key
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Revoke API Key Confirmation Dialog */}
+          <AlertDialog open={!!keyToRevoke} onOpenChange={() => setKeyToRevoke(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Revoke API Key?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will immediately invalidate "{keyToRevoke?.key_name}". Any services using this key
+                  will stop working.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  onClick={() => keyToRevoke && revokeKeyMutation.mutate(keyToRevoke.id)}
+                  disabled={revokeKeyMutation.isPending}
+                >
+                  {revokeKeyMutation.isPending ? "Revoking..." : "Revoke Key"}
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
         {/* Billing Tab */}
@@ -733,8 +948,8 @@ export default function SettingsPage() {
 
       {/* Confirmation Dialog for API Key Deletion */}
       <AlertDialog
-        open={!!keyToDelete}
-        onOpenChange={(open) => !open && setKeyToDelete(null)}
+        open={!!keyToRevoke}
+        onOpenChange={(open) => !open && setKeyToRevoke(null)}
       >
         <AlertDialogContent className="bg-card border-border">
           <AlertDialogHeader>
@@ -752,7 +967,7 @@ export default function SettingsPage() {
               Cancel
             </AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleDeleteKey}
+              onClick={() => keyToRevoke?.id && revokeKeyMutation.mutate(keyToRevoke.id)}
               className="bg-destructive hover:bg-red-600 text-foreground"
             >
               Revoke Key

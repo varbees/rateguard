@@ -7,15 +7,18 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import { copyToClipboard as copyHelper } from "@/lib/toast";
+import Link from "next/link";
 
 interface APIProxyInfoProps {
   apiName: string;
   targetUrl: string;
+  apiKey?: string | null;
 }
 
 export default function APIProxyInfo({
   apiName,
   targetUrl,
+  apiKey = null,
 }: APIProxyInfoProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -29,13 +32,17 @@ export default function APIProxyInfo({
     setTimeout(() => setCopiedField(null), 2000);
   };
 
+  // Use real API key or placeholder
+  const apiKeyDisplay = apiKey || "YOUR_API_KEY";
+  const hasApiKey = !!apiKey;
+
   const codeExamples = {
     curl: `# Instead of calling the API directly:
 # curl ${targetUrl}/endpoint
 
 # Call through RateGuard:
 curl -X POST ${proxyUrl}/endpoint \\
-  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Authorization: Bearer ${apiKeyDisplay}" \\
   -H "Content-Type: application/json" \\
   -d '{"key": "value"}'`,
 
@@ -46,7 +53,7 @@ curl -X POST ${proxyUrl}/endpoint \\
 const response = await fetch("${proxyUrl}/endpoint", {
   method: "POST",
   headers: {
-    "Authorization": "Bearer YOUR_API_KEY",
+    "Authorization": "Bearer ${apiKeyDisplay}",
     "Content-Type": "application/json"
   },
   body: JSON.stringify({ key: "value" })
@@ -63,7 +70,7 @@ import requests
 response = requests.post(
     "${proxyUrl}/endpoint",
     headers={
-        "Authorization": "Bearer YOUR_API_KEY",
+        "Authorization": "Bearer ${apiKeyDisplay}",
         "Content-Type": "application/json"
     },
     json={"key": "value"}
@@ -85,7 +92,7 @@ payload := map[string]string{"key": "value"}
 jsonData, _ := json.Marshal(payload)
 
 req, _ := http.NewRequest("POST", "${proxyUrl}/endpoint", bytes.NewBuffer(jsonData))
-req.Header.Set("Authorization", "Bearer YOUR_API_KEY")
+req.Header.Set("Authorization", "Bearer ${apiKeyDisplay}")
 req.Header.Set("Content-Type", "application/json")
 
 client := &http.Client{}
@@ -102,6 +109,26 @@ defer resp.Body.Close()`,
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
+        {/* Warning if no API key */}
+        {!hasApiKey && (
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+            <p className="text-yellow-300 text-sm font-semibold mb-2 flex items-center gap-2">
+              <span className="text-lg">⚠️</span>
+              API Key Required
+            </p>
+            <p className="text-yellow-200 text-sm">
+              You need an API key to use this proxy endpoint.{" "}
+              <Link
+                href="/dashboard/settings"
+                className="underline font-semibold hover:text-yellow-100"
+              >
+                Go to Settings → API Keys
+              </Link>{" "}
+              to generate your key.
+            </p>
+          </div>
+        )}
+
         {/* Proxy URL */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">

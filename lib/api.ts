@@ -11,7 +11,7 @@ export interface User {
   id: string;
   email: string;
   plan: "free" | "pro" | "business"; // Backend uses "business" not "enterprise"
-  api_key: string;
+  api_key?: string; // Optional - only present after signup/login, NOT in /me
   active: boolean;
   email_verified: boolean;
   last_login_at?: string;
@@ -391,6 +391,34 @@ export interface WebhookInboxRequest {
   payload: Record<string, unknown>;
   target_url: string;
   headers?: Record<string, string>;
+}
+
+// API Keys Types (NEW - multiple keys)
+export interface APIKey {
+  id: string;
+  key_name: string;
+  masked_key: string;
+  created_at: string;
+  last_used_at?: string;
+  revoked_at?: string;
+  is_active: boolean;
+}
+
+export interface CreateAPIKeyRequest {
+  key_name: string;
+}
+
+export interface CreateAPIKeyResponse {
+  id: string;
+  key_name: string;
+  api_key: string; // Full key - shown once
+  created_at: string;
+  message: string;
+}
+
+export interface ListAPIKeysResponse {
+  api_keys: APIKey[];
+  count: number;
 }
 
 // Queue Types
@@ -998,6 +1026,25 @@ class APIClient {
     return response.json();
   }
 
+  // API Keys Management (NEW - multiple keys)
+  async listAPIKeys(): Promise<ListAPIKeysResponse> {
+    return this.request<ListAPIKeysResponse>("/api/v1/api-keys");
+  }
+
+  async createAPIKey(keyName: string): Promise<CreateAPIKeyResponse> {
+    return this.request<CreateAPIKeyResponse>("/api/v1/api-keys", {
+      method: "POST",
+      body: JSON.stringify({ key_name: keyName }),
+    });
+  }
+
+  async revokeAPIKey(keyId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/v1/api-keys/${keyId}`, {
+      method: "DELETE",
+    });
+  }
+
+  // Legacy API key regeneration (single key - deprecated)
   async regenerateAPIKey(): Promise<{
     success: boolean;
     message: string;
