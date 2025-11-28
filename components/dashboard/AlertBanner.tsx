@@ -3,20 +3,58 @@
 import { useQuery } from "@tanstack/react-query";
 import { dashboardAPI, Alert } from "@/lib/api";
 import { useState } from "react";
-import { X, AlertTriangle, AlertCircle, Info, RefreshCw } from "lucide-react";
+import { X, AlertTriangle, AlertCircle, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+import { useQueryClient } from "@tanstack/react-query";
+import { useWebSocket } from "@/lib/websocket/context";
+import { toast } from "sonner";
+import { useEffect } from "react";
 
 export function AlertBanner() {
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(
     new Set()
   );
+  const queryClient = useQueryClient();
+  const { subscribe } = useWebSocket();
 
   const { data, isLoading } = useQuery({
     queryKey: ["dashboard-alerts"],
     queryFn: dashboardAPI.alerts,
-    refetchInterval: 5000, // Poll every 5 seconds
-    refetchOnWindowFocus: true,
+    // No polling needed - WebSocket provides real-time updates
+    refetchOnWindowFocus: true, // Still refetch when window regains focus
   });
+
+  // Subscribe to real-time alerts
+  useEffect(() => {
+    const unsubscribe = subscribe("alert.triggered", (event) => {
+      // Invalidate queries to fetch fresh data
+      queryClient.invalidateQueries({ queryKey: ["dashboard-alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
+
+      const alert = event.data as any;
+
+      // Show toast notification
+      if (alert.type === "critical") {
+        toast.error(alert.title, {
+          description: alert.message,
+          duration: 10000,
+        });
+      } else if (alert.type === "warning") {
+        toast.warning(alert.title, {
+          description: alert.message,
+          duration: 8000,
+        });
+      } else {
+        toast.info(alert.title, {
+          description: alert.message,
+          duration: 5000,
+        });
+      }
+    });
+
+    return unsubscribe;
+  }, [subscribe, queryClient]);
 
   if (isLoading || !data || data.count === 0) {
     return null;
