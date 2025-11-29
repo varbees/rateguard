@@ -134,6 +134,7 @@ export function WebSocketProvider({
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 10;
   const baseReconnectDelay = 1000; // 1 second
+  const maxRetriesReachedRef = useRef(false); // Flag to stop reconnection attempts
 
   /**
    * Get JWT token from cookies (httpOnly cookies are sent automatically by browser)
@@ -176,6 +177,15 @@ export function WebSocketProvider({
   const connect = useCallback(() => {
     if (!enabled) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    // Don't attempt to reconnect if max retries already reached
+    if (maxRetriesReachedRef.current) {
+      if (debug || process.env.NODE_ENV === "development") {
+        console.log(
+          "[WebSocket] Max retries already reached, skipping reconnection"
+        );
+      }
+      return;
+    }
 
     // Determine WebSocket URL
     const wsUrl =
@@ -305,6 +315,8 @@ export function WebSocketProvider({
             connect();
           }, delay);
         } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+          // Mark that max retries have been reached - stop all reconnection attempts
+          maxRetriesReachedRef.current = true;
           const finalError: WebSocketError = {
             code: "MAX_RETRIES_EXCEEDED",
             message: `Failed to connect after ${maxReconnectAttempts} attempts`,
@@ -317,7 +329,8 @@ export function WebSocketProvider({
           setLastError(finalError);
           console.error(
             "[WebSocket] Max reconnect attempts reached:",
-            finalError.message
+            finalError.message,
+            "- WebSocket will not attempt to reconnect automatically"
           );
         }
       };
@@ -368,6 +381,7 @@ export function WebSocketProvider({
   const reconnect = useCallback(() => {
     console.log("[WebSocket] Manual reconnect triggered");
     reconnectAttemptsRef.current = 0;
+    maxRetriesReachedRef.current = false; // Reset the max retries flag
     setLastError(null);
     disconnect();
     connect();

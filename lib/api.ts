@@ -1115,21 +1115,12 @@ class APIClient {
     );
   }
 
-  async resetCircuitBreaker(
-    apiId: string
-  ): Promise<CircuitBreakerResetResponse> {
+  async resetCircuitBreaker(apiId: string): Promise<CircuitBreakerResetResponse> {
     return this.request<CircuitBreakerResetResponse>(
       `/api/v1/proxy/circuit-breakers/${apiId}/reset`,
       {
         method: "POST",
       }
-    );
-  }
-
-  // Usage History Methods
-  async getUsageHistory(period: '24h' | '7d' | '30d' = '7d'): Promise<UsageHistoryResponse> {
-    return this.request<UsageHistoryResponse>(
-      `/api/v1/dashboard/usage/history?period=${period}`
     );
   }
 
@@ -1148,6 +1139,56 @@ class APIClient {
     return this.request<RecentRequestsResponse>(
       `/api/v1/dashboard/requests/recent${query ? `?${query}` : ''}`
     );
+  }
+
+  // Streaming Metrics
+  async getStreamingMetrics(): Promise<{
+    total_requests: number;
+    requests_per_second: number;
+    avg_latency_ms: number;
+    error_count: number;
+  }> {
+    return this.request(`/api/v1/dashboard/stats/streaming`);
+  }
+
+  // Streaming History
+  async getStreamingHistory(period: string = "24h"): Promise<UsageHistoryResponse> {
+    return this.request<UsageHistoryResponse>(`/api/v1/dashboard/streaming/history?period=${period}`);
+  }
+
+  // Streaming By API
+  async getStreamingByAPI(apiId?: string): Promise<{ data: UsageByAPI[] }> {
+    const url = apiId
+      ? `/api/v1/dashboard/streaming/by-api?api_id=${apiId}`
+      : "/api/v1/dashboard/streaming/by-api";
+    return this.request<{ data: UsageByAPI[] }>(url);
+  }
+
+  // Budget Management (NEW - Pro feature)
+  async getBudgetConfig(): Promise<any> {
+    return this.request("/api/v1/budget/config");
+  }
+
+  async createBudgetConfig(data: any): Promise<any> {
+    return this.request("/api/v1/budget/config", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getBudgetAlerts(includeAcknowledged: boolean = false): Promise<any> {
+    const params = new URLSearchParams({ include_acknowledged: includeAcknowledged.toString() });
+    return this.request(`/api/v1/budget/alerts?${params}`);
+  }
+
+  async acknowledgeBudgetAlert(alertId: string): Promise<any> {
+    return this.request(`/api/v1/budget/alerts/${alertId}/ack`, {
+      method: " POST",
+    });
+  }
+
+  async getCostOptimizations(): Promise<any> {
+    return this.request("/api/v1/budget/optimizations");
   }
 
   // Webhook Methods
