@@ -1,266 +1,170 @@
+import { Metadata } from "next";
+import {
+  Activity,
+  AlertTriangle,
+  RefreshCw,
+  ShieldAlert,
+  ZapOff,
+  Timer,
+  CheckCircle2,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Callout } from "@/components/docs/Callout";
+import { CodeTabs } from "@/components/docs/CodeTabs";
+import { Badge } from "@/components/ui/badge";
 
-"use client";
-
-// import { Metadata } from "next";
-import { CircuitBoard, AlertTriangle, BarChart3, Code } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CodeBlock } from "@/components/docs/code-block";
-import { DocsSectionHeader } from "@/components/docs/section-header";
-import { DocsPager } from "@/components/docs/pager";
-
-// export const metadata: Metadata = {
-//   title: "Circuit Breaker | RateGuard Documentation",
-//   description:
-//     "Learn about RateGuard's circuit breaker pattern implementation for fault tolerance.",
-// };
+export const metadata: Metadata = {
+  title: "Circuit Breaker | RateGuard Documentation",
+  description:
+    "Protect your system from cascading failures with RateGuard's automatic circuit breaker.",
+};
 
 export default function CircuitBreakerPage() {
   return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Circuit Breaker Pattern
-        </h1>
-        <p className="text-xl text-muted-foreground">
-          Automatic failover when upstream APIs fail with graceful recovery.
-        </p>
+    <div className="min-h-screen bg-background space-y-12 max-w-5xl mx-auto">
+      {/* Hero Section */}
+      <div className="border-b bg-muted/30 pb-8 pt-12 rounded-xl px-8">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+            <Activity className="size-8 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-4xl font-bold tracking-tight mb-3">
+              Circuit Breaker
+            </h1>
+            <p className="text-xl text-muted-foreground leading-relaxed">
+              Sometimes things break. Like the ice cream machine at McDonald's,
+              or Ryan starting a fire with a cheese pita. We stop the fire from
+              spreading.
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-8">
-        <DocsSectionHeader
-          icon={<CircuitBoard className="h-5 w-5" />}
-          title="How It Works"
-          description="Understand how our circuit breaker pattern protects your systems."
-        />
-
-        <div className="prose prose-slate dark:prose-invert max-w-none">
-          <p>
-            The circuit breaker pattern is a fault tolerance mechanism that
-            prevents cascading failures in distributed systems. When an upstream
-            API starts failing, the circuit breaker &quot;opens&quot; to prevent
-            further requests, allowing the failing service time to recover.
+      <div className="space-y-12 px-4">
+        {/* How It Works */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">The Safety Mechanism</h2>
+          </div>
+          <p className="text-muted-foreground text-lg">
+            When your upstream service starts failing, we stop sending requests.
+            It gives the service time to recover, like a timeout for a toddler
+            (or Andy Bernard).
           </p>
 
-          <h3>Circuit States</h3>
-          <ul>
-            <li>
-              <strong>Closed</strong> - Normal operation, requests flow through
-              to the upstream API
-            </li>
-            <li>
-              <strong>Open</strong> - Circuit is tripped, requests fail fast
-              without hitting the upstream API
-            </li>
-            <li>
-              <strong>Half-Open</strong> - Testing recovery, allows limited
-              requests to check if the API has recovered
-            </li>
-          </ul>
+          <div className="grid gap-6 md:grid-cols-3">
+            <Card className="border-l-4 border-l-green-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CheckCircle2 className="size-4 text-green-500" />
+                  Closed (Normal)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                Traffic flows normally. Everyone is happy. Pretzel day is
+                happening.
+              </CardContent>
+            </Card>
+            <Card className="border-l-4 border-l-red-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ZapOff className="size-4 text-red-500" />
+                  Open (Broken)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                Too many errors. We cut the power. No requests go through. Immediate failure.
+              </CardContent>
+            </Card>
+            <Card className="border-l-4 border-l-yellow-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Timer className="size-4 text-yellow-500" />
+                  Half-Open (Testing)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                We let a few requests through to test the waters. If they work, we're back in business.
+              </CardContent>
+            </Card>
+          </div>
+        </section>
 
-          <h3>Key Features</h3>
-          <ul>
-            <li>
-              <strong>Per-API isolation</strong> - Each API has its own circuit
-              breaker
-            </li>
-            <li>
-              <strong>Configurable thresholds</strong> - Set failure count,
-              timeout, and recovery parameters
-            </li>
-            <li>
-              <strong>Automatic recovery</strong> - Periodically tests if the
-              upstream API has recovered
-            </li>
-            <li>
-              <strong>Real-time metrics</strong> - Monitor circuit state and
-              failure rates in the dashboard
-            </li>
-            <li>
-              <strong>Dashboard integration</strong> - Visual indicators of
-              circuit state and history
-            </li>
-          </ul>
-        </div>
-
-        <DocsSectionHeader
-          icon={<AlertTriangle className="h-5 w-5" />}
-          title="Configuration"
-          description="Learn how to configure circuit breakers for your APIs."
-        />
-
-        <div className="prose prose-slate dark:prose-invert max-w-none">
-          <p>
-            Circuit breakers can be configured globally or per-API. The
-            following parameters are available:
+        {/* Configuration */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">Configuration</h2>
+          </div>
+          <p className="text-muted-foreground text-lg">
+            Tune the sensitivity. Do you want a hair-trigger like Dwight, or a
+            relaxed approach like Jim?
           </p>
 
-          <h3>Global Configuration</h3>
-          <CodeBlock
-            language="yaml"
-            value={`circuit_breaker:
+          <CodeTabs
+            examples={[
+              {
+                label: "YAML Config",
+                language: "yaml",
+                code: `circuit_breaker:
   enabled: true
-  failure_threshold: 5        # Number of failures before opening circuit
-  recovery_timeout: 60        # Seconds to wait before testing recovery
-  half_open_max_requests: 1   # Max requests in half-open state
-  failure_statuses: [500, 502, 503, 504]  # HTTP status codes counted as failures
-  timeout_seconds: 30         # Request timeout that counts as failure`}
-          />
-
-          <h3>Per-API Configuration</h3>
-          <p>You can override the global configuration for specific APIs:</p>
-
-          <CodeBlock
-            language="json"
-            value={`{
-  "name": "sensitive-api",
-  "target_url": "https://api.example.com/v1",
-  "rate_limit_per_second": 10,
+  threshold: 50        # Fail after 50 errors
+  window: 10s          # ...in 10 seconds
+  reset_timeout: 30s   # Wait 30s before trying again
+  min_requests: 10     # Need at least 10 requests to trigger`,
+              },
+              {
+                label: "JSON Config",
+                language: "json",
+                code: `{
   "circuit_breaker": {
     "enabled": true,
-    "failure_threshold": 3,
-    "recovery_timeout": 120,
-    "half_open_max_requests": 2
+    "threshold": 50,
+    "window": "10s",
+    "reset_timeout": "30s",
+    "min_requests": 10
   }
-}`}
+}`,
+              },
+            ]}
           />
-        </div>
+        </section>
 
-        <DocsSectionHeader
-          icon={<BarChart3 className="h-5 w-5" />}
-          title="Dashboard Integration"
-          description="Monitor circuit breaker status in real-time."
-        />
+        <Callout type="danger" title="Warning">
+          If you set the threshold too low, you might trigger the circuit breaker
+          just because the intern tripped over a cable. Use with caution.
+        </Callout>
 
-        <div className="prose prose-slate dark:prose-invert max-w-none">
-          <p>
-            The RateGuard dashboard provides real-time monitoring of circuit
-            breaker status:
+        {/* Error Responses */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">What Clients See</h2>
+          </div>
+          <p className="text-muted-foreground text-lg">
+            When the circuit is open, we return a <code>503 Service Unavailable</code>.
+            It's our way of saying "It's not you, it's us (well, actually it's the upstream service)."
           </p>
 
-          <ul>
-            <li>
-              <strong>Circuit State Indicators</strong> - Visual indicators
-              showing Closed, Open, or Half-Open state
-            </li>
-            <li>
-              <strong>Failure Rate Charts</strong> - Real-time graphs of failure
-              rates per API
-            </li>
-            <li>
-              <strong>State Transition History</strong> - Timeline of when
-              circuits opened and closed
-            </li>
-            <li>
-              <strong>Manual Override</strong> - Force reset circuits that are
-              stuck in the open state
-            </li>
-          </ul>
-
-          <p>
-            To access the circuit breaker dashboard, navigate to the
-            &quot;Circuit Breakers&quot; tab in your RateGuard dashboard.
-          </p>
-        </div>
-
-        <DocsSectionHeader
-          icon={<Code className="h-5 w-5" />}
-          title="Implementation"
-          description="See how circuit breakers are implemented in code."
-        />
-
-        <Tabs defaultValue="go">
-          <TabsList>
-            <TabsTrigger value="go">Go Implementation</TabsTrigger>
-            <TabsTrigger value="usage">Usage Example</TabsTrigger>
-          </TabsList>
-          <TabsContent value="go" className="mt-4">
-            <CodeBlock
-              language="go"
-              value={`// CircuitBreaker implements the circuit breaker pattern
-type CircuitBreaker struct {
-	name            string
-	state           State
-	failureCount    int
-	failureThreshold int
-	lastStateChange time.Time
-	recoveryTimeout time.Duration
-	halfOpenMaxReqs int
-	halfOpenReqs    int
-	mutex           sync.RWMutex
-}
-
-// Execute runs the given request if the circuit is closed or half-open
-// Returns error if circuit is open
-func (cb *CircuitBreaker) Execute(ctx context.Context, req *http.Request) (*http.Response, error) {
-	cb.mutex.RLock()
-	state := cb.state
-	cb.mutex.RUnlock()
-
-	switch state {
-	case StateClosed:
-		// Normal operation
-		return cb.executeRequest(ctx, req)
-	case StateOpen:
-		// Check if recovery timeout has elapsed
-		if time.Since(cb.lastStateChange) > cb.recoveryTimeout {
-			cb.mutex.Lock()
-			cb.state = StateHalfOpen
-			cb.halfOpenReqs = 0
-			cb.lastStateChange = time.Now()
-			cb.mutex.Unlock()
-			return cb.executeRequest(ctx, req)
-		}
-		return nil, ErrCircuitOpen
-	case StateHalfOpen:
-		// Allow limited requests to test recovery
-		cb.mutex.Lock()
-		if cb.halfOpenReqs >= cb.halfOpenMaxReqs {
-			cb.mutex.Unlock()
-			return nil, ErrCircuitOpen
-		}
-		cb.halfOpenReqs++
-		cb.mutex.Unlock()
-		return cb.executeRequest(ctx, req)
-	default:
-		return nil, fmt.Errorf("unknown circuit state: %v", state)
-	}
+          <div className="p-4 bg-muted/50 rounded-lg border font-mono text-sm">
+            <div className="text-muted-foreground mb-2">HTTP/1.1 503 Service Unavailable</div>
+            <div className="text-muted-foreground">Retry-After: 30</div>
+            <div className="mt-4 text-primary">
+              {`{
+  "error": "circuit_breaker_open",
+  "message": "Upstream service is unhealthy. Please try again later.",
+  "retry_after": 30
 }`}
-            />
-          </TabsContent>
-          <TabsContent value="usage" className="mt-4">
-            <CodeBlock
-              language="go"
-              value={`// Example usage in a proxy service
-func (p *ProxyService) executeWithRetryAndCircuitBreaker(req *http.Request, apiConfig *models.APIConfig) (*http.Response, error) {
-	// Get or create circuit breaker for this API
-	cb := p.circuitBreakers.GetCircuitBreaker(apiConfig.Name)
-	
-	// Execute with circuit breaker protection
-	resp, err := cb.Execute(req.Context(), req)
-	if err != nil {
-		if errors.Is(err, ErrCircuitOpen) {
-			// Circuit is open, fail fast
-			return nil, fmt.Errorf("circuit breaker open for %s: %w", apiConfig.Name, err)
-		}
-		return nil, err
-	}
-	
-	return resp, nil
-}`}
-            />
-          </TabsContent>
-        </Tabs>
-
-        <DocsPager
-          prev={{
-            href: "/docs/features/distributed-rate-limiting",
-            title: "Distributed Rate Limiting",
-          }}
-          next={{
-            href: "/docs/features/health-checks",
-            title: "Health Checks",
-          }}
-        />
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

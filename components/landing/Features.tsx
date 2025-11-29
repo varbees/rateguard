@@ -131,7 +131,7 @@ const features = [
       "Get notified when you hit 90% of your budget. Smart suggestions to switch models and save money.",
     icon: AlertTriangle,
     joke: "Your wallet will thank you.",
-    comingSoon: true,
+    highlight: true,
   },
   {
     title: "Analytics API",
@@ -139,7 +139,7 @@ const features = [
       "Programmatic access to your cost data, token usage, and error rates. Build your own internal dashboards.",
     icon: Activity,
     joke: "For when you love JSON more than people.",
-    comingSoon: true,
+    highlight: true,
   },
   {
     title: "Multi-Provider Support",
@@ -147,7 +147,7 @@ const features = [
       "Support for Mistral, Together, Replicate, Perplexity, DeepSeek, and Fireworks. 10+ providers total.",
     icon: Layers,
     joke: "Gotta catch 'em all!",
-    comingSoon: true,
+    highlight: true,
   },
 ];
 
@@ -180,14 +180,7 @@ export function Features() {
                 viewport={{ once: true }}
                 className="group relative p-6 bg-card rounded-xl border hover:shadow-lg transition-all duration-300 hover:-translate-y-1"
               >
-                {feature.comingSoon && (
-                  <Badge
-                    variant="secondary"
-                    className="absolute top-4 right-4 text-xs bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20"
-                  >
-                    Coming Soon
-                  </Badge>
-                )}
+                {/* comingSoon logic removed as all features are live */}
                 {feature.highlight && (
                   <Badge
                     variant="secondary"

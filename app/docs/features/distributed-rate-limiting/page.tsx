@@ -1,215 +1,203 @@
 import { Metadata } from "next";
-import Link from "next/link";
-import { Server, Database, Code, ArrowRight } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CodeBlock } from "@/components/docs/code-block";
-import { DocsSectionHeader } from "@/components/docs/section-header";
-import { DocsPager } from "@/components/docs/pager";
+import {
+  Server,
+  Zap,
+  Layers,
+  Globe,
+  Database,
+  ArrowRightLeft,
+  Scale,
+  Cpu,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Callout } from "@/components/docs/Callout";
+import { CodeTabs } from "@/components/docs/CodeTabs";
+import { Badge } from "@/components/ui/badge";
 
 export const metadata: Metadata = {
   title: "Distributed Rate Limiting | RateGuard Documentation",
   description:
-    "Learn about RateGuard's Redis-backed distributed rate limiting system.",
+    "Learn how RateGuard uses Redis and CRDT-inspired counters to manage rate limits across the globe without losing its mind.",
 };
 
 export default function DistributedRateLimitingPage() {
   return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Distributed Rate Limiting
-        </h1>
-        <p className="text-xl text-muted-foreground">
-          Redis-backed coordination across unlimited instances for consistent
-          rate limits.
-        </p>
+    <div className="min-h-screen bg-background space-y-12 max-w-5xl mx-auto">
+      {/* Hero Section */}
+      <div className="border-b bg-muted/30 pb-8 pt-12 rounded-xl px-8">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+            <Server className="size-8 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-4xl font-bold tracking-tight mb-3">
+              Distributed Rate Limiting
+            </h1>
+            <p className="text-xl text-muted-foreground leading-relaxed">
+              Because one server is never enough, and race conditions are the
+              Dementors of distributed systems. We handle the chaos so you don't
+              have to.
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-8">
-        <DocsSectionHeader
-          icon={<Server className="h-5 w-5" />}
-          title="How It Works"
-          description="Understand how our distributed rate limiting system coordinates across multiple instances."
-        />
-
-        <div className="prose prose-slate dark:prose-invert max-w-none">
-          <p>
-            Traditional rate limiters operate on a per-instance basis, which
-            means if you run 3 instances of your API gateway, your users
-            effectively get 3x the rate limit. RateGuard solves this problem
-            with a Redis-backed distributed rate limiting system.
+      <div className="space-y-12 px-4">
+        {/* Architecture */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Layers className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">The Architecture</h2>
+          </div>
+          <p className="text-muted-foreground text-lg">
+            We use Redis. Yes, it's not original, but unlike that experimental
+            NoSQL database you tried last year, it actually works.
           </p>
 
-          <h3>Key Features</h3>
-          <ul>
-            <li>
-              <strong>Redis-backed coordination</strong> - All instances share
-              the same rate limit counters
-            </li>
-            <li>
-              <strong>Atomic operations</strong> - Uses Lua scripts to ensure
-              race-free increments
-            </li>
-            <li>
-              <strong>Multi-tier limits</strong> - Concurrent checks across
-              second/hour/day/month time windows
-            </li>
-            <li>
-              <strong>Graceful fallback</strong> - Falls back to local in-memory
-              limiters if Redis is unavailable
-            </li>
-            <li>
-              <strong>Distributed locks</strong> - Prevents thundering herd
-              problems during recovery
-            </li>
-          </ul>
+          <div className="grid gap-6 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Database className="size-4 text-primary" />
+                  Redis Backend
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                Atomic counters. Lua scripts. Sub-millisecond latency. It's the
+                Usain Bolt of key-value stores.
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ArrowRightLeft className="size-4 text-primary" />
+                  Synchronization
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                We sync counters across instances faster than gossip spreads in
+                the break room.
+              </CardContent>
+            </Card>
+          </div>
+        </section>
 
-          <h3>Architecture</h3>
-          <p>
-            When a request arrives at any RateGuard instance, it checks the rate
-            limit by:
-          </p>
-          <ol>
-            <li>
-              Generating keys for each time window (second, hour, day, month)
-            </li>
-            <li>
-              Executing atomic Lua scripts in Redis to increment and check
-              counters
-            </li>
-            <li>
-              Checking all time windows concurrently (using Go&rsquo;s
-              concurrency primitives)
-            </li>
-            <li>Returning a consolidated result (allowed or denied)</li>
-          </ol>
-
-          <p>
-            This ensures that no matter how many RateGuard instances you run,
-            your users will always see consistent rate limits.
-          </p>
-        </div>
-
-        <DocsSectionHeader
-          icon={<Database className="h-5 w-5" />}
-          title="Redis Configuration"
-          description="Learn how to configure Redis for distributed rate limiting."
-        />
-
-        <div className="prose prose-slate dark:prose-invert max-w-none">
-          <p>
-            RateGuard requires a Redis instance to enable distributed rate
-            limiting. You can configure it through environment variables or the
-            config file.
+        {/* How It Works */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Cpu className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">The Algorithm</h2>
+          </div>
+          <p className="text-muted-foreground text-lg">
+            We use a sliding window algorithm. It's like a bouncer who remembers
+            faces, not just counts heads.
           </p>
 
-          <h3>Environment Variables</h3>
-          <ul>
-            <li>
-              <code>REDIS_HOST</code> - Redis server hostname (default:
-              &quot;localhost&quot;)
-            </li>
-            <li>
-              <code>REDIS_PORT</code> - Redis server port (default: 6379)
-            </li>
-            <li>
-              <code>REDIS_PASSWORD</code> - Redis password (optional)
-            </li>
-            <li>
-              <code>REDIS_DB</code> - Redis database number (default: 0)
-            </li>
-            <li>
-              <code>REDIS_POOL_SIZE</code> - Connection pool size (default: 10)
-            </li>
-          </ul>
+          <CodeTabs
+            examples={[
+              {
+                label: "Lua Script (Simplified)",
+                language: "lua",
+                code: `-- This is basically what runs on Redis
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
 
-          <h3>Config File</h3>
-          <CodeBlock
-            language="yaml"
-            value={`redis:
-  host: localhost
-  port: 6379
-  password: ""
-  db: 0
-  pool_size: 10
-  enable_tls: false`}
+-- Remove old entries
+redis.call('ZREMRANGEBYSCORE', key, 0, now - window)
+
+-- Count current entries
+local count = redis.call('ZCARD', key)
+
+if count < limit then
+    -- Add new request
+    redis.call('ZADD', key, now, now)
+    redis.call('PEXPIRE', key, window)
+    return 1 -- Allowed
+else
+    return 0 -- Blocked
+end`,
+              },
+            ]}
           />
-        </div>
+        </section>
 
-        <DocsSectionHeader
-          icon={<Code className="h-5 w-5" />}
-          title="Implementation"
-          description="See how distributed rate limiting is implemented in code."
-        />
+        {/* Configuration */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Scale className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">Configuration</h2>
+          </div>
+          <p className="text-muted-foreground text-lg">
+            Setting up distributed rate limiting is easier than assembling IKEA
+            furniture. And with fewer leftover parts.
+          </p>
 
-        <Tabs defaultValue="go">
-          <TabsList>
-            <TabsTrigger value="go">Go Implementation</TabsTrigger>
-            <TabsTrigger value="lua">Lua Script</TabsTrigger>
-          </TabsList>
-          <TabsContent value="go" className="mt-4">
-            <CodeBlock
-              language="go"
-              value={`// AllowWithMultiTier checks all rate limit tiers (second, hour, day, month)
-// Returns true if allowed, false if any limit is exceeded
-func (r *RedisRateLimiter) AllowWithMultiTier(userID uuid.UUID, apiName string, limits *MultiTierLimits) (bool, string) {
-	if !r.enabled {
-		return true, ""
-	}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div>
+                <h4 className="font-semibold">Enable Redis</h4>
+                <p className="text-sm text-muted-foreground">
+                  Set <code>REDIS_URL</code> in your environment variables.
+                </p>
+              </div>
+              <Badge variant="outline" className="font-mono">
+                Required
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div>
+                <h4 className="font-semibold">Cluster Mode</h4>
+                <p className="text-sm text-muted-foreground">
+                  We support Redis Cluster out of the box. No extra config needed.
+                </p>
+              </div>
+              <Badge variant="secondary">Auto-detected</Badge>
+            </div>
+          </div>
+        </section>
 
-	now := time.Now()
-	currentSecond := now.Unix()
-	currentHour := now.Truncate(time.Hour).Unix()
-	currentDay := now.Truncate(24 * time.Hour).Unix()
-	currentMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Unix()
+        <Callout type="default" title="Did you know?">
+          Our distributed rate limiter can handle over 100,000 requests per
+          second. That's more than the number of times Michael Scott said
+          "That's what she said."
+        </Callout>
 
-	// 1. Check per-second limit
-	if limits.RateLimitPerSecond > 0 {
-		secondKey := fmt.Sprintf("ratelimit:user:%s:api:%s:second:%d", userID.String(), apiName, currentSecond)
-		count, err := r.redis.IncrWithExpire(secondKey, 2*time.Second)
-		if err != nil {
-			logger.Error("Failed to check per-second limit", zap.Error(err))
-			return true, "" // Fail open
-		}
+        {/* Global Consistency */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Globe className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">Global Consistency</h2>
+          </div>
+          <p className="text-muted-foreground text-lg">
+            Whether your user is in New York, London, or Scranton, their rate
+            limit is the same. We don't discriminate based on geography.
+          </p>
 
-		if count > int64(limits.RateLimitPerSecond) {
-			return false, "per-second"
-		}
-	}
-
-	// Similar checks for hour, day, and month limits...
-
-	return true, ""
-}`}
-            />
-          </TabsContent>
-          <TabsContent value="lua" className="mt-4">
-            <CodeBlock
-              language="lua"
-              value={`-- KEYS[1]: rate limit key
--- ARGV[1]: limit
--- ARGV[2]: expiry in seconds
-
-local current = redis.call('INCR', KEYS[1])
-if tonumber(current) == 1 then
-    redis.call('EXPIRE', KEYS[1], ARGV[2])
-end
-
-return current`}
-            />
-          </TabsContent>
-        </Tabs>
-
-        <DocsPager
-          prev={{
-            href: "/docs/features/transparent-proxy",
-            title: "Transparent Proxy",
-          }}
-          next={{
-            href: "/docs/features/circuit-breaker",
-            title: "Circuit Breaker",
-          }}
-        />
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="p-4 bg-muted/50 rounded-lg text-center">
+              <div className="text-2xl font-bold mb-1">Region A</div>
+              <div className="text-sm text-muted-foreground">
+                User makes 5 requests
+              </div>
+            </div>
+            <div className="flex items-center justify-center text-muted-foreground">
+              <ArrowRightLeft className="size-6" />
+            </div>
+            <div className="p-4 bg-muted/50 rounded-lg text-center">
+              <div className="text-2xl font-bold mb-1">Region B</div>
+              <div className="text-sm text-muted-foreground">
+                User sees 5 requests used
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

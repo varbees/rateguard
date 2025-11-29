@@ -4,7 +4,7 @@ import { Providers } from "./providers";
 import { GlobalLayout } from "@/components/layout/GlobalLayout";
 
 export const metadata: Metadata = {
-  title: "RateGuard - Intelligent API Rate Limiting & Transparent Proxy",
+  title: "RateGuard - The All-in-One API Gateway for AI Developers",
   description:
     "Control every API request with intelligent rate limiting, transparent proxy, and real-time analytics. Scale without limits. Production-ready with 99.9% uptime.",
   keywords: [
@@ -16,9 +16,9 @@ export const metadata: Metadata = {
     "request queuing",
     "API analytics",
   ],
-  authors: [{ name: "RateGuard Team" }],
-  creator: "RateGuard",
-  publisher: "RateGuard",
+  authors: [{ name: "varbees" }],
+  creator: "varbees",
+  publisher: "varbees",
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     title: "RateGuard - Intelligent API Rate Limiting",
     description:
       "Control every API request with intelligent rate limiting and transparent proxy.",
-    creator: "@rateguard",
+    creator: "@varbees",
   },
   robots: {
     index: true,

@@ -8,7 +8,7 @@ import { TableOfContents } from "@/components/docs/TableOfContents";
 import {
   BookOpen,
   FileText,
-  Key,
+
   Shield,
   Zap,
   TrendingUp,
@@ -25,115 +25,75 @@ import { DocsSearch } from "@/components/docs/DocsSearch";
 
 // VS Code inspired docs navigation
 const docsNav = [
-  { title: "Introduction", href: "/docs", icon: BookOpen },
   {
-    title: "Getting Started",
+    title: "Introduction",
     items: [
-      { title: "Authentication", href: "/docs/authentication", icon: Key },
-      {
-        title: "API Keys",
-        href: "/docs/authentication/api-keys",
-        icon: Shield,
-      },
+      { title: "Welcome", href: "/docs", icon: BookOpen },
+      { title: "Quickstart", href: "/docs/quickstart", icon: Zap },
+      { title: "Supported Plans & Limits", href: "/docs/plans-and-limits", icon: CreditCard },
+    ],
+  },
+  {
+    title: "Concepts",
+    items: [
+      { title: "What is RateGuard?", href: "/docs/concepts/what-is-rateguard", icon: Shield },
+      { title: "Core Architecture", href: "/docs/concepts/architecture", icon: Layers },
+      { title: "Glossary", href: "/docs/concepts/glossary", icon: FileText },
     ],
   },
   {
     title: "Guides",
     items: [
-      { title: "Rate Limiting", href: "/docs/guides/rate-limiting", icon: Zap },
+      { title: "Setup & First Proxy", href: "/docs/guides/setup", icon: Zap },
+      { title: "Connect Your LLM API", href: "/docs/guides/connect-llm", icon: Globe },
+      { title: "Dashboard & Analytics", href: "/docs/guides/dashboard-analytics", icon: BarChart },
+      { title: "Migrating from AWS/Kong", href: "/docs/guides/migration", icon: TrendingUp },
+      { title: "Monitoring & Alerts", href: "/docs/guides/monitoring", icon: Activity },
+      { title: "Debugging API Calls", href: "/docs/guides/debugging", icon: Activity },
     ],
   },
   {
-    title: "Core Features",
+    title: "Features",
     items: [
-      {
-        title: "Transparent Proxy",
-        href: "/docs/features/transparent-proxy",
-        icon: Globe,
-      },
-      {
-        title: "Multi-Tier Rate Limiting",
-        href: "/docs/features/distributed-rate-limiting",
-        icon: Zap,
-      },
-      {
-        title: "Intelligent Queuing",
-        href: "/docs/features/queue-management",
-        icon: Layers,
-      },
-      {
-        title: "Real-Time Analytics",
-        href: "/docs/features/real-time-analytics",
-        icon: BarChart,
-      },
-      {
-        title: "Secure Credentials",
-        href: "/docs/features/secure-credentials",
-        icon: Lock,
-      },
-      {
-        title: "Automatic Retry",
-        href: "/docs/features/automatic-retry",
-        icon: Activity,
-      },
-      {
-        title: "Webhook Relay",
-        href: "/docs/features/webhooks",
-        icon: Activity,
-      },
-      {
-        title: "Dual Concurrency",
-        href: "/docs/features/concurrency",
-        icon: Layers,
-      },
+      { title: "API Rate Limiting", href: "/docs/features/distributed-rate-limiting", icon: Zap },
+      { title: "LLM Token Tracking", href: "/docs/features/llm-token-tracking", icon: BarChart },
+      { title: "Circuit Breakers", href: "/docs/features/circuit-breaker", icon: Shield },
+      { title: "Priority Queuing", href: "/docs/features/queue-management", icon: Layers },
+      { title: "Webhooks & Retries", href: "/docs/features/webhooks", icon: Activity },
+      { title: "Billing & Usage", href: "/docs/features/billing", icon: CreditCard },
     ],
   },
   {
-    title: "Advanced Features",
+    title: "Integrations",
     items: [
-      {
-        title: "Circuit Breaker",
-        href: "/docs/features/circuit-breaker",
-        icon: Shield,
-      },
-      {
-        title: "Health Checks",
-        href: "/docs/features/health-checks",
-        icon: Activity,
-      },
-      {
-        title: "Rate Limit Discovery",
-        href: "/docs/features/rate-limit-discovery",
-        icon: TrendingUp,
-      },
-      {
-        title: "Queue Observability",
-        href: "/docs/features/queue-observability",
-        icon: BarChart,
-      },
+      { title: "Common Frameworks", href: "/docs/integrations/frameworks", icon: Layers },
+      { title: "LLM Providers", href: "/docs/integrations/llm-providers", icon: Globe },
+      { title: "Third Party Tools", href: "/docs/integrations/third-party", icon: Activity },
     ],
   },
   {
-    title: "Business Features",
+    title: "Reference",
     items: [
-      {
-        title: "Plan Enforcement",
-        href: "/docs/features/plan-enforcement",
-        icon: Lock,
-      },
-      {
-        title: "Geo-Currency Detection",
-        href: "/docs/features/geo-currency",
-        icon: Globe,
-      },
-      {
-        title: "Payment Gateways",
-        href: "/docs/features/payment-gateways",
-        icon: CreditCard,
-      },
+      { title: "Proxy API", href: "/docs/reference/proxy-api", icon: FileText },
+      { title: "Token Analytics API", href: "/docs/reference/token-analytics-api", icon: BarChart },
+      { title: "Webhook Schema", href: "/docs/reference/webhooks", icon: Activity },
     ],
   },
-  { title: "API Reference", href: "/docs/api-reference", icon: FileText },
+  {
+    title: "FAQ",
+    items: [
+      { title: "Product", href: "/docs/faq/product", icon: BookOpen },
+      { title: "Account & Billing", href: "/docs/faq/billing", icon: CreditCard },
+      { title: "Support", href: "/docs/faq/support", icon: Activity },
+      { title: "Security", href: "/docs/faq/security", icon: Lock },
+    ],
+  },
+  {
+    title: "Changelog",
+    items: [
+      { title: "Release Notes", href: "/docs/changelog", icon: FileText },
+    ],
+  },
 ];
 
 export default function DocsLayout({
@@ -147,7 +107,7 @@ export default function DocsLayout({
   const NavItem = ({
     item,
   }: {
-    item: { title: string; href: string; icon?: React.ComponentType<any> };
+    item: { title: string; href: string; icon?: React.ComponentType<{ className?: string }> };
   }) => {
     const Icon = item.icon;
     const isActive = pathname === item.href;
@@ -197,7 +157,7 @@ export default function DocsLayout({
           <nav className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-thin scrollbar-thumb-border scrollbar-track-transparent">
             {docsNav.map((section) => (
               <div key={section.title} className="space-y-1">
-                {section.items ? (
+                {section.items && (
                   <>
                     <h4 className="px-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">
                       {section.title}
@@ -206,8 +166,6 @@ export default function DocsLayout({
                       <NavItem key={item.href} item={item} />
                     ))}
                   </>
-                ) : (
-                  <NavItem item={section as any} />
                 )}
               </div>
             ))}

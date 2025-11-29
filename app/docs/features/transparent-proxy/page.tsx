@@ -1,386 +1,219 @@
 import { Metadata } from "next";
 import {
-  Server,
   Shield,
   Zap,
-  Globe,
-  Lock,
-  Activity,
-  ArrowRight,
-  Code,
   Network,
+  ArrowRight,
+  Code2,
+  CheckCircle2,
+  Globe,
+  Server,
 } from "lucide-react";
-import { DocsSectionHeader } from "@/components/docs/section-header";
-import { CodeBlock } from "@/components/docs/code-block";
-import { CodeTabs } from "@/components/docs/CodeTabs";
-import { DocsPager } from "@/components/docs/pager";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Callout } from "@/components/docs/Callout";
+import { CodeTabs } from "@/components/docs/CodeTabs";
 
 export const metadata: Metadata = {
   title: "Transparent Proxy | RateGuard Documentation",
   description:
-    "Learn how RateGuard's transparent proxy seamlessly forwards requests to your upstream APIs.",
+    "Learn how RateGuard's transparent proxy seamlessly forwards requests. It's like we're not even here.",
 };
 
 export default function TransparentProxyPage() {
   return (
-    <div className="space-y-8">
-      <div className="space-y-4">
-        <h1 className="text-3xl font-bold tracking-tight">Transparent Proxy</h1>
-        <p className="text-xl text-muted-foreground">
-          Seamlessly forward requests to your upstream APIs while applying rate
-          limiting, queuing, and analytics.
-        </p>
+    <div className="min-h-screen bg-background space-y-12 max-w-5xl mx-auto">
+      {/* Hero Section */}
+      <div className="border-b bg-muted/30 pb-8 pt-12 rounded-xl px-8">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+            <Network className="size-8 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-4xl font-bold tracking-tight mb-3">
+              Transparent Proxy
+            </h1>
+            <p className="text-xl text-muted-foreground leading-relaxed">
+              It's the "Jim Halpert looking at the camera" of proxies. It sees
+              everything, says nothing (unless you ask), and just works.
+            </p>
+          </div>
+        </div>
       </div>
 
-      <Callout title="Drop-In Replacement" type="default">
-        Simply replace your API base URL with RateGuard&apos;s proxy URL - no
-        code changes required!
-      </Callout>
-
-      <div className="grid gap-8">
-        <DocsSectionHeader
-          icon={<Network className="h-5 w-5" />}
-          title="How It Works"
-          description="The transparent proxy intercepts your API calls, applies policies, and forwards them to the target."
-        />
-
-        <div className="prose prose-slate dark:prose-invert max-w-none">
-          <ol>
-            <li>
-              <strong>Client makes request</strong> to RateGuard proxy
-            </li>
-            <li>
-              <strong>Authentication</strong> validates your API key
-            </li>
-            <li>
-              <strong>Rate limiting</strong> checks if request can proceed
-            </li>
-            <li>
-              <strong>Queue management</strong> holds request if needed
-            </li>
-            <li>
-              <strong>Proxy forwards</strong> request to upstream API
-            </li>
-            <li>
-              <strong>Response returned</strong> with analytics metadata
-            </li>
-          </ol>
-        </div>
-
-        <DocsSectionHeader
-          icon={<Zap className="h-5 w-5" />}
-          title="Quick Start"
-          description="Get up and running with the transparent proxy in minutes."
-        />
-
-        <div className="space-y-6">
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">1. Configure Your API</h3>
-            <p className="text-muted-foreground">
-              In the dashboard, create an API configuration with your target URL:
-            </p>
-            <CodeBlock
-              language="yaml"
-              value={`API Name: stripe_prod
-Target URL: https://api.stripe.com
-Rate Limit: 100 req/s
-Burst: 10`}
-            />
+      <div className="space-y-12 px-4">
+        {/* How It Works */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Zap className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">How It Works</h2>
           </div>
+          <p className="text-muted-foreground text-lg">
+            You point your API client at us. We point at your upstream API. Magic
+            happens in the middle (rate limiting, analytics, existential dread).
+          </p>
+
+          <div className="grid gap-6 md:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Globe className="size-4 text-primary" />
+                  1. Ingress
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                Request hits <code>api.rateguard.io</code>. We check your ID at
+                the door.
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Shield className="size-4 text-primary" />
+                  2. Policy Check
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                Rate limits, quotas, and "is this person allowed here?" checks.
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <ArrowRight className="size-4 text-primary" />
+                  3. Forward
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm text-muted-foreground">
+                We send it to Stripe/OpenAI/Your Mom's Server.
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+
+        {/* Quick Start */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Code2 className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">Quick Start</h2>
+          </div>
+          <p className="text-muted-foreground text-lg">
+            Change the URL. Add a header. Done. It's easier than explaining to
+            Michael why he can't say "that's what she said" in a deposition.
+          </p>
 
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">2. Update Your Code</h3>
-            <p className="text-muted-foreground">Replace your base URL:</p>
+            <h3 className="text-lg font-semibold">Before & After</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="border rounded-lg p-4 bg-red-50 dark:bg-red-950/20">
-                <p className="text-sm font-semibold text-red-800 dark:text-red-400 mb-2">
-                  ❌ Before
-                </p>
-                <code className="text-xs bg-transparent p-0">
-                  https://api.stripe.com/v1/customers
+              <div className="p-4 border rounded-lg bg-red-500/5 border-red-500/20">
+                <div className="flex items-center gap-2 mb-2 text-red-500 font-bold text-sm">
+                  <span className="text-lg">❌</span> Boring Old Way
+                </div>
+                <code className="text-xs font-mono block break-all">
+                  https://api.openai.com/v1/chat/completions
                 </code>
               </div>
-              <div className="border rounded-lg p-4 bg-green-50 dark:bg-green-950/20">
-                <p className="text-sm font-semibold text-green-800 dark:text-green-400 mb-2">
-                  ✅ After
-                </p>
-                <code className="text-xs bg-transparent p-0">
-                  https://rateguard.com/proxy/stripe_prod/v1/customers
+              <div className="p-4 border rounded-lg bg-green-500/5 border-green-500/20">
+                <div className="flex items-center gap-2 mb-2 text-green-500 font-bold text-sm">
+                  <span className="text-lg">✅</span> RateGuard Way
+                </div>
+                <code className="text-xs font-mono block break-all">
+                  https://rateguard.io/p/PROJECT_ID/openai/v1/chat/completions
                 </code>
               </div>
             </div>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">3. Add Authentication</h3>
-            <p className="text-muted-foreground">
-              Include your RateGuard API key:
-            </p>
-            <CodeBlock
-              language="javascript"
-              value={`fetch('https://rateguard.com/proxy/stripe_prod/v1/customers', {
-  headers: {
-    'Authorization': 'Bearer YOUR_RATEGUARD_TOKEN'
-  }
-})`}
-            />
-          </div>
-        </div>
-
-        <DocsSectionHeader
-          icon={<Globe className="h-5 w-5" />}
-          title="URL Structure"
-          description="Understanding how to construct proxy URLs."
-        />
-
-        <div className="space-y-4">
-          <p className="text-muted-foreground">
-            RateGuard uses a simple URL pattern:
-          </p>
-          <CodeBlock
-            language="bash"
-            value="https://rateguard.com/proxy/<api_name>/<endpoint_path>"
-          />
-          <h4 className="font-semibold mt-4">Examples</h4>
-          <CodeBlock
-            language="bash"
-            value={`# Stripe
-https://rateguard.com/proxy/stripe_prod/v1/customers
-
-# OpenAI
-https://rateguard.com/proxy/openai_api/v1/chat/completions
-
-# Custom API
-https://rateguard.com/proxy/my_api/users?page=1&limit=10`}
-          />
-        </div>
-
-        <DocsSectionHeader
-          icon={<Server className="h-5 w-5" />}
-          title="Supported Features"
-          description="RateGuard supports all standard HTTP features."
-        />
-
-        <div className="prose prose-slate dark:prose-invert max-w-none">
-          <h3>HTTP Methods</h3>
-          <p>
-            All HTTP methods are supported (GET, POST, PUT, PATCH, DELETE, HEAD,
-            OPTIONS).
-          </p>
-
-          <h3>Request Headers</h3>
-          <ul>
-            <li>
-              <strong>Content-Type:</strong> Preserved as-is
-            </li>
-            <li>
-              <strong>Authorization:</strong> Your API key (RateGuard token)
-            </li>
-            <li>
-              <strong>Custom Headers:</strong> Configured per API
-            </li>
-            <li>
-              <strong>User-Agent:</strong> Can be customized
-            </li>
-          </ul>
-
-          <h3>Request Body</h3>
-          <p>
-            Request bodies are forwarded unchanged, supporting JSON, XML, form
-            data, and binary payloads.
-          </p>
-
-          <h3>Query Parameters</h3>
-          <p>
-            Query strings are preserved and forwarded exactly as received.
-          </p>
-        </div>
-
-        <DocsSectionHeader
-          icon={<Activity className="h-5 w-5" />}
-          title="Streaming Support"
-          description="Native support for Server-Sent Events (SSE) and chunked transfer encoding."
-        />
-
-        <div className="space-y-4">
-          <p className="text-muted-foreground">
-            RateGuard automatically detects and supports streaming responses,
-            making it perfect for AI applications.
-          </p>
           <CodeTabs
             examples={[
               {
-                label: "JavaScript (SSE)",
+                label: "cURL",
+                language: "bash",
+                code: `curl https://rateguard.io/p/proj_123/openai/v1/chat/completions \\
+  -H "Authorization: Bearer rg_live_xyz" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "gpt-4",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'`,
+              },
+              {
+                label: "Node.js",
                 language: "javascript",
-                code: `// OpenAI streaming example
-const response = await fetch(
-  'https://rateguard.com/proxy/openai_api/v1/chat/completions',
-  {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer YOUR_TOKEN',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'gpt-4',
-      messages: [...],
-      stream: true
-    })
-  }
-);
-
-const reader = response.body.getReader();
-// Stream chunks are automatically forwarded`,
+                code: `const response = await fetch('https://rateguard.io/p/proj_123/openai/v1/chat/completions', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer rg_live_xyz',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    model: 'gpt-4',
+    messages: [{ role: 'user', content: 'Hello!' }]
+  })
+});`,
               },
             ]}
+            defaultLanguage="curl"
           />
-        </div>
+        </section>
 
-        <DocsSectionHeader
-          icon={<Shield className="h-5 w-5" />}
-          title="Advanced Configuration"
-          description="Fine-tune your proxy behavior."
-        />
-
-        <div className="space-y-6">
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Per-API CORS</h3>
-            <p className="text-muted-foreground">
-              Configure Cross-Origin Resource Sharing (CORS) for each API:
-            </p>
-            <CodeBlock
-              language="json"
-              value={`{
-  "name": "my_api",
-  "target_url": "https://api.example.com",
-  "allowed_origins": [
-    "https://app.example.com",
-    "https://admin.example.com"
-  ]
-}`}
-            />
+        {/* Features */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-2">
+            <Server className="h-6 w-6 text-primary" />
+            <h2 className="text-2xl font-bold">What We Support</h2>
           </div>
 
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Custom Headers</h3>
-            <p className="text-muted-foreground">
-              Inject custom headers into every request (e.g., for upstream
-              authentication):
-            </p>
-            <CodeBlock
-              language="json"
-              value={`{
-  "api_name": "my_api",
-  "custom_headers": {
-    "X-API-Version": "v2",
-    "X-Custom-Auth": "secret_key"
-  }
-}`}
-            />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="flex items-start gap-3 p-4 border rounded-lg">
+              <CheckCircle2 className="size-5 text-green-500 mt-0.5" />
+              <div>
+                <h4 className="font-semibold">Streaming (SSE)</h4>
+                <p className="text-sm text-muted-foreground">
+                  We stream tokens faster than Stanley runs to his car at 5 PM.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-4 border rounded-lg">
+              <CheckCircle2 className="size-5 text-green-500 mt-0.5" />
+              <div>
+                <h4 className="font-semibold">Websockets</h4>
+                <p className="text-sm text-muted-foreground">
+                  Full duplex communication. Like Kelly and Ryan, but stable.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-4 border rounded-lg">
+              <CheckCircle2 className="size-5 text-green-500 mt-0.5" />
+              <div>
+                <h4 className="font-semibold">Binary Data</h4>
+                <p className="text-sm text-muted-foreground">
+                  Images, audio, video. We handle it all.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 p-4 border rounded-lg">
+              <CheckCircle2 className="size-5 text-green-500 mt-0.5" />
+              <div>
+                <h4 className="font-semibold">Custom Headers</h4>
+                <p className="text-sm text-muted-foreground">
+                  Pass whatever you want. We don't judge.
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <DocsSectionHeader
-          icon={<Code className="h-5 w-5" />}
-          title="Integration Examples"
-          description="Connect to RateGuard from any language."
-        />
-
-        <CodeTabs
-          examples={[
-            {
-              label: "Axios",
-              language: "javascript",
-              code: `import axios from 'axios';
-
-const api = axios.create({
-  baseURL: 'https://rateguard.com/proxy/my_api',
-  headers: {
-    'Authorization': 'Bearer YOUR_RATEGUARD_TOKEN'
-  }
-});
-
-// Use normally
-const users = await api.get('/users');
-const newUser = await api.post('/users', { name: 'John' });`,
-            },
-            {
-              label: "Python",
-              language: "python",
-              code: `import requests
-
-class RateGuardAPI:
-    def __init__(self, api_name, token):
-        self.base_url = f'https://rateguard.com/proxy/{api_name}'
-        self.headers = {'Authorization': f'Bearer {token}'}
-    
-    def get(self, endpoint):
-        return requests.get(
-            f'{self.base_url}/{endpoint}',
-            headers=self.headers
-        ).json()
-
-api = RateGuardAPI('my_api', 'YOUR_TOKEN')
-users = api.get('users')`,
-            },
-            {
-              label: "Go",
-              language: "go",
-              code: `package main
-
-import (
-    "fmt"
-    "net/http"
-)
-
-func main() {
-    client := &http.Client{}
-    req, _ := http.NewRequest("GET", 
-        "https://rateguard.com/proxy/my_api/users", nil)
-    req.Header.Add("Authorization", "Bearer YOUR_TOKEN")
-    
-    resp, _ := client.Do(req)
-    defer resp.Body.Close()
-    
-    // Process response
-}`,
-            },
-          ]}
-        />
-
-        <Callout title="Best Practices" type="warning">
-          <ul className="list-disc pl-4 space-y-1 mt-2">
-            <li>
-              <strong>Use descriptive API names:</strong> Makes analytics easier
-              to understand.
-            </li>
-            <li>
-              <strong>Configure timeouts:</strong> Match upstream API
-              characteristics.
-            </li>
-            <li>
-              <strong>Enable retries:</strong> For better reliability on
-              transient failures.
-            </li>
-            <li>
-              <strong>Secure headers:</strong> Don&apos;t expose sensitive keys
-              in client-side code; use server-side proxying or custom headers
-              injection.
-            </li>
-          </ul>
+        <Callout type="warning" title="Pro Tip">
+          Don't proxy your health checks through us. That's like calling your own
+          phone to see if it's ringing. Just hit your service directly for that.
         </Callout>
-
-        <DocsPager
-          prev={{
-            href: "/docs/guides/rate-limiting",
-            title: "Rate Limiting Guide",
-          }}
-          next={{
-            href: "/docs/features/distributed-rate-limiting",
-            title: "Distributed Rate Limiting",
-          }}
-        />
       </div>
     </div>
   );
