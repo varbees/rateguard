@@ -37,6 +37,30 @@ const features = [
     joke: "More time windows than a DeLorean.",
   },
   {
+    title: "LLM Token Tracking",
+    description:
+      "Automatic token counting for OpenAI, Anthropic, Groq, and Cohere. Real-time cost tracking with per-model breakdowns.",
+    icon: Zap,
+    joke: "We count tokens so you don't have to.",
+    highlight: true,
+  },
+  {
+    title: "Intelligent Auto-Detection",
+    description:
+      "Automatically identifies LLM APIs from URL patterns and response structure. Zero configuration needed for token tracking.",
+    icon: Bot,
+    joke: "It's not magic, it's pattern matching (but feels like magic).",
+    highlight: true,
+  },
+  {
+    title: "Dual Pricing Model",
+    description:
+      "Request-based pricing for traditional APIs, token-based pricing for LLMs. Get accurate costs for both in one dashboard.",
+    icon: CreditCard,
+    joke: "Two pricing models walk into a bar...",
+    highlight: true,
+  },
+  {
     title: "Priority Queue Management",
     description:
       "Redis-backed priority queue. VIP users jump the line, ensuring critical traffic always gets through during congestion.",
@@ -60,7 +84,7 @@ const features = [
   {
     title: "Real-Time Analytics",
     description:
-      "Live streaming metrics powered by SSE. Monitor API health, latency, and errors as they happen.",
+      "Live streaming metrics powered by WebSocket. Monitor API health, latency, errors, and LLM token usage as they happen.",
     icon: Activity,
     joke: "Stonks only go up (we hope).",
   },
@@ -164,6 +188,14 @@ export function Features() {
                     className="absolute top-4 right-4 text-xs bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20"
                   >
                     Coming Soon
+                  </Badge>
+                )}
+                {feature.highlight && (
+                  <Badge
+                    variant="secondary"
+                    className="absolute top-4 right-4 text-xs bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 animate-pulse"
+                  >
+                    New
                   </Badge>
                 )}
                 <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">

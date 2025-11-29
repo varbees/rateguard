@@ -5,6 +5,7 @@ export { APIListTable } from "./APIListTable";
 export { RecentActivity } from "./RecentActivity";
 export { AlertBanner } from "./AlertBanner";
 export { CostEstimateCard } from "./CostEstimateCard";
+export { TokenMetricsCard } from "./TokenMetricsCard";
 export { PlanLimitsCard } from "./PlanLimitsCard";
 export { FeatureGate } from "./FeatureGate";
 export { CircuitBreakerMonitor } from "./CircuitBreakerMonitor";

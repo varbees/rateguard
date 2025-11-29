@@ -18,7 +18,8 @@ import {
   UsageGraphSection,
   APIListTable,
   AlertBanner,
-  // CostEstimateCard,
+  CostEstimateCard,
+  TokenMetricsCard,
   CircuitBreakerMonitor,
   SystemHealthIndicator,
 } from "@/components/dashboard";
@@ -172,8 +173,11 @@ export default function DashboardPage() {
           {/* System Health Indicator - Real-time WebSocket updates */}
           <SystemHealthIndicator />
 
-          {/* Cost Estimate - Real-time data */}
-          {/* <CostEstimateCard /> */}
+          {/* LLM Token Tracking & Cost Estimates - Real-time WebSocket updates */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <TokenMetricsCard />
+            <CostEstimateCard />
+          </div>
 
           {/* Section 1: Metric Cards */}
           <MetricCards data={metricData} loading={loading} />
