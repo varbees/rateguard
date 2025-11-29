@@ -1164,6 +1164,11 @@ class APIClient {
     return this.request<{ data: UsageByAPI[] }>(url);
   }
 
+  // Usage History
+  async getUsageHistory(period: string = "30d"): Promise<UsageHistoryResponse> {
+    return this.request<UsageHistoryResponse>(`/api/v1/dashboard/usage/history?period=${period}`);
+  }
+
   // Budget Management (NEW - Pro feature)
   async getBudgetConfig(): Promise<any> {
     return this.request("/api/v1/budget/config");
