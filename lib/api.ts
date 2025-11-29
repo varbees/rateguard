@@ -150,7 +150,41 @@ export interface CostEstimate {
   mtd_requests: number;
   api_costs: APICost[];
   calculated_at: string;
+  // NEW: Token-based metrics for LLMs
+  mtd_tokens?: number;
+  tokens_by_model?: Record<string, number>;
+  cost_by_model?: Record<string, number>;
 }
+
+// LLM Token Tracking Types
+export interface ModelUsage {
+  model: string;
+  tokens: number;
+  requests: number;
+  cost_cents: number;
+  cost_usd: number;
+}
+
+export interface TokenUsageSummary {
+  user_id: string;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_cost_cents: number;
+  total_cost_usd: number;
+  by_model: Record<string, ModelUsage>;
+  period: string;
+  calculated_at: string;
+}
+
+export interface ModelPricing {
+  provider: string;
+  model: string;
+  input_price_per_million: number; // cents
+  output_price_per_million: number; // cents
+  effective_date: string;
+}
+
 
 // Circuit Breaker Types
 export type CircuitBreakerState = "closed" | "open" | "half-open";
@@ -1139,6 +1173,15 @@ class APIClient {
     return this.request<WebhookStats>('/api/v1/webhook/stats');
   }
 
+  // LLM Token Tracking APIs
+  async getTokenUsage(): Promise<TokenUsageSummary> {
+    return this.request<TokenUsageSummary>("/api/v1/dashboard/tokens");
+  }
+
+  async getModelPricing(): Promise<ModelPricing[]> {
+    return this.request<ModelPricing[]>("/api/v1/models/pricing");
+  }
+
   async getWebhookEvent(eventId: string): Promise<WebhookEvent> {
     return this.request<WebhookEvent>(`/api/v1/webhook/events/${eventId}`);
   }
@@ -1170,6 +1213,8 @@ export const dashboardAPI = {
   usage: () => apiClient.getUsageStats(),
   alerts: () => apiClient.getAlerts(),
   costs: () => apiClient.getCostEstimate(),
+  tokens: () => apiClient.getTokenUsage(),
+  modelPricing: () => apiClient.getModelPricing(),
 };
 
 export const analyticsAPI = {

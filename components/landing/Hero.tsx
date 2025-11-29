@@ -258,8 +258,8 @@ export function Hero() {
             >
               The distributed rate limiter that thinks globally and acts
               locally. Protect your backend with sub-millisecond latency,
-              geo-aware currency detection, and enterprise-grade concurrency
-              control.
+              intelligent LLM token tracking, and enterprise-grade concurrency
+              control. Real-time cost monitoring included.
             </motion.p>
 
             <motion.div

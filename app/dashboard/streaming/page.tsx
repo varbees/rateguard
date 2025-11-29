@@ -53,7 +53,7 @@ export default function StreamingDashboardPage() {
               Streaming Analytics
             </h1>
             <p className="text-muted-foreground mt-1">
-              Monitor and analyze your streaming API usage
+              Monitor and analyze your streaming API usage and LLM token consumption
             </p>
           </div>
 
@@ -120,6 +120,12 @@ export default function StreamingDashboardPage() {
         <div className="space-y-8">
           {/* Metrics Cards */}
           <StreamingMetrics period={period} />
+
+          {/* LLM Token Tracking & Cost Estimates */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* <TokenMetricsCard /> */}
+            {/* <CostEstimateCard /> */}
+          </div>
 
           {/* Charts Row 1 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
