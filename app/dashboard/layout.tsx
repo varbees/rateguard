@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDashboardStore } from "@/lib/store";
-import { Loader2 } from "lucide-react";
 import { useUser } from "@/lib/hooks/use-api";
 
 export default function DashboardLayout({
@@ -18,18 +17,20 @@ export default function DashboardLayout({
 
   // Immediate redirect for unauthorized users
   useEffect(() => {
-    if (!isLoading && !user) {
-      // User is not authenticated - redirect immediately
-      router.replace("/login");
-      return;
+    if (!isLoading) {
+      if (user) {
+        // User is authenticated - allow rendering
+        setUser(user);
+        setShouldRender(true);
+      } else if (isError) {
+        // API error occurred - redirect to login
+        // This handles 401 (unauthorized) and other auth errors
+        router.replace("/login");
+      }
+      // If user is null but no error, wait for data to load
+      // This prevents redirect loops when API is temporarily unavailable
     }
-
-    if (user) {
-      // User is authenticated - allow rendering
-      setUser(user);
-      setShouldRender(true);
-    }
-  }, [user, isLoading, router, setUser]);
+  }, [user, isLoading, isError, router, setUser]);
 
   // Show nothing during initial auth check to prevent flash
   if (!shouldRender) {

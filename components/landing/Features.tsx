@@ -88,20 +88,8 @@ const features = [
     icon: Activity,
     joke: "Stonks only go up (we hope).",
   },
-  {
-    title: "End-to-End Encryption",
-    description:
-      "Your keys are encrypted at rest, in transit, and in our dreams.",
-    icon: Lock,
-    joke: "Sealed tighter than a pickle jar.",
-  },
-  {
-    title: "Geo-Currency Detection",
-    description:
-      "Charge users in their local currency. Global domination made easy.",
-    icon: Globe,
-    joke: "Mr. Worldwide.",
-  },
+
+
   {
     title: "Automated Billing",
     description:
@@ -136,19 +124,29 @@ const features = [
     icon: Shield,
     joke: "Sleep well, ops team.",
   },
+
   {
-    title: "Dual Concurrency Model",
+    title: "Budget Alerts & Cost Optimization",
     description:
-      "Unbounded proxying for high throughput, bounded worker pools for heavy aggregation. Best of both worlds.",
-    icon: Zap,
-    joke: "We walk and chew gum at the same time.",
+      "Get notified when you hit 90% of your budget. Smart suggestions to switch models and save money.",
+    icon: AlertTriangle,
+    joke: "Your wallet will thank you.",
+    comingSoon: true,
   },
   {
-    title: "AI Support Assistant",
+    title: "Analytics API",
     description:
-      "Intelligent chatbot for instant API troubleshooting and documentation.",
-    icon: Bot,
-    joke: "Identity theft is not a joke, Jim!",
+      "Programmatic access to your cost data, token usage, and error rates. Build your own internal dashboards.",
+    icon: Activity,
+    joke: "For when you love JSON more than people.",
+    comingSoon: true,
+  },
+  {
+    title: "Multi-Provider Support",
+    description:
+      "Support for Mistral, Together, Replicate, Perplexity, DeepSeek, and Fireworks. 10+ providers total.",
+    icon: Layers,
+    joke: "Gotta catch 'em all!",
     comingSoon: true,
   },
 ];

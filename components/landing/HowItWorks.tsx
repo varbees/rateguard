@@ -196,26 +196,24 @@ export function HowItWorks() {
         {/* Technical Deep Dive - Clean Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start max-w-6xl mx-auto">
           <div className="space-y-6">
-            <h3 className="text-3xl font-bold">Dual Concurrency Architecture</h3>
+            <h3 className="text-3xl font-bold">High-Performance Architecture</h3>
             <p className="text-muted-foreground leading-relaxed">
-              RateGuard isn&apos;t just a proxy; it&apos;s a smart traffic manager. We use a 
-              <strong className="text-foreground"> Dual Concurrency Model</strong> to optimize performance:
+              RateGuard is built for speed and reliability. We use a 
+              <strong className="text-foreground"> Distributed Concurrency Model</strong> to ensure your API never bottlenecks:
             </p>
             <ul className="space-y-4 text-muted-foreground">
               <li className="flex gap-3">
                 <Zap className="w-5 h-5 text-primary shrink-0 mt-1" />
                 <div>
-                  <strong className="text-foreground block">Unbounded Proxying</strong>
-                  For standard API calls, we use lightweight goroutines (one per request). This allows us to handle 
-                  <strong className="text-foreground"> 50,000+ req/s</strong> with sub-millisecond overhead, limited only by your hardware.
+                  <strong className="text-foreground block">Fast Concurrent Handling</strong>
+                  We handle thousands of concurrent requests with sub-millisecond overhead, ensuring your users get the fastest possible response times.
                 </div>
               </li>
               <li className="flex gap-3">
                 <Cpu className="w-5 h-5 text-primary shrink-0 mt-1" />
                 <div>
-                  <strong className="text-foreground block">Bounded Aggregation</strong>
-                  For resource-heavy scatter-gather operations, we use a fixed-size 
-                  <strong className="text-foreground"> Worker Pool</strong>. This prevents resource exhaustion and ensures your backend stays stable even under massive load.
+                  <strong className="text-foreground block">Intelligent Resource Management</strong>
+                  Our system automatically balances load across resources, preventing exhaustion and ensuring stability even during massive traffic spikes.
                 </div>
               </li>
             </ul>
