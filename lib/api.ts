@@ -1249,6 +1249,29 @@ class APIClient {
       method: 'POST',
     });
   }
+  // Billing Methods
+  async getPaymentProviders(): Promise<{ providers: string[]; preferred: string }> {
+    return this.request<{ providers: string[]; preferred: string }>("/api/v1/billing/providers");
+  }
+
+  async createCheckout(provider: string, planId: string): Promise<{ checkout_url: string }> {
+    return this.request<{ checkout_url: string }>(`/api/v1/billing/${provider}/checkout`, {
+      method: "POST",
+      body: JSON.stringify({ plan_id: planId }),
+    });
+  }
+
+  async getPortal(provider: string): Promise<{ portal_url: string }> {
+    return this.request<{ portal_url: string }>(`/api/v1/billing/${provider}/portal`, {
+      method: "POST",
+    });
+  }
+
+  async cancelSubscription(provider: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/api/v1/billing/${provider}/cancel`, {
+      method: "POST",
+    });
+  }
 }
 
 // Export singleton instance
@@ -1303,6 +1326,13 @@ export const webhookAPI = {
   get: (eventId: string) => apiClient.getWebhookEvent(eventId),
   create: (data: WebhookInboxRequest) => apiClient.createWebhookEvent(data),
   retry: (eventId: string) => apiClient.retryWebhookEvent(eventId),
+};
+
+export const billingAPI = {
+  getProviders: () => apiClient.getPaymentProviders(),
+  checkout: (provider: string, planId: string) => apiClient.createCheckout(provider, planId),
+  portal: (provider: string) => apiClient.getPortal(provider),
+  cancel: (provider: string) => apiClient.cancelSubscription(provider),
 };
 
 // Query Client Configuration

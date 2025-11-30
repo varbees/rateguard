@@ -46,7 +46,7 @@ const navItems = [
   },
   {
     title: "Settings",
-    href: "/dashboard/settings",
+    href: "/dashboard/account",
     icon: Settings,
   },
 ];

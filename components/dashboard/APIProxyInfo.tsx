@@ -119,7 +119,7 @@ defer resp.Body.Close()`,
             <p className="text-yellow-200 text-sm">
               You need an API key to use this proxy endpoint.{" "}
               <Link
-                href="/dashboard/settings"
+                href="/dashboard/account/keys"
                 className="underline font-semibold hover:text-yellow-100"
               >
                 Go to Settings → API Keys

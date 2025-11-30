@@ -45,7 +45,7 @@ export function QuickActionsCard() {
       icon: Settings,
       title: 'Manage Settings',
       description: 'Notifications, security, and preferences',
-      href: '/dashboard/settings',
+      href: '/dashboard/account',
     },
     {
       icon: Book,

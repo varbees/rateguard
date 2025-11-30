@@ -24,9 +24,10 @@ export function BasicConfiguration({ state, updateState, onNext, onBack }: Basic
   const [testError, setTestError] = useState<string | null>(null);
   const [overrideUrl, setOverrideUrl] = useState(false);
 
-  const isValid = state.name.length >= 3 && 
-                 state.target_url.startsWith('http') && 
-                 state.api_key && state.api_key.length > 10;
+  const isTestable = state.target_url.startsWith('http') && 
+                     state.api_key && state.api_key.length > 10;
+
+  const isValid = state.name.length >= 3 && isTestable;
 
   const handleTestConnection = async () => {
     setTesting(true);
@@ -144,7 +145,7 @@ export function BasicConfiguration({ state, updateState, onNext, onBack }: Basic
               type="button"
               variant="outline"
               onClick={handleTestConnection}
-              disabled={!isValid || testing}
+              disabled={!isTestable || testing}
               className="gap-2"
             >
               {testing ? (

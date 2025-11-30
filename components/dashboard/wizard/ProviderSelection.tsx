@@ -61,13 +61,29 @@ export function ProviderSelection({ state, updateState, onNext }: ProviderSelect
 
   const handleSelect = (provider: APIProvider) => {
     updateState({ provider });
-    // Auto-fill target URL for known providers
+    // Auto-fill target URL and Name for known providers
     if (provider === 'openai') {
-      updateState({ target_url: 'https://api.openai.com/v1' });
+      updateState({ 
+        target_url: 'https://api.openai.com/v1',
+        name: 'My OpenAI API'
+      });
     } else if (provider === 'anthropic') {
-      updateState({ target_url: 'https://api.anthropic.com/v1' });
+      updateState({ 
+        target_url: 'https://api.anthropic.com/v1',
+        name: 'My Anthropic API'
+      });
+    } else if (provider === 'google') {
+      updateState({ 
+        target_url: 'https://generativelanguage.googleapis.com/v1beta',
+        name: 'My Gemini API'
+      });
+    } else if (provider === 'cohere') {
+      updateState({ 
+        target_url: 'https://api.cohere.ai/v1',
+        name: 'My Cohere API'
+      });
     } else if (provider === 'custom') {
-      updateState({ target_url: '' });
+      updateState({ target_url: '', name: '' });
     }
   };
 

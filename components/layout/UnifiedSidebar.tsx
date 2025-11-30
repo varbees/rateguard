@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
@@ -35,26 +35,99 @@ import {
   PieChart,
   Activity,
   List,
+  Users,
+  Key,
+  ChevronDown,
+  Plus,
+  Star,
+  Bell,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 
-type NavItem = { title: string; href: string; icon: React.ComponentType<any> };
+type NavItem = {
+  title: string;
+  href: string;
+  icon: React.ComponentType<any>;
+  description?: string;
+  children?: NavItem[];
+  disabled?: boolean;
+  tooltip?: string;
+};
 
-const loggedInNavItems: NavItem[] = [
-  { title: "Dashboard", href: "/dashboard", icon: LayoutGrid },
-  { title: "APIs", href: "/dashboard/apis", icon: Server },
-  { title: "Usage", href: "/dashboard/usage", icon: Activity },
-  { title: "Queues", href: "/dashboard/queues", icon: List },
-  { title: "Streaming", href: "/dashboard/streaming", icon: Zap },
-  { title: "Analytics", href: "/dashboard/analytics", icon: PieChart },
-  { title: "Billing", href: "/dashboard/billing", icon: CreditCard },
-  { title: "Settings", href: "/dashboard/settings", icon: Settings },
+const primaryNavItems: NavItem[] = [
+  {
+    title: "Overview",
+    href: "/dashboard/overview",
+    icon: LayoutGrid,
+    description: "Your account at a glance",
+  },
+  {
+    title: "APIs / Proxies",
+    href: "/dashboard/apis",
+    icon: Server,
+    description: "Manage & observe all your RateGuard API gateways",
+    children: [
+      {
+        title: "Create New API",
+        href: "/dashboard/apis/new",
+        icon: Plus,
+      },
+      // Recent/Starred APIs could be dynamically added here
+    ],
+  },
+  {
+    title: "Usage / Analytics",
+    href: "/dashboard/usage",
+    icon: Activity,
+    description: "Live and historical traffic",
+  },
+  {
+    title: "Live Events",
+    href: "/dashboard/events",
+    icon: Zap,
+    description: "Real-time event stream and alerts",
+  },
 ];
 
-const docsNavItems: NavItem[] = [
-  { title: "Documentation", href: "/docs", icon: BookOpen },
+const secondaryNavItems: NavItem[] = [
+  {
+    title: "Billing & Plan",
+    href: "/dashboard/billing",
+    icon: CreditCard,
+    description: "Current plan, quota, usage",
+  },
+  {
+    title: "Team & Access",
+    href: "/dashboard/team",
+    icon: Users,
+    description: "Invite team, share API keys",
+    disabled: true,
+    tooltip: "Not available for your plan (coming soon)",
+  },
+];
+
+const accountNavItems: NavItem[] = [
+  {
+    title: "Account Settings",
+    href: "/dashboard/account",
+    icon: Settings,
+    description: "Profile, notifications, security",
+  },
+  {
+    title: "API Keys",
+    href: "/dashboard/account/keys",
+    icon: Key,
+    description: "Rotate/regenerate authentication tokens",
+  },
+  {
+    title: "Docs & Help",
+    href: "/docs",
+    icon: BookOpen,
+    description: "Quick start, API reference",
+  },
 ];
 
 const loggedOutNavItems: NavItem[] = [
@@ -67,6 +140,7 @@ interface NavLinkProps {
   pathname: string;
   isSidebarCollapsed: boolean;
   onClick?: () => void;
+  depth?: number;
 }
 
 function NavLink({
@@ -74,55 +148,140 @@ function NavLink({
   pathname,
   isSidebarCollapsed,
   onClick,
+  depth = 0,
 }: NavLinkProps) {
   const Icon = item.icon;
   const isActive =
-    pathname === item.href ||
-    (item.href !== "/dashboard" && pathname.startsWith(item.href));
+    !item.disabled &&
+    (pathname === item.href ||
+      (item.href !== "/dashboard" && pathname.startsWith(item.href)));
+  const [isOpen, setIsOpen] = useState(false);
 
-  return (
-    <Link href={item.href} onClick={onClick} className="block w-full">
-      <div
+  // Auto-expand if child is active
+  useEffect(() => {
+    if (item.children?.some((child) => pathname.startsWith(child.href))) {
+      setIsOpen(true);
+    }
+  }, [pathname, item.children]);
+
+  const hasChildren = item.children && item.children.length > 0;
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (item.disabled) {
+      e.preventDefault();
+      return;
+    }
+    if (hasChildren && !isSidebarCollapsed) {
+      e.preventDefault();
+      setIsOpen(!isOpen);
+    } else if (onClick) {
+      onClick();
+    }
+  };
+
+  const content = (
+    <div
+      className={cn(
+        "flex items-center gap-3 px-2 py-2 rounded-md transition-all duration-200 group relative overflow-hidden",
+        isActive
+          ? "bg-primary/10 text-primary"
+          : item.disabled
+          ? "text-muted-foreground/50 cursor-not-allowed"
+          : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+        isSidebarCollapsed ? "justify-center" : "justify-start",
+        depth > 0 && "ml-4"
+      )}
+    >
+      <Icon
         className={cn(
-          "flex items-center gap-3 px-2 py-2 rounded-md transition-all duration-200 group relative overflow-hidden",
-          isActive
-            ? "bg-primary/10 text-primary"
-            : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
-          isSidebarCollapsed ? "justify-center" : "justify-start"
+          "w-5 h-5 shrink-0 transition-transform duration-200",
+          isActive && "scale-110"
         )}
-      >
-        <Icon
+      />
+
+      <AnimatePresence mode="wait">
+        {!isSidebarCollapsed && (
+          <motion.span
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -10 }}
+            transition={{ duration: 0.2 }}
+            className="font-medium truncate whitespace-nowrap text-sm flex-1"
+          >
+            {item.title}
+          </motion.span>
+        )}
+      </AnimatePresence>
+
+      {!isSidebarCollapsed && hasChildren && (
+        <ChevronDown
           className={cn(
-            "w-5 h-5 shrink-0 transition-transform duration-200",
-            isActive && "scale-110"
+            "w-4 h-4 transition-transform duration-200",
+            isOpen ? "rotate-180" : ""
           )}
         />
+      )}
 
-        <AnimatePresence mode="wait">
-          {!isSidebarCollapsed && (
-            <motion.span
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.2 }}
-              className="font-medium truncate whitespace-nowrap text-sm"
-            >
-              {item.title}
-            </motion.span>
-          )}
-        </AnimatePresence>
+      {isActive && (
+        <motion.div
+          layoutId="active-nav-indicator"
+          className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0, x: -10 }}
+        />
+      )}
+    </div>
+  );
 
-        {isActive && (
-          <motion.div
-            layoutId="active-nav-indicator"
-            className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          />
-        )}
+  if (item.disabled) {
+    return (
+      <div className="w-full">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className="block w-full cursor-not-allowed">{content}</div>
+          </TooltipTrigger>
+          <TooltipContent side="right" className="ml-2">
+            {item.tooltip || "Not available"}
+          </TooltipContent>
+        </Tooltip>
       </div>
-    </Link>
+    );
+  }
+
+  return (
+    <div className="w-full">
+      <Link
+        href={hasChildren && !isSidebarCollapsed ? "#" : item.href}
+        onClick={handleClick}
+        className="block w-full"
+      >
+        {content}
+      </Link>
+
+      {/* Nested Items */}
+      <AnimatePresence>
+        {!isSidebarCollapsed && hasChildren && isOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            {item.children!.map((child) => (
+              <NavLink
+                key={child.href}
+                item={child}
+                pathname={pathname}
+                isSidebarCollapsed={isSidebarCollapsed}
+                onClick={onClick}
+                depth={depth + 1}
+              />
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -149,6 +308,39 @@ function SidebarContent({
   onNavClick,
   onLogout,
 }: SidebarContentProps) {
+  const renderNavItems = (items: NavItem[]) => {
+    return items.map((item) =>
+      isSidebarCollapsed ? (
+        <Tooltip key={item.href}>
+          <TooltipTrigger asChild>
+            <div>
+              <NavLink
+                item={item}
+                pathname={pathname}
+                isSidebarCollapsed={isSidebarCollapsed}
+                onClick={onNavClick}
+              />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent
+            side="right"
+            className="bg-popover text-popover-foreground border-border font-medium ml-2"
+          >
+            {item.disabled ? item.tooltip : item.title}
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <NavLink
+          key={item.href}
+          item={item}
+          pathname={pathname}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onClick={onNavClick}
+        />
+      )
+    );
+  };
+
   return (
     <div className="flex flex-col h-full w-full">
       {/* Header */}
@@ -181,107 +373,63 @@ function SidebarContent({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-none">
+      <nav className="flex-1 py-4 px-2 space-y-6 overflow-y-auto overflow-x-hidden scrollbar-none">
         <TooltipProvider delayDuration={0}>
-          {isAuthenticated
-            ? loggedInNavItems.map((item) =>
-                isSidebarCollapsed ? (
-                  <Tooltip key={item.href}>
-                    <TooltipTrigger asChild>
-                      <div>
-                        <NavLink
-                          item={item}
-                          pathname={pathname}
-                          isSidebarCollapsed={isSidebarCollapsed}
-                          onClick={onNavClick}
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-popover text-popover-foreground border-border font-medium ml-2"
-                    >
-                      {item.title}
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <NavLink
-                    key={item.href}
-                    item={item}
-                    pathname={pathname}
-                    isSidebarCollapsed={isSidebarCollapsed}
-                    onClick={onNavClick}
-                  />
-                )
-              )
-            : loggedOutNavItems.map((item) =>
-                isSidebarCollapsed ? (
-                  <Tooltip key={item.href}>
-                    <TooltipTrigger asChild>
-                      <div>
-                        <NavLink
-                          item={item}
-                          pathname={pathname}
-                          isSidebarCollapsed={isSidebarCollapsed}
-                          onClick={onNavClick}
-                        />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side="right"
-                      className="bg-popover text-popover-foreground border-border font-medium ml-2"
-                    >
-                      {item.title}
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <NavLink
-                    key={item.href}
-                    item={item}
-                    pathname={pathname}
-                    isSidebarCollapsed={isSidebarCollapsed}
-                    onClick={onNavClick}
-                  />
-                )
-              )}
+          {isAuthenticated ? (
+            <>
+              {/* Primary Section */}
+              <div className="space-y-1">
+                {!isSidebarCollapsed && (
+                  <h3 className="text-xs font-semibold text-muted-foreground px-2 mb-2 uppercase tracking-wider">
+                    Primary
+                  </h3>
+                )}
+                {renderNavItems(primaryNavItems)}
+              </div>
 
-          <div className="my-2 border-t border-white/10 mx-2" />
+              {/* Secondary Section */}
+              <div className="space-y-1">
+                {!isSidebarCollapsed && (
+                  <h3 className="text-xs font-semibold text-muted-foreground px-2 mb-2 uppercase tracking-wider">
+                    Secondary
+                  </h3>
+                )}
+                {renderNavItems(secondaryNavItems)}
+              </div>
 
-          {docsNavItems.map((item) =>
-            isSidebarCollapsed ? (
-              <Tooltip key={item.href}>
-                <TooltipTrigger asChild>
-                  <div>
-                    <NavLink
-                      item={item}
-                      pathname={pathname}
-                      isSidebarCollapsed={isSidebarCollapsed}
-                      onClick={onNavClick}
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent
-                  side="right"
-                  className="bg-popover text-popover-foreground border-border font-medium ml-2"
-                >
-                  {item.title}
-                </TooltipContent>
-              </Tooltip>
-            ) : (
-              <NavLink
-                key={item.href}
-                item={item}
-                pathname={pathname}
-                isSidebarCollapsed={isSidebarCollapsed}
-                onClick={onNavClick}
-              />
-            )
+              {/* Account Section */}
+              <div className="space-y-1">
+                {!isSidebarCollapsed && (
+                  <h3 className="text-xs font-semibold text-muted-foreground px-2 mb-2 uppercase tracking-wider">
+                    Account
+                  </h3>
+                )}
+                {renderNavItems(accountNavItems)}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-1">{renderNavItems(loggedOutNavItems)}</div>
           )}
         </TooltipProvider>
       </nav>
 
       {/* Footer Actions */}
-      <div className="p-2 border-t border-white/10 space-y-1">
+      <div className="p-2 border-t border-white/10 space-y-1 bg-black/20">
+        {/* Plan Badge (Optional/Pro) */}
+        {!isSidebarCollapsed && isAuthenticated && (
+          <div className="px-2 py-2 mb-2 rounded-md bg-gradient-to-r from-primary/20 to-purple-500/20 border border-primary/10">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-primary">Pro Plan</span>
+              <Link
+                href="/dashboard/billing"
+                className="text-[10px] text-muted-foreground hover:text-foreground underline"
+              >
+                Upgrade
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Toggle Button */}
         <Button
           variant="ghost"
@@ -341,48 +489,24 @@ function SidebarContent({
             {isSidebarCollapsed ? (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Link href="/dashboard/settings" className="block w-full">
+                  <Link href="/dashboard/account" className="block w-full">
                     <div className="flex items-center justify-center p-2 rounded-lg transition-colors hover:bg-white/5">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="w-6 h-6 rounded-full border border-white/10 bg-background p-0.5"
-                      >
-                        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
+                      <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
+                        {(user?.email?.[0] || "U").toUpperCase()}
+                      </div>
                     </div>
                   </Link>
                 </TooltipTrigger>
                 <TooltipContent side="right" className="ml-2">
-                  Settings
+                  Account Settings
                 </TooltipContent>
               </Tooltip>
             ) : (
               <div className="flex items-center gap-2 p-1 rounded-lg transition-colors hover:bg-white/5">
-                <Link href="/dashboard/settings" className="shrink-0">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="w-6 h-6 rounded-full border border-white/10 bg-background p-0.5"
-                  >
-                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
+                <Link href="/dashboard/account" className="shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary border border-primary/10">
+                    {(user?.email?.[0] || "U").toUpperCase()}
+                  </div>
                 </Link>
                 <div className="flex flex-col overflow-hidden">
                   <span className="text-xs font-medium truncate max-w-[120px]">
@@ -441,13 +565,8 @@ export default function UnifiedSidebar() {
       <motion.aside
         className="hidden lg:flex fixed left-0 top-0 bottom-0 z-40 bg-background/60 backdrop-blur-xl border-r border-white/10 shadow-xl"
         initial={false}
-        animate={{ width: isSidebarCollapsed ? 48 : 240 }}
+        animate={{ width: isSidebarCollapsed ? 60 : 260 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        style={
-          {
-            // Optional: Add a subtle noise texture if available, or just rely on backdrop blur
-          }
-        }
       >
         <SidebarContent
           isAuthenticated={isAuthenticated}
@@ -466,7 +585,7 @@ export default function UnifiedSidebar() {
       <header className="lg:hidden sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-md">
         <div className="flex h-16 items-center px-4 justify-between">
           <Link
-            href={isAuthenticated ? "/dashboard" : "/"}
+            href={isAuthenticated ? "/dashboard/overview" : "/"}
             className="flex items-center gap-2"
           >
             <div className="p-1.5 bg-primary/10 rounded-lg">
@@ -498,18 +617,55 @@ export default function UnifiedSidebar() {
                     <X className="w-5 h-5" />
                   </Button>
                 </div>
-                <nav className="flex-1 p-4 space-y-1">
-                  {isAuthenticated
-                    ? loggedInNavItems.map((item) => (
-                        <NavLink
-                          key={item.href}
-                          item={item}
-                          pathname={pathname}
-                          isSidebarCollapsed={false}
-                          onClick={handleNavClick}
-                        />
-                      ))
-                    : loggedOutNavItems.map((item) => (
+                <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
+                  {isAuthenticated ? (
+                    <>
+                      <div className="space-y-1">
+                        <h3 className="text-xs font-semibold text-muted-foreground px-2 mb-2 uppercase tracking-wider">
+                          Primary
+                        </h3>
+                        {primaryNavItems.map((item) => (
+                          <NavLink
+                            key={item.href}
+                            item={item}
+                            pathname={pathname}
+                            isSidebarCollapsed={false}
+                            onClick={handleNavClick}
+                          />
+                        ))}
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-xs font-semibold text-muted-foreground px-2 mb-2 uppercase tracking-wider">
+                          Secondary
+                        </h3>
+                        {secondaryNavItems.map((item) => (
+                          <NavLink
+                            key={item.href}
+                            item={item}
+                            pathname={pathname}
+                            isSidebarCollapsed={false}
+                            onClick={handleNavClick}
+                          />
+                        ))}
+                      </div>
+                      <div className="space-y-1">
+                        <h3 className="text-xs font-semibold text-muted-foreground px-2 mb-2 uppercase tracking-wider">
+                          Account
+                        </h3>
+                        {accountNavItems.map((item) => (
+                          <NavLink
+                            key={item.href}
+                            item={item}
+                            pathname={pathname}
+                            isSidebarCollapsed={false}
+                            onClick={handleNavClick}
+                          />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-1">
+                      {loggedOutNavItems.map((item) => (
                         <NavLink
                           key={item.href}
                           item={item}
@@ -518,16 +674,8 @@ export default function UnifiedSidebar() {
                           onClick={handleNavClick}
                         />
                       ))}
-                  <div className="my-4 border-t border-sidebar-border/50" />
-                  {docsNavItems.map((item) => (
-                    <NavLink
-                      key={item.href}
-                      item={item}
-                      pathname={pathname}
-                      isSidebarCollapsed={false}
-                      onClick={handleNavClick}
-                    />
-                  ))}
+                    </div>
+                  )}
                 </nav>
                 <div className="p-4 border-t border-sidebar-border/50 space-y-4">
                   <Button
@@ -546,20 +694,9 @@ export default function UnifiedSidebar() {
                   </Button>
                   {isAuthenticated ? (
                     <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/50">
-                      <Image
-                        src={`data:image/svg+xml,${encodeURIComponent(
-                          `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-                            <rect width="32" height="32" fill="#e0e0e0"/>
-                            <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="16" fill="#333" font-family="Arial, sans-serif">
-                              ${(user?.email?.[0] || "U").toUpperCase()}
-                            </text>
-                          </svg>`
-                        )}`}
-                        width={32}
-                        height={32}
-                        alt="User Avatar"
-                        className="w-8 h-8 rounded-full"
-                      />
+                      <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-sm font-bold text-primary border border-primary/10">
+                        {(user?.email?.[0] || "U").toUpperCase()}
+                      </div>
                       <div className="flex flex-col flex-1 min-w-0">
                         <span className="text-sm font-medium truncate">
                           {user?.email}

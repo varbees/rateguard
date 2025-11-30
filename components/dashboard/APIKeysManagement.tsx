@@ -40,7 +40,7 @@ interface APIKey {
 }
 
 interface APIKeysManagementProps {
-  apiId: string;
+  apiId?: string;
   keys?: APIKey[];
   onGenerate?: (name: string) => Promise<APIKey>;
   onRevoke?: (keyId: string) => Promise<void>;
