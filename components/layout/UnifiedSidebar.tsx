@@ -42,6 +42,7 @@ import {
   Star,
   Bell,
   HelpCircle,
+  Webhook,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
@@ -89,6 +90,12 @@ const primaryNavItems: NavItem[] = [
     href: "/dashboard/events",
     icon: Zap,
     description: "Real-time event stream and alerts",
+  },
+  {
+    title: "Webhooks",
+    href: "/dashboard/webhooks",
+    icon: Webhook,
+    description: "Reliable webhook relay with retries",
   },
 ];
 

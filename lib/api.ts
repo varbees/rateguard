@@ -4,7 +4,9 @@ import { QueryClient } from "@tanstack/react-query";
 // This makes requests relative (e.g. /api/v1/...) which Vercel forwards to Render.
 // In development, we use the direct URL or localhost.
 const isProduction = process.env.NODE_ENV === "production";
-const API_BASE_URL = isProduction ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008");
+const API_BASE_URL = isProduction
+  ? ""
+  : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008";
 
 // API Response Types (matching backend models exactly)
 export interface User {
@@ -186,7 +188,6 @@ export interface ModelPricing {
   effective_date: string;
 }
 
-
 // Circuit Breaker Types
 export type CircuitBreakerState = "closed" | "open" | "half-open";
 
@@ -321,7 +322,6 @@ export interface LoginResponse {
 // - Token exchange endpoints
 // - Provider account linking to existing users
 
-
 export interface RequestPasswordResetRequest {
   email: string;
 }
@@ -372,7 +372,7 @@ export interface WebhookEvent {
   payload: Record<string, unknown>;
   headers?: Record<string, string>;
   target_url: string;
-  status: 'pending' | 'processing' | 'delivered' | 'failed' | 'dead_letter';
+  status: "pending" | "processing" | "delivered" | "failed" | "dead_letter";
   retries: number;
   max_retries: number;
   next_attempt_at?: string;
@@ -426,6 +426,28 @@ export interface WebhookInboxRequest {
   payload: Record<string, unknown>;
   target_url: string;
   headers?: Record<string, string>;
+}
+
+export interface WebhookDeliveryAttempt {
+  attempt_number: number;
+  timestamp: string;
+  status_code?: number;
+  latency_ms?: number;
+  error?: string;
+  response_headers?: Record<string, string>;
+  request_headers?: Record<string, string>;
+}
+
+export interface WebhookConfig {
+  inbox_url: string;
+  destination_url: string;
+  retry_policy: "auto" | "custom";
+  max_retries?: number;
+  retry_delays?: number[]; // in seconds
+  dead_letter_action: "store" | "discard" | "email";
+  signature_secret?: string;
+  enabled: boolean;
+  event_types: string[]; // e.g. ["payment.succeeded", "user.created"]
 }
 
 // API Keys Types (NEW - multiple keys)
@@ -499,6 +521,27 @@ export interface QueueConfig {
   max_wait_time_ms: number;
   queueing_strategy: "fifo" | "priority" | "weighted";
   per_api_settings: APIQueueConfig[];
+}
+
+// Test Connection Types
+export interface TestConnectionRequest {
+  target_url: string;
+  auth_type: "none" | "bearer" | "api_key" | "basic";
+  auth_credentials?: Record<string, string>;
+  timeout_seconds?: number;
+}
+
+export interface TestConnectionResponse {
+  success: boolean;
+  status_code?: number;
+  status_text?: string;
+  latency_ms: number;
+  error_message?: string;
+  error_code?: string;
+  server_info?: string;
+  content_type?: string;
+  tls_version?: string;
+  tested_at: string;
 }
 
 // Custom API Error Class
@@ -1073,7 +1116,9 @@ class APIClient {
     });
   }
 
-  async revokeAPIKey(keyId: string): Promise<{ success: boolean; message: string }> {
+  async revokeAPIKey(
+    keyId: string
+  ): Promise<{ success: boolean; message: string }> {
     return this.request(`/api/v1/api-keys/${keyId}`, {
       method: "DELETE",
     });
@@ -1116,7 +1161,9 @@ class APIClient {
     );
   }
 
-  async resetCircuitBreaker(apiId: string): Promise<CircuitBreakerResetResponse> {
+  async resetCircuitBreaker(
+    apiId: string
+  ): Promise<CircuitBreakerResetResponse> {
     return this.request<CircuitBreakerResetResponse>(
       `/api/v1/proxy/circuit-breakers/${apiId}/reset`,
       {
@@ -1132,13 +1179,14 @@ class APIClient {
     status_code?: number;
   }): Promise<RecentRequestsResponse> {
     const queryParams = new URLSearchParams();
-    if (params?.limit) queryParams.append('limit', String(params.limit));
-    if (params?.api_id) queryParams.append('api_id', params.api_id);
-    if (params?.status_code) queryParams.append('status_code', String(params.status_code));
-    
+    if (params?.limit) queryParams.append("limit", String(params.limit));
+    if (params?.api_id) queryParams.append("api_id", params.api_id);
+    if (params?.status_code)
+      queryParams.append("status_code", String(params.status_code));
+
     const query = queryParams.toString();
     return this.request<RecentRequestsResponse>(
-      `/api/v1/dashboard/requests/recent${query ? `?${query}` : ''}`
+      `/api/v1/dashboard/requests/recent${query ? `?${query}` : ""}`
     );
   }
 
@@ -1153,8 +1201,12 @@ class APIClient {
   }
 
   // Streaming History
-  async getStreamingHistory(period: string = "24h"): Promise<UsageHistoryResponse> {
-    return this.request<UsageHistoryResponse>(`/api/v1/dashboard/streaming/history?period=${period}`);
+  async getStreamingHistory(
+    period: string = "24h"
+  ): Promise<UsageHistoryResponse> {
+    return this.request<UsageHistoryResponse>(
+      `/api/v1/dashboard/streaming/history?period=${period}`
+    );
   }
 
   // Streaming By API
@@ -1167,7 +1219,9 @@ class APIClient {
 
   // Usage History
   async getUsageHistory(period: string = "30d"): Promise<UsageHistoryResponse> {
-    return this.request<UsageHistoryResponse>(`/api/v1/dashboard/usage/history?period=${period}`);
+    return this.request<UsageHistoryResponse>(
+      `/api/v1/dashboard/usage/history?period=${period}`
+    );
   }
 
   // Budget Management (NEW - Pro feature)
@@ -1183,7 +1237,9 @@ class APIClient {
   }
 
   async getBudgetAlerts(includeAcknowledged: boolean = false): Promise<any> {
-    const params = new URLSearchParams({ include_acknowledged: includeAcknowledged.toString() });
+    const params = new URLSearchParams({
+      include_acknowledged: includeAcknowledged.toString(),
+    });
     return this.request(`/api/v1/budget/alerts?${params}`);
   }
 
@@ -1205,19 +1261,20 @@ class APIClient {
     source?: string;
   }): Promise<WebhookStatusResponse> {
     const queryParams = new URLSearchParams();
-    if (params?.page) queryParams.append('page', String(params.page));
-    if (params?.page_size) queryParams.append('page_size', String(params.page_size));
-    if (params?.status) queryParams.append('status', params.status);
-    if (params?.source) queryParams.append('source', params.source);
-    
+    if (params?.page) queryParams.append("page", String(params.page));
+    if (params?.page_size)
+      queryParams.append("page_size", String(params.page_size));
+    if (params?.status) queryParams.append("status", params.status);
+    if (params?.source) queryParams.append("source", params.source);
+
     const query = queryParams.toString();
     return this.request<WebhookStatusResponse>(
-      `/api/v1/webhook/status${query ? `?${query}` : ''}`
+      `/api/v1/webhook/status${query ? `?${query}` : ""}`
     );
   }
 
   async getWebhookStats(): Promise<WebhookStats> {
-    return this.request<WebhookStats>('/api/v1/webhook/stats');
+    return this.request<WebhookStats>("/api/v1/webhook/stats");
   }
 
   // LLM Token Tracking APIs
@@ -1234,47 +1291,136 @@ class APIClient {
   }
 
   async createWebhookEvent(data: WebhookInboxRequest): Promise<WebhookEvent> {
-    return this.request<WebhookEvent>('/api/v1/webhook/inbox', {
-      method: 'POST',
+    return this.request<WebhookEvent>("/api/v1/webhook/inbox", {
+      method: "POST",
       body: JSON.stringify(data),
     });
   }
 
-  async retryWebhookEvent(eventId: string): Promise<{ 
-    success: boolean; 
-    message: string; 
+  async retryWebhookEvent(eventId: string): Promise<{
+    success: boolean;
+    message: string;
     next_attempt_at: string;
   }> {
     return this.request(`/api/v1/webhook/events/${eventId}/retry`, {
-      method: 'POST',
+      method: "POST",
     });
-  }
-  // Billing Methods
-  async getPaymentProviders(): Promise<{ providers: string[]; preferred: string }> {
-    return this.request<{ providers: string[]; preferred: string }>("/api/v1/billing/providers");
   }
 
-  async createCheckout(provider: string, planId: string): Promise<{ checkout_url: string }> {
-    return this.request<{ checkout_url: string }>(`/api/v1/billing/${provider}/checkout`, {
-      method: "POST",
-      body: JSON.stringify({ plan_id: planId }),
+  async deleteWebhookEvent(
+    eventId: string
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/v1/webhook/events/${eventId}`, {
+      method: "DELETE",
     });
+  }
+
+  async bulkRetryWebhookEvents(eventIds: string[]): Promise<{
+    success: boolean;
+    message: string;
+    retried_count: number;
+  }> {
+    return this.request("/api/v1/webhook/events/bulk-retry", {
+      method: "POST",
+      body: JSON.stringify({ event_ids: eventIds }),
+    });
+  }
+
+  async getWebhookConfig(): Promise<WebhookConfig> {
+    return this.request<WebhookConfig>("/api/v1/webhook/config");
+  }
+
+  async updateWebhookConfig(
+    config: Partial<WebhookConfig>
+  ): Promise<WebhookConfig> {
+    return this.request<WebhookConfig>("/api/v1/webhook/config", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    });
+  }
+
+  async testWebhookDelivery(data: {
+    target_url: string;
+    payload: Record<string, unknown>;
+    headers?: Record<string, string>;
+  }): Promise<{
+    success: boolean;
+    status_code: number;
+    latency_ms: number;
+    response_body: string;
+  }> {
+    return this.request("/api/v1/webhook/test", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Billing Methods
+  async getPaymentProviders(): Promise<{
+    providers: string[];
+    preferred: string;
+  }> {
+    return this.request<{ providers: string[]; preferred: string }>(
+      "/api/v1/billing/providers"
+    );
+  }
+
+  async createCheckout(
+    provider: string,
+    planId: string
+  ): Promise<{ checkout_url: string }> {
+    return this.request<{ checkout_url: string }>(
+      `/api/v1/billing/${provider}/checkout`,
+      {
+        method: "POST",
+        body: JSON.stringify({ plan_id: planId }),
+      }
+    );
   }
 
   async getPortal(provider: string): Promise<{ portal_url: string }> {
-    return this.request<{ portal_url: string }>(`/api/v1/billing/${provider}/portal`, {
-      method: "POST",
-    });
+    return this.request<{ portal_url: string }>(
+      `/api/v1/billing/${provider}/portal`,
+      {
+        method: "POST",
+      }
+    );
   }
 
-  async cancelSubscription(provider: string): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(`/api/v1/billing/${provider}/cancel`, {
-      method: "POST",
-    });
+  async cancelSubscription(
+    provider: string
+  ): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(
+      `/api/v1/billing/${provider}/cancel`,
+      {
+        method: "POST",
+      }
+    );
   }
   // Geo Detection
-  async detectGeo(): Promise<{ CountryCode: string; Currency: string; Provider: string }> {
-    return this.request<{ CountryCode: string; Currency: string; Provider: string }>("/api/v1/auth/geo");
+  async detectGeo(): Promise<{
+    CountryCode: string;
+    Currency: string;
+    Provider: string;
+  }> {
+    return this.request<{
+      CountryCode: string;
+      Currency: string;
+      Provider: string;
+    }>("/api/v1/auth/geo");
+  }
+
+  // Test Connection - Tests connectivity to a target API endpoint
+  async testConnection(
+    data: TestConnectionRequest
+  ): Promise<TestConnectionResponse> {
+    return this.request<TestConnectionResponse>(
+      "/api/v1/apis/test-connection",
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      }
+    );
   }
 }
 
@@ -1286,7 +1432,8 @@ export const authAPI = {
   login: (data: LoginRequest) => apiClient.login(data),
   logout: () => apiClient.logout(),
   me: () => apiClient.getCurrentUser(),
-  requestPasswordReset: (data: RequestPasswordResetRequest) => apiClient.requestPasswordReset(data),
+  requestPasswordReset: (data: RequestPasswordResetRequest) =>
+    apiClient.requestPasswordReset(data),
   resetPassword: (data: ResetPasswordRequest) => apiClient.resetPassword(data),
   detectGeo: () => apiClient.detectGeo(),
 };
@@ -1312,6 +1459,8 @@ export const apiConfigAPI = {
   update: (id: string, data: Partial<APIConfig>) =>
     apiClient.updateAPIConfig(id, data),
   delete: (id: string) => apiClient.deleteAPIConfig(id),
+  testConnection: (data: TestConnectionRequest) =>
+    apiClient.testConnection(data),
 };
 
 export const settingsAPI = {
@@ -1334,17 +1483,32 @@ export const circuitBreakerAPI = {
 };
 
 export const webhookAPI = {
-  status: (params?: { page?: number; page_size?: number; status?: string; source?: string }) =>
-    apiClient.getWebhookStatus(params),
+  status: (params?: {
+    page?: number;
+    page_size?: number;
+    status?: string;
+    source?: string;
+  }) => apiClient.getWebhookStatus(params),
   stats: () => apiClient.getWebhookStats(),
   get: (eventId: string) => apiClient.getWebhookEvent(eventId),
   create: (data: WebhookInboxRequest) => apiClient.createWebhookEvent(data),
   retry: (eventId: string) => apiClient.retryWebhookEvent(eventId),
+  delete: (eventId: string) => apiClient.deleteWebhookEvent(eventId),
+  bulkRetry: (eventIds: string[]) => apiClient.bulkRetryWebhookEvents(eventIds),
+  getConfig: () => apiClient.getWebhookConfig(),
+  updateConfig: (config: Partial<WebhookConfig>) =>
+    apiClient.updateWebhookConfig(config),
+  test: (data: {
+    target_url: string;
+    payload: Record<string, unknown>;
+    headers?: Record<string, string>;
+  }) => apiClient.testWebhookDelivery(data),
 };
 
 export const billingAPI = {
   getProviders: () => apiClient.getPaymentProviders(),
-  checkout: (provider: string, planId: string) => apiClient.createCheckout(provider, planId),
+  checkout: (provider: string, planId: string) =>
+    apiClient.createCheckout(provider, planId),
   portal: (provider: string) => apiClient.getPortal(provider),
   cancel: (provider: string) => apiClient.cancelSubscription(provider),
 };
