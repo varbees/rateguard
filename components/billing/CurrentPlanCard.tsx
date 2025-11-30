@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, Loader2 } from "lucide-react";
+import { useGeo } from "@/hooks/use-geo";
 
 interface PlanInfo {
   tier: string;
@@ -50,6 +51,7 @@ const planLabels = {
 };
 
 export function CurrentPlanCard({ plan, stats }: CurrentPlanCardProps) {
+  const { Provider: geoProvider } = useGeo();
   const [isLoadingPortal, setIsLoadingPortal] = React.useState(false);
   const [portalError, setPortalError] = React.useState<string | null>(null);
 
@@ -76,8 +78,7 @@ export function CurrentPlanCard({ plan, stats }: CurrentPlanCardProps) {
       setIsLoadingPortal(true);
 
       // Determine provider based on plan tier
-      // Default to Stripe for now (will be enhanced with geo-detection)
-      const provider = "stripe";
+      const provider = geoProvider || "stripe";
 
       // Call backend portal endpoint
       const response = await fetch(`/api/v1/billing/${provider}/portal`, {

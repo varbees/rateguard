@@ -37,28 +37,34 @@ export default function ProductFaqPage() {
           <AccordionItem value="latency">
             <AccordionTrigger>Does RateGuard add latency?</AccordionTrigger>
             <AccordionContent>
-              Technically, yes. Everything adds latency. But we're talking about milliseconds. Our edge proxies are optimized for speed, and we usually add less than 20ms to your request time.
+              Technically, yes. Everything adds latency. But we&apos;re talking
+              about milliseconds. Our edge proxies are optimized for speed, and
+              we usually add less than 20ms to your request time.
             </AccordionContent>
           </AccordionItem>
 
           <AccordionItem value="uptime">
             <AccordionTrigger>What is your uptime guarantee?</AccordionTrigger>
             <AccordionContent>
-              For Enterprise plans, we offer a 99.99% SLA. For other plans, we aim for 100%, but we promise 99.9%.
+              For Enterprise plans, we offer a 99.99% SLA. For other plans, we
+              aim for 100%, but we promise 99.9%.
             </AccordionContent>
           </AccordionItem>
 
           <AccordionItem value="data-privacy">
             <AccordionTrigger>Do you store my API data?</AccordionTrigger>
             <AccordionContent>
-              We store metadata (headers, timestamps, token counts) for analytics. We do NOT store request or response bodies unless you explicitly enable "Debug Mode" for troubleshooting.
+              We store metadata (headers, timestamps, token counts) for
+              analytics. We do NOT store request or response bodies unless you
+              explicitly enable &quot;Debug Mode&quot; for troubleshooting.
             </AccordionContent>
           </AccordionItem>
 
           <AccordionItem value="streaming">
             <AccordionTrigger>Do you support streaming?</AccordionTrigger>
             <AccordionContent>
-              Yes! We support Server-Sent Events (SSE) for LLM streaming. We count tokens on the fly without buffering the entire response.
+              Yes! We support Server-Sent Events (SSE) for LLM streaming. We
+              count tokens on the fly without buffering the entire response.
             </AccordionContent>
           </AccordionItem>
         </Accordion>

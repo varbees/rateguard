@@ -112,6 +112,23 @@ export function Step1Welcome({ onNext, onSkip }: Step1WelcomeProps) {
         </Button>
       </motion.div>
 
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.7 }}
+        className="text-xs text-center text-muted-foreground mt-4"
+      >
+        By clicking &quot;Get Started&quot;, you agree to our{" "}
+        <a href="/legal/terms" className="underline hover:text-primary" target="_blank">
+          Terms of Service
+        </a>{" "}
+        and{" "}
+        <a href="/legal/privacy" className="underline hover:text-primary" target="_blank">
+          Privacy Policy
+        </a>
+        .
+      </motion.p>
+
       {/* Quick Stats */}
       <motion.div
         initial={{ opacity: 0 }}

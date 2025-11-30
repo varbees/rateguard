@@ -1272,10 +1272,24 @@ class APIClient {
       method: "POST",
     });
   }
+  // Geo Detection
+  async detectGeo(): Promise<{ CountryCode: string; Currency: string; Provider: string }> {
+    return this.request<{ CountryCode: string; Currency: string; Provider: string }>("/api/v1/auth/geo");
+  }
 }
 
 // Export singleton instance
 export const apiClient = new APIClient();
+
+export const authAPI = {
+  signup: (data: SignupRequest) => apiClient.signup(data),
+  login: (data: LoginRequest) => apiClient.login(data),
+  logout: () => apiClient.logout(),
+  me: () => apiClient.getCurrentUser(),
+  requestPasswordReset: (data: RequestPasswordResetRequest) => apiClient.requestPasswordReset(data),
+  resetPassword: (data: ResetPasswordRequest) => apiClient.resetPassword(data),
+  detectGeo: () => apiClient.detectGeo(),
+};
 
 // Export individual API namespaces for convenience
 export const dashboardAPI = {

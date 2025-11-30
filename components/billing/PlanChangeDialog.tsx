@@ -28,25 +28,30 @@ const plans = [
     name: "Free",
     price: "$0",
     period: "/mo",
-    features: ["1k req/day", "3 APIs"],
+    features: ["100K req/month", "3 APIs", "100K tokens/month"],
+  },
+  {
+    id: "starter",
+    name: "Starter",
+    price: "$29",
+    period: "/mo",
+    features: ["1M req/month", "10 APIs", "10M tokens/month"],
   },
   {
     id: "pro",
     name: "Pro",
-    price: "$29",
+    price: "$79",
     period: "/mo",
-    features: ["100k req/day", "Unlimited APIs", "Priority Support"],
-  },
-  {
-    id: "business",
-    name: "Business",
-    price: "$99",
-    period: "/mo",
-    features: ["1M+ req/day", "Custom Limits", "SLA"],
+    features: ["10M req/month", "Unlimited APIs", "100M tokens/month"],
   },
 ];
 
-export function PlanChangeDialog({ open, onOpenChange, currentPlanId, onPlanChange }: PlanChangeDialogProps) {
+export function PlanChangeDialog({
+  open,
+  onOpenChange,
+  currentPlanId,
+  onPlanChange,
+}: PlanChangeDialogProps) {
   const [selectedPlan, setSelectedPlan] = useState(currentPlanId);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -61,7 +66,11 @@ export function PlanChangeDialog({ open, onOpenChange, currentPlanId, onPlanChan
       await onPlanChange(selectedPlan);
       // For paid plans, we redirect to checkout, so don't show success toast immediately
       if (selectedPlan === "free") {
-        toast.success(`Successfully changed plan to ${plans.find(p => p.id === selectedPlan)?.name}`);
+        toast.success(
+          `Successfully changed plan to ${
+            plans.find((p) => p.id === selectedPlan)?.name
+          }`
+        );
         onOpenChange(false);
       } else {
         toast.info("Redirecting to secure checkout...");
@@ -80,29 +89,42 @@ export function PlanChangeDialog({ open, onOpenChange, currentPlanId, onPlanChan
         <DialogHeader>
           <DialogTitle>Change Plan</DialogTitle>
           <DialogDescription>
-            Choose the plan that best fits your needs. Changes take effect immediately.
+            Choose the plan that best fits your needs. Changes take effect
+            immediately.
           </DialogDescription>
         </DialogHeader>
-        
+
         <div className="py-4">
-          <RadioGroup 
-            value={selectedPlan} 
-            onValueChange={setSelectedPlan} 
+          <RadioGroup
+            value={selectedPlan}
+            onValueChange={setSelectedPlan}
             className="grid gap-4"
             aria-label="Select a plan"
           >
             {plans.map((plan) => (
               <div key={plan.id}>
-                <RadioGroupItem value={plan.id} id={plan.id} className="peer sr-only" aria-labelledby={`plan-name-${plan.id}`} />
+                <RadioGroupItem
+                  value={plan.id}
+                  id={plan.id}
+                  className="peer sr-only"
+                  aria-labelledby={`plan-name-${plan.id}`}
+                />
                 <Label
                   htmlFor={plan.id}
                   className="flex flex-col md:flex-row md:items-center justify-between rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2"
                 >
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span id={`plan-name-${plan.id}`} className="font-semibold text-lg">{plan.name}</span>
+                      <span
+                        id={`plan-name-${plan.id}`}
+                        className="font-semibold text-lg"
+                      >
+                        {plan.name}
+                      </span>
                       {currentPlanId === plan.id && (
-                        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">Current</span>
+                        <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                          Current
+                        </span>
                       )}
                     </div>
                     <div className="text-sm text-muted-foreground mt-1 flex flex-wrap gap-2">
@@ -124,10 +146,17 @@ export function PlanChangeDialog({ open, onOpenChange, currentPlanId, onPlanChan
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isLoading}
+          >
             Cancel
           </Button>
-          <Button onClick={handleConfirm} disabled={isLoading || selectedPlan === currentPlanId}>
+          <Button
+            onClick={handleConfirm}
+            disabled={isLoading || selectedPlan === currentPlanId}
+          >
             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {selectedPlan === "free" ? "Confirm Change" : "Proceed to Payment"}
           </Button>

@@ -66,23 +66,23 @@ export default function RootLayout({
                   name: "Free Plan",
                   price: "0",
                   priceCurrency: "USD",
-                  description: "10k requests/month with basic rate limiting",
+                  description: "100K requests/month with basic rate limiting",
                 },
                 {
                   "@type": "Offer",
-                  name: "Pro Plan",
-                  price: "49",
+                  name: "Starter Plan",
+                  price: "29",
                   priceCurrency: "USD",
                   description:
                     "1M requests/month with advanced rate limiting and priority support",
                 },
                 {
                   "@type": "Offer",
-                  name: "Business Plan",
-                  price: "199",
+                  name: "Pro Plan",
+                  price: "79",
                   priceCurrency: "USD",
                   description:
-                    "Unlimited requests with 99.99% SLA and on-premise option",
+                    "10M requests/month with 99.99% SLA and dedicated support",
                 },
               ],
               description:

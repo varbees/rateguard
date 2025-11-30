@@ -6,15 +6,28 @@ import { Check, X, Sparkles } from "lucide-react";
 const competitors = [
   { name: "RateGuard", highlight: true },
   { name: "Portkey", highlight: false },
-  { name: "AWS API Gateway", highlight: false },
+  { name: "AWS API GW", highlight: false },
   { name: "Kong", highlight: false },
 ];
 
-const features = [
+type FeatureValue = 
+  | boolean 
+  | string 
+  | { checked: boolean; text: string; subtext?: string };
+
+interface FeatureRow {
+  name: string;
+  rateGuard: FeatureValue;
+  portkey: FeatureValue;
+  aws: FeatureValue;
+  kong: FeatureValue;
+}
+
+const features: FeatureRow[] = [
   {
     name: "Rate Limiting",
     rateGuard: true,
-    portkey: false,
+    portkey: { checked: true, text: "(Enterprise only)" },
     aws: true,
     kong: true,
   },
@@ -23,47 +36,47 @@ const features = [
     rateGuard: true,
     portkey: true,
     aws: false,
-    kong: true,
+    kong: { checked: true, text: "(Enterprise)" },
   },
   {
     name: "Dual Pricing (Cost + Usage)",
     rateGuard: true,
-    portkey: false,
+    portkey: "Partial",
     aws: false,
-    kong: false,
+    kong: "Partial",
   },
   {
     name: "Circuit Breaker",
     rateGuard: true,
-    portkey: false,
+    portkey: true,
     aws: false,
-    kong: true,
+    kong: { checked: true, text: "(plugins)" },
   },
   {
     name: "Real-time Dashboard",
     rateGuard: true,
     portkey: true,
-    aws: false,
-    kong: true,
+    aws: { checked: true, text: "(CloudWatch)" },
+    kong: { checked: true, text: "(Konnect)" },
   },
   {
     name: "Setup in 5 minutes",
     rateGuard: true,
-    portkey: false,
-    aws: false,
-    kong: false,
+    portkey: { checked: true, text: "(1 min claim)" },
+    aws: "Partial (>20m)",
+    kong: "Partial (15+m)",
   },
   {
     name: "LLM Token Counting",
     rateGuard: true,
     portkey: true,
     aws: false,
-    kong: false,
+    kong: { checked: true, text: "(Enterprise)" },
   },
   {
     name: "Distributed Rate Limiting",
     rateGuard: true,
-    portkey: false,
+    portkey: true,
     aws: true,
     kong: true,
   },
@@ -72,20 +85,20 @@ const features = [
     rateGuard: true,
     portkey: false,
     aws: false,
-    kong: false,
+    kong: "Partial",
   },
   {
     name: "Webhook Relay & Retries",
     rateGuard: true,
-    portkey: false,
-    aws: false,
-    kong: false,
+    portkey: { checked: true, text: "(guardrails)" },
+    aws: "Partial (SQS)",
+    kong: "Partial",
   },
 ];
 
-function CheckMark({ isRateGuard = false }: { isRateGuard?: boolean }) {
+function CheckMark({ isRateGuard = false, text }: { isRateGuard?: boolean; text?: string }) {
   return (
-    <div className="flex items-center justify-center">
+    <div className="flex flex-col items-center justify-center gap-1">
       <Check 
         className={`w-5 h-5 ${
           isRateGuard 
@@ -93,16 +106,66 @@ function CheckMark({ isRateGuard = false }: { isRateGuard?: boolean }) {
             : "text-green-500/50"
         }`} 
       />
+      {text && (
+        <span className="text-[10px] sm:text-xs text-muted-foreground font-medium text-center leading-tight">
+          {text}
+        </span>
+      )}
     </div>
   );
 }
 
-function CrossMark() {
+function CrossMark({ text }: { text?: string }) {
   return (
-    <div className="flex items-center justify-center">
+    <div className="flex flex-col items-center justify-center gap-1">
       <X className="w-5 h-5 text-red-500/30" />
+      {text && (
+        <span className="text-[10px] sm:text-xs text-muted-foreground font-medium text-center leading-tight">
+          {text}
+        </span>
+      )}
     </div>
   );
+}
+
+function TextValue({ text }: { text: string }) {
+  return (
+    <div className="flex items-center justify-center">
+      <span className="text-xs sm:text-sm text-muted-foreground font-medium text-center">
+        {text}
+      </span>
+    </div>
+  );
+}
+
+function CellContent({ value, isRateGuard = false }: { value: FeatureValue; isRateGuard?: boolean }) {
+  if (typeof value === "boolean") {
+    return value ? <CheckMark isRateGuard={isRateGuard} /> : <CrossMark />;
+  }
+  
+  if (typeof value === "string") {
+    return <TextValue text={value} />;
+  }
+
+  if (typeof value === "object") {
+    return value.checked ? (
+      <CheckMark isRateGuard={isRateGuard} text={value.text} />
+    ) : (
+      <CrossMark text={value.text} />
+    );
+  }
+
+  return null;
+}
+
+function countFeatures(competitorKey: keyof FeatureRow) {
+  return features.filter((f) => {
+    const val = f[competitorKey];
+    if (typeof val === "boolean") return val;
+    if (typeof val === "object" && val !== null && "checked" in val) return val.checked;
+    // For "Partial" strings, we don't count them as full features in the summary
+    return false;
+  }).length;
 }
 
 export function Comparison() {
@@ -201,20 +264,16 @@ export function Comparison() {
                           {feature.name}
                         </td>
                         <td className="px-6 py-4 bg-primary/5 border-x-2 border-primary/20">
-                          {feature.rateGuard ? (
-                            <CheckMark isRateGuard />
-                          ) : (
-                            <CrossMark />
-                          )}
+                          <CellContent value={feature.rateGuard} isRateGuard />
                         </td>
                         <td className="px-6 py-4">
-                          {feature.portkey ? <CheckMark /> : <CrossMark />}
+                          <CellContent value={feature.portkey} />
                         </td>
                         <td className="px-6 py-4">
-                          {feature.aws ? <CheckMark /> : <CrossMark />}
+                          <CellContent value={feature.aws} />
                         </td>
                         <td className="px-6 py-4">
-                          {feature.kong ? <CheckMark /> : <CrossMark />}
+                          <CellContent value={feature.kong} />
                         </td>
                       </motion.tr>
                     ))}
@@ -226,19 +285,19 @@ export function Comparison() {
                       </td>
                       <td className="px-6 py-4 text-center bg-primary/10 border-x-2 border-primary/20">
                         <span className="text-primary text-lg font-bold">
-                          {features.filter((f) => f.rateGuard).length}/
+                          {countFeatures("rateGuard")}/
                           {features.length}
                         </span>
                       </td>
                       <td className="px-6 py-4 text-center text-muted-foreground">
-                        {features.filter((f) => f.portkey).length}/
+                        {countFeatures("portkey")}/
                         {features.length}
                       </td>
                       <td className="px-6 py-4 text-center text-muted-foreground">
-                        {features.filter((f) => f.aws).length}/{features.length}
+                        {countFeatures("aws")}/{features.length}
                       </td>
                       <td className="px-6 py-4 text-center text-muted-foreground">
-                        {features.filter((f) => f.kong).length}/
+                        {countFeatures("kong")}/
                         {features.length}
                       </td>
                     </tr>

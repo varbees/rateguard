@@ -19,24 +19,28 @@ import {
   Crown,
   ArrowRight,
   Calculator,
-  HelpCircle,
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
 import { UpgradeModal } from "@/components/pricing/UpgradeModal";
+import { Footer } from "@/components/layout/Footer";
+import { Header } from "@/components/landing/Header";
+import { useGeo } from "@/hooks/use-geo";
+import { PRICING_TIERS, CURRENCY_SYMBOLS } from "@/lib/constants";
 
 // Pricing data
 const pricingTiers = [
   {
     id: "free",
     name: "Free",
-    price: { monthly: 0, annual: 0 },
+    // price removed, calculated dynamically
     icon: Shield,
-    description: "Perfect for getting started",
+    description: "Perfect for hobbyists and side projects",
     features: [
-      "2 APIs",
-      "10K requests/day",
+      "3 APIs",
+      "100K requests/month",
+      "100k tokens/month",
       "Basic analytics",
       "Community support",
       "99% uptime",
@@ -47,45 +51,47 @@ const pricingTiers = [
     isCurrent: true,
   },
   {
-    id: "pro",
-    name: "Pro",
-    price: { monthly: 19, annual: 15.2 }, // 20% off annual
+    id: "starter",
+    name: "Starter",
+    // price removed, calculated dynamically
     icon: Zap,
-    description: "For growing teams and apps",
+    description: "For growing startups and serious developers",
     features: [
       "10 APIs",
-      "100K requests/day",
+      "1M requests/month",
+      "10M tokens/month",
       "Advanced analytics",
-      "Email support",
+      "Email support (24h response)",
       "Priority queue",
       "Custom rate limits",
       "Webhook notifications",
       "99.9% uptime SLA",
     ],
     limitations: [],
-    costPer1K: "$0.19",
+    costPer1K: "$0.029",
     popular: true,
   },
   {
-    id: "business",
-    name: "Business",
-    price: { monthly: 49, annual: 39.2 }, // 20% off annual
+    id: "pro",
+    name: "Pro",
+    // price removed, calculated dynamically
     icon: Crown,
-    description: "For enterprises at scale",
+    description: "For scaling teams with high volume needs",
     features: [
-      "50 APIs",
-      "1M requests/day",
-      "Custom rate limits",
-      "Dedicated support",
-      "99.9% uptime SLA",
-      "Advanced security",
+      "Unlimited APIs",
+      "10M requests/month",
+      "LLM token tracking",
+      "Custom rate limits & rules",
+      "Dedicated support channel",
+      "99.99% uptime SLA",
+      "Advanced security (WAF)",
       "SSO & team management",
       "Custom integrations",
       "Priority phone support",
       "Dedicated account manager",
     ],
     limitations: [],
-    costPer1K: "$0.049",
+    costPer1K: "$0.009",
     enterprise: true,
   },
 ];
@@ -104,7 +110,7 @@ const faqData = [
   {
     question: "Is there a free trial for paid plans?",
     answer:
-      "Yes! All paid plans include a 7-day free trial. No credit card required to start.",
+      "Yes! All paid plans include a 14-day free trial. No credit card required to start.",
   },
   {
     question: "Do you offer refunds?",
@@ -119,12 +125,13 @@ const faqData = [
   {
     question: "How does billing work for annual plans?",
     answer:
-      "Annual plans are billed once per year and include a 20% discount. You can switch to monthly billing at renewal.",
+      "Annual plans are billed once per year and include a significant discount (up to 20%). You can switch to monthly billing at renewal.",
   },
 ];
 
 export default function PricingPage() {
-  const [isAnnual, setIsAnnual] = useState(false);
+  const { Currency: currency, isLoading } = useGeo();
+  const [isAnnual, setIsAnnual] = useState(true);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<string>("");
@@ -134,7 +141,13 @@ export default function PricingPage() {
   const [downtime, setDowntime] = useState(5);
 
   const calculateROI = () => {
-    const rateguardCost = isAnnual ? 19 * 12 * 0.8 : 19 * 12; // Pro plan
+    // Default to USD for ROI calc if loading, or use current currency
+    const safeCurrency = isLoading ? "USD" : currency;
+    const monthlyPrice =
+      PRICING_TIERS.PRO[safeCurrency as keyof typeof PRICING_TIERS.PRO];
+    const annualPrice = monthlyPrice * 0.8; // Approx 20% discount
+
+    const rateguardCost = isAnnual ? annualPrice * 12 : monthlyPrice * 12;
     const downtimeCost = (currentCost * downtime) / 100;
     const savings = downtimeCost - rateguardCost;
     return Math.max(0, savings);
@@ -146,51 +159,31 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950">
-      {/* Header */}
-      <header className="border-b border-slate-800 sticky top-0 bg-slate-950/95 backdrop-blur z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="p-2 bg-blue-500 rounded-lg">
-              <Shield className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-2xl font-bold text-white">RateGuard</span>
-          </Link>
-          <div className="flex gap-4">
-            <Link href="/login">
-              <Button
-                variant="ghost"
-                className="text-slate-300 hover:text-white"
-              >
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button className="bg-blue-500 hover:bg-blue-600">
-                Get Started
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
+      <Header />
 
-      <main className="container mx-auto px-4 py-12">
+      <main className="container mx-auto px-4 py-12 md:py-24">
         {/* Hero Section */}
-        <section className="text-center mb-16">
-          <h1 className="text-5xl font-bold text-white mb-4">
+        <section className="text-center mb-16 animate-fade-in-up">
+          <h1 className="text-4xl md:text-6xl font-bold mb-6 bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">
             Simple, Transparent Pricing
           </h1>
-          <p className="text-xl text-slate-400 mb-8 max-w-2xl mx-auto">
+          <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
             Start free, upgrade as you grow. No hidden fees, no surprises.
+            <br />
+            Built for developers, by developers.
           </p>
 
           {/* Monthly/Annual Toggle */}
-          <div className="flex items-center justify-center gap-4 mb-4">
+          <div className="flex items-center justify-center gap-4 mb-8">
             <Label
               htmlFor="billing-toggle"
-              className={`text-lg ${
-                !isAnnual ? "text-white" : "text-slate-400"
+              className={`text-lg cursor-pointer ${
+                !isAnnual
+                  ? "text-foreground font-semibold"
+                  : "text-muted-foreground"
               }`}
+              onClick={() => setIsAnnual(false)}
             >
               Monthly
             </Label>
@@ -198,116 +191,130 @@ export default function PricingPage() {
               id="billing-toggle"
               checked={isAnnual}
               onCheckedChange={setIsAnnual}
-              className="data-[state=checked]:bg-blue-500"
+              className="data-[state=checked]:bg-primary"
             />
             <Label
               htmlFor="billing-toggle"
-              className={`text-lg ${
-                isAnnual ? "text-white" : "text-slate-400"
+              className={`text-lg cursor-pointer ${
+                isAnnual
+                  ? "text-foreground font-semibold"
+                  : "text-muted-foreground"
               }`}
+              onClick={() => setIsAnnual(true)}
             >
               Annual
             </Label>
             {isAnnual && (
-              <Badge className="bg-green-500/10 text-green-500 border-green-500/20">
-                Save 20%
+              <Badge
+                variant="secondary"
+                className="text-primary border-primary/20 animate-pulse-glow"
+              >
+                Save ~20%
               </Badge>
             )}
           </div>
-          <p className="text-sm text-slate-500">
-            All plans include 7-day free trial • Cancel anytime
-          </p>
         </section>
 
         {/* Pricing Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-20 max-w-6xl mx-auto">
-          {pricingTiers.map((tier) => {
+        <section className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-24 max-w-7xl mx-auto">
+          {pricingTiers.map((tier, index) => {
             const Icon = tier.icon;
-            const price = isAnnual ? tier.price.annual : tier.price.monthly;
-            const totalAnnual = isAnnual ? price * 12 : tier.price.annual * 12;
+
+            // Calculate dynamic price
+            const safeCurrency = isLoading ? "USD" : currency;
+            const tierKey = tier.id.toUpperCase() as keyof typeof PRICING_TIERS;
+            const monthlyPrice =
+              PRICING_TIERS[tierKey][
+                safeCurrency as keyof typeof PRICING_TIERS.FREE
+              ];
+            const annualPrice = Math.floor(monthlyPrice * 0.8); // 20% discount for annual
+
+            const displayPrice = isAnnual ? annualPrice : monthlyPrice;
+            const totalAnnual = displayPrice * 12;
+            const symbol = CURRENCY_SYMBOLS[safeCurrency] || "$";
 
             return (
               <Card
                 key={tier.id}
-                className={`relative bg-slate-900 border-slate-800 ${
-                  tier.popular ? "ring-2 ring-blue-500" : ""
-                } ${tier.isCurrent ? "opacity-75" : ""}`}
+                className={`relative flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-2 ${
+                  tier.popular
+                    ? "border-primary shadow-lg shadow-primary/10 scale-105 z-10"
+                    : "border-border bg-card/50"
+                }`}
+                style={{ animationDelay: `${index * 100}ms` }}
               >
                 {tier.popular && (
                   <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <Badge className="bg-blue-500 text-white px-4 py-1">
+                    <Badge className="bg-primary text-primary-foreground px-4 py-1 shadow-lg">
                       Most Popular
                     </Badge>
                   </div>
                 )}
-                {tier.isCurrent && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <Badge className="bg-slate-700 text-white px-4 py-1">
-                      Current Plan
-                    </Badge>
-                  </div>
-                )}
 
-                <CardHeader className="text-center pb-8">
-                  <div className="mx-auto mb-4 p-3 bg-blue-500/10 rounded-full w-fit">
-                    <Icon className="w-8 h-8 text-blue-500" />
+                <CardHeader className="text-center pb-8 pt-8">
+                  <div
+                    className={`mx-auto mb-4 p-3 rounded-full w-fit ${
+                      tier.popular ? "bg-primary/10" : "bg-muted"
+                    }`}
+                  >
+                    <Icon
+                      className={`w-8 h-8 ${
+                        tier.popular ? "text-primary" : "text-muted-foreground"
+                      }`}
+                    />
                   </div>
-                  <CardTitle className="text-2xl text-white mb-2">
+                  <CardTitle className="text-2xl font-bold mb-2">
                     {tier.name}
                   </CardTitle>
-                  <CardDescription className="text-slate-400 mb-4">
+                  <CardDescription className="text-muted-foreground mb-4 h-10">
                     {tier.description}
                   </CardDescription>
 
                   <div className="space-y-1">
                     <div className="flex items-baseline justify-center gap-1">
-                      <span className="text-4xl font-bold text-white">
-                        ${price.toFixed(price === 0 ? 0 : 2)}
+                      <span className="text-4xl font-bold">
+                        {symbol}
+                        {displayPrice}
                       </span>
-                      <span className="text-slate-400">
-                        /{isAnnual ? "month" : "month"}
+                      <span className="text-muted-foreground">
+                        /{isAnnual ? "mo" : "mo"}
                       </span>
                     </div>
-                    {isAnnual && price > 0 && (
-                      <p className="text-sm text-slate-500">
-                        ${totalAnnual.toFixed(2)} billed annually
+                    {isAnnual && displayPrice > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Billed {symbol}
+                        {totalAnnual} yearly
                       </p>
                     )}
-                    <p className="text-xs text-blue-400 font-medium">
+                    <p className="text-xs text-primary font-medium mt-2">
                       {tier.costPer1K} per 1K requests
                     </p>
                   </div>
                 </CardHeader>
 
-                <CardContent className="space-y-6">
-                  <ul className="space-y-3">
+                <CardContent className="space-y-8 flex-1 flex flex-col">
+                  <ul className="space-y-4 flex-1">
                     {tier.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2">
-                        <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-                        <span className="text-slate-300 text-sm">
+                      <li key={feature} className="flex items-start gap-3">
+                        <CheckCircle className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                        <span className="text-sm text-foreground/80">
                           {feature}
                         </span>
                       </li>
                     ))}
                   </ul>
 
-                  {tier.isCurrent ? (
-                    <Button className="w-full" variant="outline" disabled>
-                      Current Plan
-                    </Button>
-                  ) : (
-                    <Button
-                      className={`w-full group ${
-                        tier.popular
-                          ? "bg-blue-500 hover:bg-blue-600"
-                          : "bg-slate-800 hover:bg-slate-700"
-                      }`}
-                      onClick={() => handleUpgrade(tier.id)}
-                    >
-                      {tier.id === "free" ? "Start Free Trial" : "Upgrade Now"}
-                      <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                    </Button>
-                  )}
+                  <Button
+                    size="lg"
+                    variant={tier.popular ? "default" : "outline"}
+                    className={`w-full group ${
+                      tier.popular ? "shadow-lg shadow-primary/20" : ""
+                    }`}
+                    onClick={() => handleUpgrade(tier.id)}
+                  >
+                    {tier.id === "free" ? "Start Free" : "Get Started"}
+                    <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                  </Button>
                 </CardContent>
               </Card>
             );
@@ -315,92 +322,89 @@ export default function PricingPage() {
         </section>
 
         {/* Feature Comparison Table */}
-        <section className="mb-20">
-          <h2 className="text-3xl font-bold text-white text-center mb-12">
+        <section
+          className="mb-24 animate-fade-in-up"
+          style={{ animationDelay: "300ms" }}
+        >
+          <h2 className="text-3xl font-bold text-center mb-12">
             Compare Plans
           </h2>
-          <div className="overflow-x-auto">
-            <table className="w-full max-w-5xl mx-auto bg-slate-900 border border-slate-800 rounded-lg">
+          <div className="overflow-x-auto rounded-xl border border-border bg-card/50 shadow-sm">
+            <table className="w-full max-w-5xl mx-auto">
               <thead>
-                <tr className="border-b border-slate-800">
-                  <th className="text-left p-4 text-white font-semibold">
-                    Feature
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="text-left p-6 font-semibold">Feature</th>
+                  <th className="text-center p-6 font-semibold">Free</th>
+                  <th className="text-center p-6 font-semibold text-primary bg-primary/5">
+                    Starter
                   </th>
-                  <th className="text-center p-4 text-white font-semibold">
-                    Free
-                  </th>
-                  <th className="text-center p-4 text-white font-semibold bg-blue-500/5">
-                    Pro
-                  </th>
-                  <th className="text-center p-4 text-white font-semibold">
-                    Business
-                  </th>
+                  <th className="text-center p-6 font-semibold">Pro</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800">
-                <tr>
-                  <td className="p-4 text-slate-300">APIs</td>
-                  <td className="p-4 text-center text-slate-400">2</td>
-                  <td className="p-4 text-center text-white bg-blue-500/5">
-                    10
+              <tbody className="divide-y divide-border">
+                <tr className="hover:bg-muted/10">
+                  <td className="p-4 pl-6 font-medium">APIs</td>
+                  <td className="p-4 text-center text-muted-foreground">3</td>
+                  <td className="p-4 text-center font-bold bg-primary/5">10</td>
+                  <td className="p-4 text-center text-muted-foreground">
+                    Unlimited
                   </td>
-                  <td className="p-4 text-center text-slate-400">50</td>
                 </tr>
-                <tr>
-                  <td className="p-4 text-slate-300">Requests/day</td>
-                  <td className="p-4 text-center text-slate-400">10K</td>
-                  <td className="p-4 text-center text-white bg-blue-500/5">
+                <tr className="hover:bg-muted/10">
+                  <td className="p-4 pl-6 font-medium">Requests/month</td>
+                  <td className="p-4 text-center text-muted-foreground">
                     100K
                   </td>
-                  <td className="p-4 text-center text-slate-400">1M</td>
+                  <td className="p-4 text-center font-bold bg-primary/5">1M</td>
+                  <td className="p-4 text-center text-muted-foreground">10M</td>
                 </tr>
-                <tr>
-                  <td className="p-4 text-slate-300">Analytics</td>
-                  <td className="p-4 text-center text-slate-400">Basic</td>
-                  <td className="p-4 text-center text-white bg-blue-500/5">
+                <tr className="hover:bg-muted/10">
+                  <td className="p-4 pl-6 font-medium">Tokens/month</td>
+                  <td className="p-4 text-center text-muted-foreground">
+                    100K
+                  </td>
+                  <td className="p-4 text-center font-bold bg-primary/5">
+                    10M
+                  </td>
+                  <td className="p-4 text-center text-muted-foreground">
+                    100M
+                  </td>
+                </tr>
+                <tr className="hover:bg-muted/10">
+                  <td className="p-4 pl-6 font-medium">Analytics</td>
+                  <td className="p-4 text-center text-muted-foreground">
+                    Basic
+                  </td>
+                  <td className="p-4 text-center font-bold bg-primary/5">
                     Advanced
                   </td>
-                  <td className="p-4 text-center text-slate-400">Advanced</td>
-                </tr>
-                <tr>
-                  <td className="p-4 text-slate-300">Support</td>
-                  <td className="p-4 text-center text-slate-400">Community</td>
-                  <td className="p-4 text-center text-white bg-blue-500/5">
-                    Email
-                  </td>
-                  <td className="p-4 text-center text-slate-400">Dedicated</td>
-                </tr>
-                <tr>
-                  <td className="p-4 text-slate-300">Priority Queue</td>
-                  <td className="p-4 text-center">
-                    <span className="text-red-400">✗</span>
-                  </td>
-                  <td className="p-4 text-center bg-blue-500/5">
-                    <CheckCircle className="w-5 h-5 text-green-500 mx-auto" />
-                  </td>
-                  <td className="p-4 text-center">
-                    <CheckCircle className="w-5 h-5 text-green-500 mx-auto" />
+                  <td className="p-4 text-center text-muted-foreground">
+                    Advanced
                   </td>
                 </tr>
-                <tr>
-                  <td className="p-4 text-slate-300">Custom Rate Limits</td>
-                  <td className="p-4 text-center">
-                    <span className="text-red-400">✗</span>
+                <tr className="hover:bg-muted/10">
+                  <td className="p-4 pl-6 font-medium">Rate Limiting</td>
+                  <td className="p-4 text-center text-muted-foreground">
+                    Standard
                   </td>
-                  <td className="p-4 text-center bg-blue-500/5">
-                    <CheckCircle className="w-5 h-5 text-green-500 mx-auto" />
+                  <td className="p-4 text-center font-bold bg-primary/5">
+                    Custom Rules
                   </td>
-                  <td className="p-4 text-center">
-                    <CheckCircle className="w-5 h-5 text-green-500 mx-auto" />
+                  <td className="p-4 text-center text-muted-foreground">
+                    Advanced WAF
                   </td>
                 </tr>
-                <tr>
-                  <td className="p-4 text-slate-300">SLA Guarantee</td>
-                  <td className="p-4 text-center text-slate-400">99%</td>
-                  <td className="p-4 text-center text-white bg-blue-500/5">
-                    99.9%
+                <tr className="hover:bg-muted/10">
+                  <td className="p-4 pl-6 font-medium">Support</td>
+                  <td className="p-4 text-center text-muted-foreground">
+                    Community
                   </td>
-                  <td className="p-4 text-center text-slate-400">99.9%</td>
+                  <td className="p-4 text-center font-bold bg-primary/5">
+                    Email (24h)
+                  </td>
+                  <td className="p-4 text-center text-muted-foreground">
+                    Dedicated
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -408,109 +412,128 @@ export default function PricingPage() {
         </section>
 
         {/* ROI Calculator */}
-        <section className="mb-20 max-w-4xl mx-auto">
-          <Card className="bg-gradient-to-br from-blue-500/10 to-purple-500/10 border-blue-500/20">
+        <section
+          className="mb-24 max-w-4xl mx-auto animate-fade-in-up"
+          style={{ animationDelay: "400ms" }}
+        >
+          <Card className="overflow-hidden border-primary/20 shadow-2xl shadow-primary/5">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
             <CardHeader>
               <div className="flex items-center gap-3 mb-2">
-                <Calculator className="w-6 h-6 text-blue-400" />
-                <CardTitle className="text-2xl text-white">
-                  Calculate Your ROI
-                </CardTitle>
+                <div className="p-2 bg-primary/10 rounded-lg">
+                  <Calculator className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle className="text-2xl">Calculate Your ROI</CardTitle>
               </div>
-              <CardDescription className="text-slate-300">
-                See how much RateGuard can save your business
+              <CardDescription>
+                See how much RateGuard can save your business by preventing
+                downtime
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-white">
-                    Monthly API costs without RateGuard
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl text-white">$</span>
+            <CardContent className="space-y-8 relative">
+              <div className="grid md:grid-cols-2 gap-8">
+                <div className="space-y-3">
+                  <Label>Monthly API costs without RateGuard</Label>
+                  <div className="flex items-center gap-2 bg-muted/50 rounded-md border border-input px-3 focus-within:ring-2 focus-within:ring-ring">
+                    <span className="text-xl text-muted-foreground">
+                      {isLoading ? "$" : CURRENCY_SYMBOLS[currency] || "$"}
+                    </span>
                     <input
                       type="number"
                       value={currentCost}
                       onChange={(e) => setCurrentCost(Number(e.target.value))}
-                      className="flex-1 bg-slate-800 border border-slate-700 rounded-md px-4 py-2 text-white text-lg"
+                      className="flex-1 bg-transparent border-none py-2 text-lg focus:outline-none"
                       min="0"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-white">
-                    Estimated downtime/errors (%)
-                  </Label>
-                  <div className="flex items-center gap-2">
+                <div className="space-y-3">
+                  <Label>Estimated downtime/errors (%)</Label>
+                  <div className="flex items-center gap-2 bg-muted/50 rounded-md border border-input px-3 focus-within:ring-2 focus-within:ring-ring">
                     <input
                       type="number"
                       value={downtime}
                       onChange={(e) => setDowntime(Number(e.target.value))}
-                      className="flex-1 bg-slate-800 border border-slate-700 rounded-md px-4 py-2 text-white text-lg"
+                      className="flex-1 bg-transparent border-none py-2 text-lg focus:outline-none"
                       min="0"
                       max="100"
                     />
-                    <span className="text-2xl text-white">%</span>
+                    <span className="text-xl text-muted-foreground">%</span>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 text-center">
-                <p className="text-slate-400 mb-2">Estimated Annual Savings</p>
-                <p className="text-4xl font-bold text-green-500">
-                  ${(calculateROI() * 12).toFixed(2)}
+              <div className="bg-card border border-border rounded-xl p-8 text-center shadow-inner">
+                <p className="text-muted-foreground mb-2 font-medium">
+                  Estimated Annual Savings
                 </p>
-                <p className="text-sm text-slate-500 mt-2">
+                <p className="text-5xl font-bold text-green-500 mb-2">
+                  {isLoading ? "$" : CURRENCY_SYMBOLS[currency] || "$"}
+                  {(calculateROI() * 12).toFixed(2)}
+                </p>
+                <p className="text-sm text-muted-foreground">
                   ROI:{" "}
-                  {(
-                    (calculateROI() / (isAnnual ? 19 * 12 * 0.8 : 19 * 12)) *
-                    100
-                  ).toFixed(0)}
-                  %
+                  <span className="font-bold text-foreground">
+                    {(
+                      (calculateROI() /
+                        (isAnnual
+                          ? PRICING_TIERS.PRO[
+                              currency as keyof typeof PRICING_TIERS.PRO
+                            ] *
+                            0.8 *
+                            12
+                          : PRICING_TIERS.PRO[
+                              currency as keyof typeof PRICING_TIERS.PRO
+                            ] * 12)) *
+                      100
+                    ).toFixed(0)}
+                    %
+                  </span>
                 </p>
               </div>
-
-              <p className="text-xs text-slate-400 text-center">
-                * Based on average downtime costs and Pro plan pricing
-              </p>
             </CardContent>
           </Card>
         </section>
 
         {/* FAQ Section */}
-        <section className="mb-20 max-w-3xl mx-auto">
-          <h2 className="text-3xl font-bold text-white text-center mb-12">
+        <section
+          className="mb-24 max-w-3xl mx-auto animate-fade-in-up"
+          style={{ animationDelay: "500ms" }}
+        >
+          <h2 className="text-3xl font-bold text-center mb-12">
             Frequently Asked Questions
           </h2>
           <div className="space-y-4">
             {faqData.map((faq, index) => (
               <Card
                 key={index}
-                className="bg-slate-900 border-slate-800 cursor-pointer hover:border-slate-700 transition-colors"
+                className={`cursor-pointer transition-all duration-200 hover:border-primary/50 ${
+                  expandedFaq === index
+                    ? "border-primary/50 bg-primary/5"
+                    : "bg-card"
+                }`}
                 onClick={() =>
                   setExpandedFaq(expandedFaq === index ? null : index)
                 }
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <HelpCircle className="w-5 h-5 text-blue-400" />
-                      <h3 className="text-lg font-semibold text-white">
-                        {faq.question}
-                      </h3>
-                    </div>
+                    <h3 className="text-lg font-semibold pr-8">
+                      {faq.question}
+                    </h3>
                     {expandedFaq === index ? (
-                      <ChevronUp className="w-5 h-5 text-slate-400" />
+                      <ChevronUp className="w-5 h-5 text-primary flex-shrink-0" />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-slate-400" />
+                      <ChevronDown className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                     )}
                   </div>
                 </CardHeader>
                 {expandedFaq === index && (
-                  <CardContent>
-                    <p className="text-slate-300">{faq.answer}</p>
+                  <CardContent className="animate-fade-in-up">
+                    <p className="text-muted-foreground leading-relaxed">
+                      {faq.answer}
+                    </p>
                   </CardContent>
                 )}
               </Card>
@@ -518,67 +541,42 @@ export default function PricingPage() {
           </div>
         </section>
 
-        {/* Trust Badges */}
-        <section className="text-center mb-20">
-          <h3 className="text-xl font-semibold text-white mb-6">
-            Trusted by Developers Worldwide
-          </h3>
-          <div className="flex flex-wrap justify-center gap-8 text-slate-400">
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-              <span>No Hidden Fees</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-              <span>Cancel Anytime</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-              <span>30-Day Money Back</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-green-500" />
-              <span>7-Day Free Trial</span>
-            </div>
-          </div>
-        </section>
-
         {/* CTA Section */}
-        <section className="text-center bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-2xl p-12">
-          <h2 className="text-4xl font-bold text-white mb-4">
-            Ready to Get Started?
-          </h2>
-          <p className="text-xl text-slate-300 mb-8">
-            Join thousands of developers using RateGuard to protect their APIs
-          </p>
-          <div className="flex gap-4 justify-center">
-            <Link href="/signup">
-              <Button size="lg" className="bg-blue-500 hover:bg-blue-600">
-                Start Free Trial
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-slate-700 hover:bg-slate-800"
-              >
-                View Documentation
-              </Button>
-            </Link>
+        <section className="text-center relative overflow-hidden rounded-3xl p-12 md:p-20 border border-primary/20 bg-gradient-to-b from-primary/5 to-transparent">
+          <div className="relative z-10">
+            <h2 className="text-4xl md:text-5xl font-bold mb-6">
+              Ready to Scale?
+            </h2>
+            <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto">
+              Join thousands of developers using RateGuard to protect their APIs
+              and sleep better at night.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link href="/signup">
+                <Button
+                  size="lg"
+                  className="w-full sm:w-auto text-lg px-8 py-6 shadow-xl shadow-primary/20 hover:scale-105 transition-transform"
+                >
+                  Start Free Trial
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+              </Link>
+              <Link href="/docs">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="w-full sm:w-auto text-lg px-8 py-6 hover:bg-muted"
+                >
+                  Read Documentation
+                </Button>
+              </Link>
+            </div>
           </div>
         </section>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800 py-8 mt-20">
-        <div className="container mx-auto px-4 text-center text-slate-400">
-          <p>&copy; 2025 RateGuard. All rights reserved.</p>
-        </div>
-      </footer>
+      <Footer />
 
-      {/* Upgrade Modal */}
       <UpgradeModal
         isOpen={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}

@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, Zap, Loader2 } from "lucide-react";
+import { useGeo } from "@/hooks/use-geo";
+import { PRICING_TIERS, CURRENCY_SYMBOLS } from "@/lib/constants";
 
 interface PlanFeatures {
   max_apis: number;
@@ -27,8 +29,7 @@ interface Plan {
   id: string;
   name: string;
   tier: string;
-  price: number;
-  displayPrice: string;
+  // price and displayPrice removed, calculated dynamically
   period: string;
   description: string;
   features: PlanFeatures;
@@ -41,8 +42,6 @@ const plans: Plan[] = [
     id: "free",
     name: "Free",
     tier: "free",
-    price: 0,
-    displayPrice: "$0",
     period: "/month",
     description: "Perfect for getting started",
     features: {
@@ -61,8 +60,6 @@ const plans: Plan[] = [
     id: "pro",
     name: "Pro",
     tier: "pro",
-    price: 1900,
-    displayPrice: "$19",
     period: "/month",
     description: "For growing teams",
     features: {
@@ -82,8 +79,6 @@ const plans: Plan[] = [
     id: "business",
     name: "Business",
     tier: "business",
-    price: 4900,
-    displayPrice: "$49",
     period: "/month",
     description: "For enterprises",
     features: {
@@ -119,6 +114,7 @@ function formatNumber(num: number): string {
 }
 
 export function PlanComparisonCards({ currentTier }: PlanComparisonCardsProps) {
+  const { Currency: currency, Provider: geoProvider, isLoading } = useGeo();
   const [loadingPlan, setLoadingPlan] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -128,8 +124,7 @@ export function PlanComparisonCards({ currentTier }: PlanComparisonCardsProps) {
       setLoadingPlan(plan.tier);
 
       // Determine payment provider based on currency
-      // Default to Stripe for now (will be enhanced with geo-detection)
-      const provider = "stripe";
+      const provider = geoProvider || "stripe";
 
       // Call backend checkout endpoint
       const response = await fetch(`/api/v1/billing/${provider}/checkout`, {
@@ -193,6 +188,13 @@ export function PlanComparisonCards({ currentTier }: PlanComparisonCardsProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {plans.map((plan) => {
           const isCurrent = plan.tier === currentTier;
+          
+          // Calculate dynamic price
+          const safeCurrency = isLoading ? 'USD' : currency;
+          const tierKey = plan.tier.toUpperCase() as keyof typeof PRICING_TIERS;
+          const price = PRICING_TIERS[tierKey][safeCurrency as keyof typeof PRICING_TIERS.FREE];
+          const symbol = CURRENCY_SYMBOLS[safeCurrency] || '$';
+          const displayPrice = `${symbol}${price}`;
 
           return (
             <Card
@@ -230,7 +232,7 @@ export function PlanComparisonCards({ currentTier }: PlanComparisonCardsProps) {
                 <div className="mt-4">
                   <div className="flex items-baseline gap-1">
                     <span className="text-4xl font-bold text-foreground">
-                      {plan.displayPrice}
+                      {displayPrice}
                     </span>
                     <span className="text-muted-foreground text-sm">
                       {plan.period}

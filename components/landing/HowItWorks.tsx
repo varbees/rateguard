@@ -5,7 +5,7 @@ import { InteractivePlayground } from "./InteractivePlayground";
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" className="py-24 bg-muted/30">
+    <section id="how-it-works" className="py-24 bg-background">
       <div className="container max-w-7xl mx-auto px-4 md:px-6">
         {/* Section Header */}
         <div className="text-center mb-16">

@@ -1,3 +1,4 @@
+r;
 /**
  * Landing page constants
  * Centralized content, pricing, features, and configuration data
@@ -16,6 +17,7 @@ import {
   Activity,
   type LucideIcon,
 } from "lucide-react";
+import r from "react-syntax-highlighter/dist/esm/languages/hljs/r";
 
 // Hero section content
 export const HERO_CONTENT = {
@@ -57,6 +59,32 @@ export interface Feature {
   gradient: string;
   monetizationValue: string;
 }
+
+export const PRICING_TIERS = {
+  FREE: {
+    USD: 0,
+    INR: 0,
+    EUR: 0,
+  },
+  STARTER: {
+    USD: 29,
+    INR: 499,
+    EUR: 29,
+  },
+  PRO: {
+    USD: 79,
+    INR: 1499,
+    EUR: 79,
+  },
+};
+
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  INR: "₹",
+  EUR: "€",
+};
+
+export const APP_NAME = "RateGuard";
 
 export const FEATURES: Feature[] = [
   {
@@ -230,49 +258,52 @@ export const PRICING_PLANS: PricingPlan[] = [
     description: "Perfect for side projects and experimentation",
     features: [
       "Up to 3 APIs",
-      "10,000 requests/month",
-      "Basic rate limiting",
+      "100K requests/month",
+      "100K tokens/month",
+      "Basic analytics",
       "7-day analytics retention",
       "Community support",
-      "99.9% uptime SLA",
+      "99% uptime",
     ],
     cta: "Start Free",
   },
   {
-    name: "Pro",
+    name: "Starter",
     price: "$29",
     period: "/month",
-    description: "For production applications and growing teams",
+    description: "For growing startups and serious developers",
     features: [
-      "Up to 20 APIs",
-      "1 million requests/month",
-      "Advanced rate limiting",
+      "Up to 10 APIs",
+      "1M requests/month",
+      "10M tokens/month",
+      "Advanced analytics",
       "30-day analytics retention",
-      "Priority support (24h response)",
-      "Custom rate limit rules",
+      "Email support (24h response)",
+      "Custom rate limits",
       "Webhook notifications",
-      "99.95% uptime SLA",
+      "99.9% uptime SLA",
     ],
     cta: "Start 14-Day Trial",
     popular: true,
     highlight: "Most Popular",
   },
   {
-    name: "Enterprise",
-    price: "Custom",
-    period: "",
-    description: "For large-scale operations with custom needs",
+    name: "Pro",
+    price: "$79",
+    period: "/month",
+    description: "For scaling teams with high volume needs",
     features: [
       "Unlimited APIs",
-      "Unlimited requests",
-      "Custom integrations",
-      "Unlimited analytics retention",
-      "Dedicated support (1h response)",
-      "SLA guarantees",
-      "On-premise deployment",
-      "Custom contracts",
+      "10M requests/month",
+      "100M tokens/month",
+      "Advanced analytics & monitoring",
+      "90-day analytics retention",
+      "Dedicated support channel",
+      "Custom rate limits & rules",
+      "Advanced security (WAF)",
+      "99.99% uptime SLA",
     ],
-    cta: "Contact Sales",
+    cta: "Start 14-Day Trial",
   },
 ];
 
