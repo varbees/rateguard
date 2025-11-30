@@ -1,52 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiConfigAPI, APIConfig } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Edit, Power, ExternalLink, Eye } from "lucide-react";
+import { Plus, Lock } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
-import APIProxyInfo from "@/components/dashboard/APIProxyInfo";
-import { SkeletonAPITable } from "@/components/dashboard";
+import { useUser } from "@/lib/hooks/use-user";
+import {
+  APIListWithStatus,
+  SearchAndFilterBar,
+  BulkActionsToolbar,
+  EmptyStateView,
+  LimitReachedState,
+  PlanStatusBanner,
+  SkeletonAPITable,
+} from "@/components/dashboard";
+import { FilterState } from "@/components/dashboard/SearchAndFilterBar";
+import { toast } from "@/lib/toast";
 
 export default function APIsPage() {
   const router = useRouter();
-  const [selectedAPI, setSelectedAPI] = useState<APIConfig | null>(null);
   const queryClient = useQueryClient();
+  const { user, hasAccess } = useUser();
 
-  const { data: apis, isLoading } = useQuery({
+  // State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedAPIs, setSelectedAPIs] = useState<Set<string>>(new Set());
+  const [filters, setFilters] = useState<FilterState>({
+    status: { active: false, paused: false },
+    health: { healthy: false, degraded: false, down: false },
+  });
+
+  // Data Fetching
+  const { data: apis, isLoading, error } = useQuery({
     queryKey: ["apis"],
     queryFn: apiConfigAPI.list,
   });
 
+  // Mutations
   const deleteMutation = useMutation({
     mutationFn: apiConfigAPI.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["apis"] });
       toasts.api.deleted("API");
+      setSelectedAPIs(new Set()); // Clear selection
     },
     onError: (error: Error) => {
       handleApiError(error, "Failed to delete API");
     },
   });
 
-  const handleViewDetails = (api: APIConfig) => {
-    router.push(`/dashboard/apis/${api.id}`);
-  };
+  const toggleMutation = useMutation({
+    mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
+      return apiConfigAPI.update(id, { enabled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["apis"] });
+      toast.success("API status updated");
+    },
+    onError: (error: Error) => {
+      handleApiError(error, "Failed to update API status");
+    },
+  });
 
-  const handleEdit = (api: APIConfig) => {
-    router.push(`/dashboard/apis/${api.id}/edit`);
+  // Derived State
+  const canCreate = useMemo(() => {
+    if (!user || !apis) return false;
+    // Check plan limits
+    const limit = user.planLimits.maxApis;
+    return apis.length < limit;
+  }, [user, apis]);
+
+  const filteredAPIs = useMemo(() => {
+    if (!apis) return [];
+    
+    return apis.filter((api) => {
+      // Search
+      const matchesSearch = 
+        api.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        api.target_url.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      if (!matchesSearch) return false;
+
+      // Status Filter
+      if (filters.status.active && !api.enabled) return false;
+      if (filters.status.paused && api.enabled) return false;
+
+      // Note: Health filtering would require joining with status data
+      // which is handled inside APIListWithStatus for display.
+      // For strict filtering, we'd need to lift that state up or 
+      // pass the filter down to the list component.
+      // For now, we'll implement basic status filtering here.
+
+      return true;
+    });
+  }, [apis, searchQuery, filters]);
+
+  // Handlers
+  const handleCreate = () => {
+    if (canCreate) {
+      router.push("/dashboard/apis/new");
+    }
   };
 
   const handleDelete = (id: string) => {
@@ -55,186 +111,145 @@ export default function APIsPage() {
     }
   };
 
+  const handleToggleStatus = (api: APIConfig) => {
+    toggleMutation.mutate({ id: api.id, enabled: !api.enabled });
+  };
+
+  const handleBulkDelete = () => {
+    if (confirm(`Are you sure you want to delete ${selectedAPIs.size} APIs?`)) {
+      // In a real app, we'd have a bulk delete endpoint
+      // For now, we'll just delete them one by one (not ideal but works)
+      selectedAPIs.forEach(id => deleteMutation.mutate(id));
+    }
+  };
+
+  const handleBulkPause = () => {
+    selectedAPIs.forEach(id => toggleMutation.mutate({ id, enabled: false }));
+  };
+
+  const handleBulkActivate = () => {
+    selectedAPIs.forEach(id => toggleMutation.mutate({ id, enabled: true }));
+  };
+
+  // Render
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div className="h-8 w-48 bg-muted animate-pulse rounded" />
+          <div className="h-10 w-32 bg-muted animate-pulse rounded" />
+        </div>
+        <SkeletonAPITable />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="py-12 text-center">
+        <h3 className="font-semibold mb-2">Failed to load APIs</h3>
+        <p className="text-muted-foreground mb-4">
+          {error instanceof Error ? error.message : "Unknown error"}
+        </p>
+        <Button onClick={() => queryClient.invalidateQueries({ queryKey: ["apis"] })}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
+
+  // Empty State (First time user)
+  if (!apis || apis.length === 0) {
+    return <EmptyStateView />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">
-            API Configurations
+          <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
+            Your API Proxies
+            <span className="text-sm font-normal text-muted-foreground bg-muted px-2 py-1 rounded-full">
+              {apis.length} / {user?.planLimits.maxApis === Infinity ? '∞' : user?.planLimits.maxApis}
+            </span>
           </h1>
           <p className="text-muted-foreground mt-1">
-            Manage your API endpoints and rate limits
+            Monitor and manage your protected API endpoints
           </p>
         </div>
         <Button
-          onClick={() => router.push("/dashboard/apis/new")}
-          className="bg-primary hover:bg-primary/90 text-primary-foreground"
+          onClick={handleCreate}
+          disabled={!canCreate}
+          className={!canCreate ? "opacity-80" : ""}
         >
-          <Plus className="w-4 h-4 mr-2" />
-          Add API
+          {canCreate ? (
+            <><Plus className="w-4 h-4 mr-2" /> Create API</>
+          ) : (
+            <><Lock className="w-4 h-4 mr-2" /> Limit Reached</>
+          )}
         </Button>
       </div>
 
-      {/* APIs Table */}
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <CardTitle className="text-card-foreground">Your APIs</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <SkeletonAPITable />
-          ) : apis && apis.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-border">
-                  <TableHead className="text-muted-foreground">Name</TableHead>
-                  <TableHead className="text-muted-foreground">
-                    Target URL
-                  </TableHead>
-                  <TableHead className="text-muted-foreground">
-                    Rate Limit
-                  </TableHead>
-                  <TableHead className="text-muted-foreground">
-                    Status
-                  </TableHead>
-                  <TableHead className="text-muted-foreground">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {apis.map((api) => (
-                  <TableRow
-                    key={api.id}
-                    className="border-border hover:bg-muted/50 transition-colors"
-                  >
-                    <TableCell className="font-medium text-foreground">
-                      <button
-                        onClick={() => handleViewDetails(api)}
-                        className="hover:text-primary hover:underline text-left"
-                      >
-                        {api.name}
-                      </button>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-xs truncate">
-                      {api.target_url}
-                    </TableCell>
-                    <TableCell className="text-foreground">
-                      <div className="flex flex-col gap-1">
-                        <span className="font-medium">
-                          {api.rate_limit_per_second} req/s
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          Burst: {api.burst_size}
-                        </span>
-                        {(api.rate_limit_per_hour > 0 ||
-                          api.rate_limit_per_day > 0 ||
-                          api.rate_limit_per_month > 0) && (
-                          <div className="text-xs text-primary mt-1">
-                            {api.rate_limit_per_hour > 0 && (
-                              <div>
-                                Hour: {api.rate_limit_per_hour.toLocaleString()}
-                              </div>
-                            )}
-                            {api.rate_limit_per_day > 0 && (
-                              <div>
-                                Day: {api.rate_limit_per_day.toLocaleString()}
-                              </div>
-                            )}
-                            {api.rate_limit_per_month > 0 && (
-                              <div>
-                                Month:{" "}
-                                {api.rate_limit_per_month.toLocaleString()}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={api.enabled ? "default" : "secondary"}
-                        className={
-                          api.enabled
-                            ? "bg-primary/10 text-primary border-primary/20"
-                            : "bg-muted text-muted-foreground border-border"
-                        }
-                      >
-                        <Power className="w-3 h-3 mr-1" />
-                        {api.enabled ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewDetails(api)}
-                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950"
-                          title="View API details and usage"
-                          aria-label={`View details for ${api.name}`}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setSelectedAPI(api)}
-                          className="text-primary hover:text-primary/80 hover:bg-primary/10"
-                          title="View proxy endpoint"
-                          aria-label={`View proxy endpoint for ${api.name}`}
-                        >
-                          <ExternalLink className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(api)}
-                          className="text-primary hover:text-primary/80 hover:bg-primary/10"
-                          aria-label={`Edit ${api.name}`}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(api.id)}
-                          className="text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                          aria-label={`Delete ${api.name}`}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground mb-4">
-                No APIs configured yet
-              </p>
-              <Button
-                onClick={() => router.push("/dashboard/apis/new")}
-                className="bg-primary hover:bg-primary/90 text-primary-foreground"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Your First API
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Plan Status Banner */}
+      {user && <PlanStatusBanner />}
 
-      {/* Proxy Info for Selected API */}
-      {selectedAPI && (
-        <APIProxyInfo
-          apiName={selectedAPI.name}
-          targetUrl={selectedAPI.target_url}
+      {/* Limit Reached State (if at limit and trying to view list) */}
+      {!canCreate && apis.length > 0 && (
+        // Optional: We could show a banner here instead of a full state
+        // or just rely on the disabled button + PlanStatusBanner
+        null
+      )}
+
+      {/* Search & Filter */}
+      <SearchAndFilterBar
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        filters={filters}
+        onFilterChange={setFilters}
+        totalResults={filteredAPIs.length}
+      />
+
+      {/* Bulk Actions (Pro+) */}
+      {hasAccess('pro') && (
+        <BulkActionsToolbar
+          selectedCount={selectedAPIs.size}
+          onBulkDelete={handleBulkDelete}
+          onBulkPause={handleBulkPause}
+          onBulkActivate={handleBulkActivate}
+          onClearSelection={() => setSelectedAPIs(new Set())}
         />
       )}
+
+      {/* Main List */}
+      <APIListWithStatus
+        apis={filteredAPIs}
+        loading={isLoading}
+        onSelectAPI={(id: string) => {
+          const newSelected = new Set(selectedAPIs);
+          if (newSelected.has(id)) {
+            newSelected.delete(id);
+          } else {
+            newSelected.add(id);
+          }
+          setSelectedAPIs(newSelected);
+        }}
+        onToggleSelection={(id: string) => {
+          const newSelected = new Set(selectedAPIs);
+          if (newSelected.has(id)) {
+            newSelected.delete(id);
+          } else {
+            newSelected.add(id);
+          }
+          setSelectedAPIs(newSelected);
+        }}
+        selectedIds={selectedAPIs}
+        canBulkAction={hasAccess('pro')}
+        onDelete={(api) => handleDelete(api.id)}
+        onToggleStatus={handleToggleStatus}
+        onEdit={(api) => router.push(`/dashboard/apis/${api.id}/edit`)}
+        onAdd={handleCreate}
+      />
     </div>
   );
 }

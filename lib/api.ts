@@ -48,6 +48,7 @@ export interface APIConfig {
   created_at: string;
   updated_at: string;
   custom_headers?: Record<string, string>;
+  provider?: string;
 }
 
 export interface UsageByAPI {

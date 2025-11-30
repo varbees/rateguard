@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   apiClient,
   User,
@@ -149,6 +150,21 @@ export function useAPIConfigs() {
   });
 }
 
+export function useCreateAPI() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: (data: Partial<APIConfig>) => apiClient.createAPIConfig(data as APIConfig),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.apiConfigs });
+      toast.success('API created successfully');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to create API: ${error.message}`);
+    },
+  });
+}
+
 export function useAPIConfig(id: string) {
   return useQuery({
     queryKey: queryKeys.apiConfig(id),
@@ -203,6 +219,10 @@ export function useDeleteAPIConfig() {
     },
   });
 }
+
+// Aliases for consistency
+export const useUpdateAPI = useUpdateAPIConfig;
+export const useDeleteAPI = useDeleteAPIConfig;
 
 // Queue Hooks
 export function useQueueStats() {

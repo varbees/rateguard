@@ -18,19 +18,25 @@ import {
 } from "@/components/ui/breadcrumb";
 import {
   ArrowLeft,
-  Edit,
   TrendingUp,
-  Clock,
-  Shield,
-  Settings,
   Loader2,
   CheckCircle2,
+  Download,
+  Edit,
+  Upload,
   Activity,
 } from "lucide-react";
 import { UsageProgressBar } from "@/components/dashboard/UsageProgressBar";
-import { useAPIConfig, useDashboardStats } from "@/lib/hooks/use-api";
+import { ProxyURLCard } from "@/components/dashboard/ProxyURLCard";
+import { QuickSettingsPanel } from "@/components/dashboard/QuickSettingsPanel";
+import { DangerZone } from "@/components/dashboard/DangerZone";
+import { LiveAnalyticsDashboard } from "@/components/dashboard/LiveAnalyticsDashboard";
+import { RecentRequestsStream } from "@/components/dashboard/RecentRequestsStream";
+import { APIKeysManagement } from "@/components/dashboard/APIKeysManagement";
+import { useAPIConfig, useDashboardStats, useUpdateAPI, useDeleteAPI } from "@/lib/hooks/use-api";
 import { SkeletonAPIDetail, APIUsageChart } from "@/components/dashboard";
 import { useAPIMetricsWebSocket } from "@/lib/hooks/use-api-metrics-websocket";
+import { toast } from "sonner";
 
 interface RateLimitSuggestion {
   api_id: string;
@@ -244,6 +250,52 @@ export default function APIDetailPage() {
   const apiId = params.id as string;
 
   const { data: api, isLoading } = useAPIConfig(apiId);
+  const updateMutation = useUpdateAPI();
+  const deleteMutation = useDeleteAPI();
+
+  // Handlers
+  const handleToggle = async (enabled: boolean) => {
+    try {
+      await updateMutation.mutateAsync({ id: apiId, data: { enabled } });
+      toast.success(`API ${enabled ? 'enabled' : 'disabled'} successfully`);
+    } catch (error) {
+      toast.error(`Failed to ${enabled ? 'enable' : 'disable'} API`);
+      throw error;
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync(apiId);
+      toast.success('API deleted successfully');
+      router.push('/dashboard/apis');
+    } catch (error) {
+      toast.error('Failed to delete API');
+      throw error;
+    }
+  };
+
+  const handleDisable = async () => {
+    await handleToggle(false);
+  };
+
+  const handleExport = async () => {
+    try {
+      // Implement export logic - for now just download API config as JSON
+      const dataStr = JSON.stringify(api, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${api?.name}-export-${new Date().toISOString()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success('API data exported successfully');
+    } catch (error) {
+      toast.error('Failed to export API data');
+      throw error;
+    }
+  };
 
   // Fetch dashboard stats for usage percentages
   const { data: dashboardStats } = useDashboardStats();
@@ -389,93 +441,53 @@ export default function APIDetailPage() {
       {/* Rate Limit Suggestions */}
       <RateLimitSuggestions apiId={apiId} />
 
-      {/* API Details */}
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Basic Info */}
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Settings className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">Basic Information</h3>
-          </div>
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm text-muted-foreground">Target URL</p>
-              <p className="text-sm font-mono">{api.target_url}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">API ID</p>
-              <p className="text-sm font-mono">{api.id}</p>
-            </div>
-          </div>
-        </Card>
+      {/* Proxy URL Card */}
+      <ProxyURLCard 
+        proxyUrl={api.proxy_url || `https://api.rateguard.io/proxy/${apiId}`}
+        targetUrl={api.target_url}
+        apiName={api.name}
+      />
 
-        {/* Rate Limits */}
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Shield className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">Current Rate Limits</h3>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Per Second:</span>
-              <span className="text-sm font-medium">
-                {api.rate_limit_per_second}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Per Hour:</span>
-              <span className="text-sm font-medium">
-                {api.rate_limit_per_hour || "N/A"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Per Day:</span>
-              <span className="text-sm font-medium">
-                {api.rate_limit_per_day || "N/A"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Burst Size:</span>
-              <span className="text-sm font-medium">{api.burst_size}</span>
-            </div>
-          </div>
-        </Card>
+      {/* Live Analytics Dashboard */}
+      <LiveAnalyticsDashboard
+        apiId={apiId}
+        metrics={liveMetrics ? {
+          requests: liveMetrics.metrics.requests_today,
+          successRate: liveMetrics.metrics.success_rate,
+          avgLatency: liveMetrics.metrics.avg_latency_ms,
+          totalCost: 0, // Not yet available in WebSocket stream
+          errors: liveMetrics.metrics.error_count
+        } : undefined}
+        isLive={isLive}
+        lastUpdate={lastUpdate || undefined}
+      />
 
-        {/* Advanced Settings */}
-        <Card className="p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Clock className="h-5 w-5 text-muted-foreground" />
-            <h3 className="text-lg font-semibold">Advanced Settings</h3>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Timeout:</span>
-              <span className="text-sm font-medium">
-                {api.timeout_seconds}s
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">
-                Retry Attempts:
-              </span>
-              <span className="text-sm font-medium">{api.retry_attempts}</span>
-            </div>
-          </div>
-        </Card>
+      {/* Recent Requests Stream */}
+      <RecentRequestsStream
+        apiId={apiId}
+        isLive={isLive}
+      />
 
-        {/* CORS */}
-        {api.allowed_origins && api.allowed_origins.length > 0 && (
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">CORS Origins</h3>
-            <div className="space-y-1">
-              {api.allowed_origins.map((origin, i) => (
-                <p key={i} className="text-sm font-mono">
-                  {origin}
-                </p>
-              ))}
-            </div>
-          </Card>
-        )}
+      {/* API Keys Management */}
+      <APIKeysManagement
+        apiId={apiId}
+      />
+
+      {/* Management Section */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Quick Settings */}
+        <QuickSettingsPanel 
+          api={api}
+          onToggle={handleToggle}
+        />
+
+        {/* Danger Zone */}
+        <DangerZone
+          api={api}
+          onDisable={handleDisable}
+          onDelete={handleDelete}
+          onExport={handleExport}
+        />
       </div>
     </div>
   );
