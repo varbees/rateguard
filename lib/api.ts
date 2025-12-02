@@ -12,10 +12,13 @@ const API_BASE_URL = isProduction
 export interface User {
   id: string;
   email: string;
+  handle: string; // NEW: Username for vanity URLs (/p/:handle/:slug/*)
   plan: "free" | "pro" | "business"; // Backend uses "business" not "enterprise"
   api_key?: string; // Optional - only present after signup/login, NOT in /me
   active: boolean;
   email_verified: boolean;
+  country_code?: string; // NEW: Detected country for geo-aware pricing
+  detected_currency?: string; // NEW: Currency based on location (USD, INR, EUR)
   last_login_at?: string;
   created_at: string;
   updated_at: string;
@@ -34,8 +37,9 @@ export interface APIConfig {
   id: string;
   user_id: string;
   name: string;
+  slug: string; // NEW: URL-safe project identifier for vanity URLs
   target_url: string;
-  proxy_url?: string; // Computed by backend
+  proxy_url?: string; // NEW: Computed field - full RateGuard proxy URL
   rate_limit_per_second: number;
   burst_size: number;
   rate_limit_per_hour: number; // NEW: Hourly rate limit (0 = unlimited)
@@ -297,6 +301,7 @@ export interface AnalyticsData {
 export interface SignupRequest {
   email: string;
   password: string;
+  handle: string; // NEW: Username for vanity URLs
   plan?: "free" | "pro" | "business";
 }
 
@@ -544,6 +549,54 @@ export interface TestConnectionResponse {
   tested_at: string;
 }
 
+// Marketplace Template Types (NEW)
+export interface APITemplate {
+  id: string;
+  provider: string; // 'openai', 'anthropic', 'stripe', etc.
+  display_name: string;
+  description: string;
+  icon_url?: string;
+  category: string; // 'ai', 'payments', 'communication', etc.
+  target_url: string;
+  auth_type: string;
+  required_headers: Record<string, string>;
+  rate_limit_per_second: number;
+  burst_size: number;
+  popularity_score: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TemplateUsage {
+  user_id: string;
+  template_provider: string;
+  requests: number;
+  usage_date: string;
+}
+
+export interface ListTemplatesResponse {
+  templates: APITemplate[];
+  count: number;
+}
+
+export interface TemplateUsageStatsResponse {
+  usage: TemplateUsage[];
+  total_requests: number;
+}
+
+// Handle availability check
+export interface HandleAvailabilityResponse {
+  available: boolean;
+  suggestions?: string[];
+}
+
+// Slug availability check  
+export interface SlugAvailabilityResponse {
+  available: boolean;
+  suggestions?: string[];
+}
+
 // Custom API Error Class
 export class APIError extends Error {
   constructor(
@@ -746,6 +799,17 @@ class APIClient {
     return response;
   }
 
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/api/v1/auth/verify?token=${token}`);
+  }
+
+  async resendVerificationEmail(email: string): Promise<{ message: string; dev_token?: string }> {
+    return this.request<{ message: string; dev_token?: string }>("/api/v1/auth/resend-verification", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
+
   async logout(): Promise<void> {
     await this.request("/api/v1/auth/logout", {
       method: "POST",
@@ -781,6 +845,44 @@ class APIClient {
       method: "POST",
       body: JSON.stringify(data),
     });
+  }
+
+  // Handle Operations (NEW)
+  async checkHandleAvailability(handle: string): Promise<HandleAvailabilityResponse> {
+    return this.request<HandleAvailabilityResponse>("/api/v1/auth/handle/check", {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+    });
+  }
+
+  async updateHandle(newHandle: string): Promise<User> {
+    const response = await this.request<{ user: User }>("/api/v1/auth/handle", {
+      method: "PUT",
+      body: JSON.stringify({ handle: newHandle }),
+    });
+    return response.user;
+  }
+
+  // Slug Operations (NEW)
+  async checkSlugAvailability(slug: string): Promise<SlugAvailabilityResponse> {
+    return this.request<SlugAvailabilityResponse>("/api/v1/apis/slug/check", {
+      method: "POST",
+      body: JSON.stringify({ slug }),
+    });
+  }
+
+  // Marketplace Template Operations (NEW)
+  async listTemplates(category?: string): Promise<ListTemplatesResponse> {
+    const params = category ? `?category=${encodeURIComponent(category)}` : '';
+    return this.request<ListTemplatesResponse>(`/api/v1/marketplace/templates${params}`);
+  }
+
+  async getTemplate(provider: string): Promise<APITemplate> {
+    return this.request<APITemplate>(`/api/v1/marketplace/templates/${provider}`);
+  }
+
+  async getTemplateUsage(days: number = 30): Promise<TemplateUsageStatsResponse> {
+    return this.request<TemplateUsageStatsResponse>(`/api/v1/marketplace/usage?days=${days}`);
   }
 
   // Dashboard Stats
@@ -1461,6 +1563,32 @@ export const apiConfigAPI = {
   delete: (id: string) => apiClient.deleteAPIConfig(id),
   testConnection: (data: TestConnectionRequest) =>
     apiClient.testConnection(data),
+};
+
+export const budgetAPI = {
+  get: () => apiClient.getBudgetSettings(),
+  set: (data: {
+    monthly_limit_cents: number;
+    alert_threshold_percent: number;
+  }) => apiClient.setBudgetSettings(data),
+  disable: () => apiClient.disableBudget(),
+};
+
+// NEW: Marketplace Template API
+export const marketplaceAPI = {
+  listTemplates: (category?: string) => apiClient.listTemplates(category),
+  getTemplate: (provider: string) => apiClient.getTemplate(provider),
+  getUsage: (days?: number) => apiClient.getTemplateUsage(days),
+};
+
+// NEW: Handle/Slug API
+export const handleAPI = {
+  checkAvailability: (handle: string) => apiClient.checkHandleAvailability(handle),
+  update: (newHandle: string) => apiClient.updateHandle(newHandle),
+};
+
+export const slugAPI = {
+  checkAvailability: (slug: string) => apiClient.checkSlugAvailability(slug),
 };
 
 export const settingsAPI = {

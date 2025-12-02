@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,12 +21,17 @@ import {
   AlertCircle,
   CheckCircle2,
   Shield,
+  User,
 } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
 import { useSignup } from "@/lib/hooks/use-api";
+import { handleAPI } from "@/lib/api";
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Handle validation regex (3-30 chars, lowercase alphanumeric + hyphen/underscore)
+const HANDLE_REGEX = /^[a-z0-9_-]{3,30}$/;
 
 // Password strength checker
 const getPasswordStrength = (password: string): { strength: number; label: string; color: string } => {
@@ -47,14 +52,19 @@ const getPasswordStrength = (password: string): { strength: number; label: strin
 
 export default function SignUpForm() {
   const [email, setEmail] = useState("");
+  const [handle, setHandle] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [handleError, setHandleError] = useState("");
+  const [handleChecking, setHandleChecking] = useState(false);
+  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null);
   const [passwordError, setPasswordError] = useState("");
   const [confirmPasswordError, setConfirmPasswordError] = useState("");
   
   const signupMutation = useSignup();
+  const debounceTimeout = useRef<NodeJS.Timeout>();
 
   // Validate email format
   const validateEmail = (email: string): boolean => {
@@ -68,6 +78,65 @@ export default function SignUpForm() {
     }
     setEmailError("");
     return true;
+  };
+
+  // Validate handle format and availability
+  const validateHandle = async (handle: string): Promise<boolean> => {
+    if (!handle) {
+      setHandleError("Username is required");
+      setHandleAvailable(null);
+      return false;
+    }
+    if (handle.length < 3) {
+      setHandleError("Username must be at least 3 characters");
+      setHandleAvailable(null);
+      return false;
+    }
+    if (handle.length > 30) {
+      setHandleError("Username must be at most 30 characters");
+      setHandleAvailable(null);
+      return false;
+    }
+    if (!HANDLE_REGEX.test(handle)) {
+      setHandleError("Username can only contain lowercase letters, numbers, hyphens, and underscores");
+      setHandleAvailable(null);
+      return false;
+    }
+    
+    // Check availability
+    setHandleChecking(true);
+    try {
+      const result = await handleAPI.checkAvailability(handle);
+      setHandleChecking(false);
+      
+      if (!result.available) {
+        setHandleError("Username is already taken");
+        setHandleAvailable(false);
+        return false;
+      }
+      
+      setHandleError("");
+      setHandleAvailable(true);
+      return true;
+    } catch {
+      setHandleChecking(false);
+      setHandleError("Unable to check availability");
+      setHandleAvailable(null);
+      return false;
+    }
+  };
+
+  // Debounced handle availability check
+  const checkHandleDebounced = (value: string) => {
+    if (debounceTimeout.current) {
+      clearTimeout(debounceTimeout.current);
+    }
+    
+    if (value.length >= 3 && HANDLE_REGEX.test(value)) {
+      debounceTimeout.current = setTimeout(() => {
+        validateHandle(value);
+      }, 500);
+    }
   };
 
   // Validate password
@@ -102,15 +171,17 @@ export default function SignUpForm() {
     e.preventDefault();
     setError("");
     setEmailError("");
+    setHandleError("");
     setPasswordError("");
     setConfirmPasswordError("");
 
     // Validate all fields
     const isEmailValid = validateEmail(email);
+    const isHandleValid = await validateHandle(handle);
     const isPasswordValid = validatePassword(password);
     const isConfirmPasswordValid = validateConfirmPassword(confirmPassword);
 
-    if (!isEmailValid || !isPasswordValid || !isConfirmPasswordValid) {
+    if (!isEmailValid || !isHandleValid || !isPasswordValid || !isConfirmPasswordValid) {
       toasts.validation.failed();
       return;
     }
@@ -118,13 +189,13 @@ export default function SignUpForm() {
     signupMutation.mutate(
       {
         email,
+        handle,
         password,
         plan: "free",
       },
       {
         onSuccess: () => {
           toasts.auth.signupSuccess();
-          // Redirect to dashboard using window.location for full page reload
           window.location.href = "/dashboard";
         },
         onError: (err) => {
@@ -164,6 +235,7 @@ export default function SignUpForm() {
             </Alert>
           )}
 
+          {/* Email Field */}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-foreground">
               Email
@@ -196,6 +268,59 @@ export default function SignUpForm() {
             )}
           </div>
 
+          {/* Handle Field */}
+          <div className="space-y-2">
+            <Label htmlFor="handle" className="text-foreground">
+              Username (Handle)
+            </Label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
+              <Input
+                id="handle"
+                type="text"
+                placeholder="johndoe"
+                value={handle}
+                onChange={(e) => {
+                  const value = e.target.value.toLowerCase();
+                  setHandle(value);
+                  if (handleError) setHandleError("");
+                  if (error) setError("");
+                  setHandleAvailable(null);
+                  checkHandleDebounced(value);
+                }}
+                onBlur={() => validateHandle(handle)}
+                className={`pl-10 pr-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring ${
+                  handleError ? "border-destructive focus-visible:ring-destructive" : ""
+                } ${handleAvailable === true ? "border-green-500" : ""}`}
+                required
+                disabled={signupMutation.isPending}
+                minLength={3}
+                maxLength={30}
+              />
+              {handleChecking && (
+                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 animate-spin" />
+              )}
+              {!handleChecking && handleAvailable === true && (
+                <CheckCircle2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500 w-5 h-5" />
+              )}
+              {!handleChecking && handleAvailable === false && (
+                <AlertCircle className="absolute right-3 top-1/2 transform -translate-y-1/2 text-destructive w-5 h-5" />
+              )}
+            </div>
+            {handleError && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {handleError}
+              </p>
+            )}
+            {!handleError && handle && handle.length >= 3 && (
+              <p className="text-xs text-muted-foreground">
+                Your API URL: <code className="text-primary font-mono">/p/{handle}/your-project/*</code>
+              </p>
+            )}
+          </div>
+
+          {/* Password Field */}
           <div className="space-y-2">
             <Label htmlFor="password" className="text-foreground">
               Password
@@ -257,6 +382,7 @@ export default function SignUpForm() {
             )}
           </div>
 
+          {/* Confirm Password Field */}
           <div className="space-y-2">
             <Label htmlFor="confirmPassword" className="text-foreground">
               Confirm Password
