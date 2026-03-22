@@ -494,7 +494,7 @@ interface DashboardStats {
   avg_response_time_ms: number;
   success_rate: number;  // 0.0 - 1.0
   monthly_usage: number;
-  plan_limit: number;
+  monthly_request_limit: number;
   usage_by_api: UsageByAPI[];
   usage_percentages: {
     daily_pct: number;    // 0-100

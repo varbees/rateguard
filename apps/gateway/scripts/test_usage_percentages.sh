@@ -74,18 +74,18 @@ echo "Additional Stats:"
 echo "=========================================="
 REQUESTS_TODAY=$(echo "$RESPONSE" | jq -r '.requests_today')
 MONTHLY_USAGE=$(echo "$RESPONSE" | jq -r '.monthly_usage')
-PLAN_LIMIT=$(echo "$RESPONSE" | jq -r '.plan_limit')
+MONTHLY_REQUEST_LIMIT=$(echo "$RESPONSE" | jq -r '.monthly_request_limit')
 ACTIVE_APIS=$(echo "$RESPONSE" | jq -r '.active_apis')
 
 echo "Requests Today:  $REQUESTS_TODAY"
 echo "Monthly Usage:   $MONTHLY_USAGE"
-echo "Plan Limit:      $PLAN_LIMIT"
+echo "Monthly Limit:   $MONTHLY_REQUEST_LIMIT"
 echo "Active APIs:     $ACTIVE_APIS"
 echo ""
 
 # Calculate expected monthly percentage for comparison
-if [ "$PLAN_LIMIT" != "0" ]; then
-  EXPECTED_MONTHLY=$(echo "scale=2; ($MONTHLY_USAGE / $PLAN_LIMIT) * 100" | bc)
+if [ "$MONTHLY_REQUEST_LIMIT" != "0" ]; then
+  EXPECTED_MONTHLY=$(echo "scale=2; ($MONTHLY_USAGE / $MONTHLY_REQUEST_LIMIT) * 100" | bc)
   if [ "$EXPECTED_MONTHLY" != "$MONTHLY_PCT" ]; then
     echo -e "${YELLOW}Note: Calculated monthly % ($EXPECTED_MONTHLY) differs slightly from API ($MONTHLY_PCT)${NC}"
   fi

@@ -699,7 +699,7 @@ export default function SettingsPage() {
                   <Label>Monthly Requests</Label>
                   <span className="text-sm text-muted-foreground">
                     {dashboardStats
-                      ? `${formatNumber(dashboardStats.stats.monthly_usage)} / ${formatNumber(dashboardStats.stats.plan_limit)}`
+                      ? `${formatNumber(dashboardStats.stats.monthly_usage)} / ${formatNumber(dashboardStats.stats.monthly_request_limit)}`
                       : "Loading..."}
                   </span>
                 </div>
@@ -708,11 +708,11 @@ export default function SettingsPage() {
                     className="bg-blue-500 h-2 rounded-full"
                     style={{
                       width:
-                        dashboardStats && dashboardStats.stats.plan_limit > 0
+                        dashboardStats && dashboardStats.stats.monthly_request_limit > 0
                           ? `${Math.min(
                               100,
-                              (dashboardStats.stats.monthly_usage /
-                                dashboardStats.stats.plan_limit) *
+                                (dashboardStats.stats.monthly_usage /
+                                dashboardStats.stats.monthly_request_limit) *
                                 100
                             )}%`
                           : "0%",

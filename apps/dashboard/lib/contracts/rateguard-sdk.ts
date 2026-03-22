@@ -68,7 +68,7 @@ export type DashboardStats = KnownProps<GeneratedDashboardStats> & {
         avg_response_time_ms: number;
         success_rate: number;
         monthly_usage: number;
-        plan_limit: number;
+        monthly_request_limit: number;
         usage_by_api: Array<{
             api_name: string;
             requests: number;

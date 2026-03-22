@@ -26,8 +26,8 @@ export function UsageGuardrailsBanner() {
   const { subscribe, isConnected } = useAlertsWebSocket();
   const stats = dashboardStats?.stats;
   const usagePercent =
-    stats && stats.plan_limit > 0
-      ? (stats.monthly_usage / stats.plan_limit) * 100
+    stats && stats.monthly_request_limit > 0
+      ? (stats.monthly_usage / stats.monthly_request_limit) * 100
       : 0;
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export function UsageGuardrailsBanner() {
           id: 'usage_warning',
           severity: usagePercent >= 95 ? 'error' : 'warning',
           title: 'Usage Guardrail Warning',
-          message: `You're using ${usagePercent.toFixed(0)}% of your monthly request budget (${formatNumber(stats.monthly_usage)}/${formatNumber(stats.plan_limit)})`,
+          message: `You're using ${usagePercent.toFixed(0)}% of your monthly request budget (${formatNumber(stats.monthly_usage)}/${formatNumber(stats.monthly_request_limit)})`,
           action: {
             label: 'Review Guardrails',
             href: '/dashboard/budget',

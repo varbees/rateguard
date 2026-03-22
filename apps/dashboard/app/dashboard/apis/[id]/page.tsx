@@ -420,7 +420,7 @@ export default function APIDetailPage() {
             <UsageProgressBar
               label="Monthly Requests"
               current={dashboardStats.stats.monthly_usage}
-              limit={dashboardStats.stats.plan_limit}
+              limit={dashboardStats.stats.monthly_request_limit}
               percentage={dashboardStats.stats.usage_percentages.monthly_pct}
               resetTime={
                 new Date(

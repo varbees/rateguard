@@ -821,13 +821,14 @@ func (u *UsageTracker) calculateUsagePercentages(ctx context.Context, userID uui
 
 	// Get policy preset limits.
 	presetLimits := domainpolicy.GetRateLimits(userPreset)
+	stats.MonthlyRequestLimit = presetLimits.MonthlyRequestLimit
 
 	// Calculate monthly percentage
-	if presetLimits.MonthlyRequestLimit == 0 {
+	if stats.MonthlyRequestLimit == 0 {
 		// 0 = unlimited
 		stats.UsagePercentages.Monthly = 0
 	} else {
-		monthlyPct := (float64(stats.MonthlyUsage) / float64(presetLimits.MonthlyRequestLimit)) * 100
+		monthlyPct := (float64(stats.MonthlyUsage) / float64(stats.MonthlyRequestLimit)) * 100
 		// Cap at 100 max
 		if monthlyPct > 100 {
 			monthlyPct = 100

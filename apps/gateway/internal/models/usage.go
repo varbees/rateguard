@@ -17,25 +17,25 @@ type APIUsage struct {
 
 // APIMetrics tracks detailed performance metrics
 type APIMetrics struct {
-	ID         int64         `json:"id" db:"id"`
-	UserID     uuid.UUID     `json:"user_id" db:"user_id"`
-	TargetAPI  string        `json:"target_api" db:"target_api"`
-	StatusCode int           `json:"status_code" db:"status_code"`
-	DurationMs int64         `json:"duration_ms" db:"duration_ms"`
-	Timestamp  time.Time     `json:"timestamp" db:"timestamp"`
+	ID         int64     `json:"id" db:"id"`
+	UserID     uuid.UUID `json:"user_id" db:"user_id"`
+	TargetAPI  string    `json:"target_api" db:"target_api"`
+	StatusCode int       `json:"status_code" db:"status_code"`
+	DurationMs int64     `json:"duration_ms" db:"duration_ms"`
+	Timestamp  time.Time `json:"timestamp" db:"timestamp"`
 }
 
 // UsageStats represents aggregated usage statistics
 type UsageStats struct {
-	UserID         uuid.UUID `json:"user_id"`
-	TotalRequests  int64     `json:"total_requests"`
-	APIsUsed       int       `json:"apis_used"`
-	AvgDurationMs  float64   `json:"avg_duration_ms"`
-	SuccessRate    float64   `json:"success_rate"`
-	ErrorRate      float64   `json:"error_rate"`
-	Period         string    `json:"period"` // daily, weekly, monthly
-	PeriodStart    time.Time `json:"period_start"`
-	PeriodEnd      time.Time `json:"period_end"`
+	UserID        uuid.UUID `json:"user_id"`
+	TotalRequests int64     `json:"total_requests"`
+	APIsUsed      int       `json:"apis_used"`
+	AvgDurationMs float64   `json:"avg_duration_ms"`
+	SuccessRate   float64   `json:"success_rate"`
+	ErrorRate     float64   `json:"error_rate"`
+	Period        string    `json:"period"` // daily, weekly, monthly
+	PeriodStart   time.Time `json:"period_start"`
+	PeriodEnd     time.Time `json:"period_end"`
 }
 
 // UsageByAPI represents usage statistics per API
@@ -50,15 +50,15 @@ type UsageByAPI struct {
 
 // DashboardStats represents overview statistics for dashboard
 type DashboardStats struct {
-	TotalRequests     int64        `json:"total_requests"`
-	RequestsToday     int64        `json:"requests_today"`
-	ActiveAPIs        int          `json:"active_apis"`
-	AvgResponseTimeMs float64      `json:"avg_response_time_ms"`
-	SuccessRate       float64      `json:"success_rate"`
-	MonthlyUsage      int64        `json:"monthly_usage"`
-	PlanLimit         int          `json:"plan_limit"`
-	UsageByAPI        []UsageByAPI `json:"usage_by_api"`
-	UsagePercentages  struct {
+	TotalRequests       int64        `json:"total_requests"`
+	RequestsToday       int64        `json:"requests_today"`
+	ActiveAPIs          int          `json:"active_apis"`
+	AvgResponseTimeMs   float64      `json:"avg_response_time_ms"`
+	SuccessRate         float64      `json:"success_rate"`
+	MonthlyUsage        int64        `json:"monthly_usage"`
+	MonthlyRequestLimit int          `json:"monthly_request_limit"`
+	UsageByAPI          []UsageByAPI `json:"usage_by_api"`
+	UsagePercentages    struct {
 		Daily   float64 `json:"daily_pct"`   // current/limit * 100
 		Monthly float64 `json:"monthly_pct"` // current/limit * 100
 	} `json:"usage_percentages"`
@@ -75,9 +75,9 @@ type UsageQueryParams struct {
 
 // UsageHistoryPoint represents a single point in time-series usage data
 type UsageHistoryPoint struct {
-	Timestamp        time.Time `json:"timestamp" db:"timestamp"`
-	Requests         int64     `json:"requests" db:"requests"`
-	SuccessRate      float64   `json:"success_rate" db:"success_rate"`
+	Timestamp         time.Time `json:"timestamp" db:"timestamp"`
+	Requests          int64     `json:"requests" db:"requests"`
+	SuccessRate       float64   `json:"success_rate" db:"success_rate"`
 	AvgResponseTimeMs float64   `json:"avg_response_time_ms" db:"avg_response_time_ms"`
 }
 

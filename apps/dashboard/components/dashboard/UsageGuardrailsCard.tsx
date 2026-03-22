@@ -14,7 +14,7 @@ export function UsageGuardrailsCard({ stats }: UsageGuardrailsCardProps) {
   const router = useRouter();
 
   const requestUsagePercent =
-    stats.plan_limit > 0 ? (stats.monthly_usage / stats.plan_limit) * 100 : 0;
+    stats.monthly_request_limit > 0 ? (stats.monthly_usage / stats.monthly_request_limit) * 100 : 0;
   const requestWarning = requestUsagePercent >= 80;
   const anyCritical = requestUsagePercent >= 100;
 
@@ -62,7 +62,7 @@ export function UsageGuardrailsCard({ stats }: UsageGuardrailsCardProps) {
             <span className="text-muted-foreground">Monthly Requests</span>
             <span className="font-medium">
               {formatNumber(stats.monthly_usage)} /{" "}
-              {formatNumber(stats.plan_limit)}
+              {formatNumber(stats.monthly_request_limit)}
             </span>
           </div>
           <Progress

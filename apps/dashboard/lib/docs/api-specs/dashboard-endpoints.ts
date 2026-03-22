@@ -19,7 +19,7 @@ export const DASHBOARD_STATS: EndpointSpec = {
         total_requests_month: 45000,
         total_apis: 5,
         active_apis: 4,
-        plan_limit: 100000,
+        monthly_request_limit: 100000,
         usage_percentage: 45.0,
         requests_by_status: {
           "200": 1100,
