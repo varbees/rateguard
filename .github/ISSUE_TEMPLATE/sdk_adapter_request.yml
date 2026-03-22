@@ -1,0 +1,29 @@
+name: SDK adapter request
+description: Request a new middleware or integration adapter for RateGuard.
+labels: ["adapter", "sdk"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for new language, framework, or runtime adapters.
+  - type: input
+    id: ecosystem
+    attributes:
+      label: Ecosystem
+      description: Example: Go chi, FastAPI, Express, NestJS, Next.js, gRPC
+    validations:
+      required: true
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: What does the adapter need to do?
+    validations:
+      required: true
+  - type: textarea
+    id: api_surface
+    attributes:
+      label: Desired API surface
+      description: Show the rough code shape you want.
+    validations:
+      required: true

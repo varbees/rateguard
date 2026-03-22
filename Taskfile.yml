@@ -1,0 +1,121 @@
+version: "3"
+
+vars:
+  BACKEND_DIR: apps/gateway
+  DASHBOARD_DIR: apps/dashboard
+  DOCKER_DIR: deploy/docker
+  GOCACHE: /tmp/go-build-cache
+  CCACHE_DIR: /tmp/ccache
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  test:
+    desc: Run backend and SDK tests
+    deps:
+      - backend:test
+      - sdk:test
+
+  backend:test:
+    desc: Run the Go control-plane test suite
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - mkdir -p {{.GOCACHE}} {{.CCACHE_DIR}}
+      - CCACHE_DIR={{.CCACHE_DIR}} GOCACHE={{.GOCACHE}} GOWORK=off GOPROXY=off GOSUMDB=off go test -v ./...
+
+  sdk:test:
+    desc: Run the standalone Go SDK test suite
+    dir: packages/sdk-go
+    cmds:
+      - mkdir -p {{.GOCACHE}} {{.CCACHE_DIR}}
+      - GOCACHE={{.GOCACHE}} GOWORK=off GOPROXY=off GOSUMDB=off go test -v ./...
+
+  openapi:generate:
+    desc: Generate the live OpenAPI document and TypeScript SDK artifacts
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - mkdir -p ../../packages/openapi ../../packages/sdk-ts/generated
+      - GOCACHE={{.GOCACHE}} GOWORK=off GOPROXY=off GOSUMDB=off go run ./cmd/openapi-gen
+
+  smoke:
+    desc: Run a release smoke check against a live backend
+    dir: "{{.BACKEND_DIR}}/scripts"
+    env:
+      AGG_SERVICE_URL: "{{.AGG_SERVICE_URL}}"
+    cmds:
+      - bash smoke.sh
+
+  dev:
+    desc: Start the Docker dev stack (gateway + infra only)
+    dir: "{{.DOCKER_DIR}}"
+    cmds:
+      - docker compose -f compose.yml up -d --build
+
+  dev:down:
+    desc: Stop the backend dev stack
+    dir: "{{.DOCKER_DIR}}"
+    cmds:
+      - docker compose -f compose.yml down -v
+
+  dev:logs:
+    desc: Follow backend dev logs
+    dir: "{{.DOCKER_DIR}}"
+    cmds:
+      - docker compose -f compose.yml logs -f
+
+  staging:
+    desc: Start the Docker staging stack
+    dir: "{{.DOCKER_DIR}}"
+    cmds:
+      - docker compose -f compose.yml -f compose.staging.yml up -d --build
+
+  staging:down:
+    desc: Stop the staging stack
+    dir: "{{.DOCKER_DIR}}"
+    cmds:
+      - docker compose -f compose.yml -f compose.staging.yml down -v
+
+  staging:logs:
+    desc: Follow staging logs
+    dir: "{{.DOCKER_DIR}}"
+    cmds:
+      - docker compose -f compose.yml -f compose.staging.yml logs -f
+
+  ui:deps:
+    desc: Install dashboard dependencies
+    dir: "{{.DASHBOARD_DIR}}"
+    cmds:
+      - bun install --frozen-lockfile
+
+  ui:dev:
+    desc: Run the dashboard against the local backend
+    dir: "{{.DASHBOARD_DIR}}"
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:8008
+      NEXT_PUBLIC_WS_URL: ws://localhost:8008
+    cmds:
+      - bun run dev -- --hostname 0.0.0.0 --port 3003
+
+  ui:build:
+    desc: Build the dashboard
+    dir: "{{.DASHBOARD_DIR}}"
+    cmds:
+      - bun run build
+
+  ui:typecheck:
+    desc: Type-check the dashboard
+    dir: "{{.DASHBOARD_DIR}}"
+    cmds:
+      - bun run type-check
+
+  ui:start:
+    desc: Run the dashboard production server
+    dir: "{{.DASHBOARD_DIR}}"
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:8008
+      NEXT_PUBLIC_WS_URL: ws://localhost:8008
+    cmds:
+      - bun run start -- --hostname 0.0.0.0 --port 3003
