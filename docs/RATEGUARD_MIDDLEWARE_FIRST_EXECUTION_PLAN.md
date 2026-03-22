@@ -39,8 +39,9 @@ The current 2026 market shape matters because it tells us where RateGuard can wi
 
 Primary competitors and the relevant truth:
 - Kong: enterprise-heavy, proxy-first, and now shipping premium AI token limiting; the OSS tier still does not give the middleware-first SDK wedge we have
+- Portkey: gateway-centric with model catalogs, budgets, rate limits, and virtual keys; strong governance surface, but still proxy/gateway-first rather than in-process middleware
 - Tyk: governance-heavy and upmarket; strong enterprise story, weak developer-first in-process story
-- Helicone: strong on LLM observability, but narrow; it does not cover traditional API traffic control in the same product path
+- Helicone: strong on LLM observability and gateway-style logging/rate limiting, but narrow; it does not cover traditional API traffic control in the same product path
 - Cloudflare AI Gateway: powerful edge platform, but not self-hostable or on-prem; structurally different from our audience
 - LiteLLM / APISIX AI / Zuplo: credible 2025-2026 entrants, each with one or two strong features, but not the same middleware-first Go SDK shape
 
@@ -49,6 +50,24 @@ RateGuard’s wedge:
 - self-hosted control plane and runtime contracts
 - LLM token budgets plus traditional API traffic control in one developer path
 - OSS-friendly deployment shape for teams that refuse proxy migration
+
+Capability matrix snapshot:
+
+| Capability | RateGuard | Portkey | Helicone | LiteLLM | Kong |
+|---|---|---|---|---|---|
+| In-process middleware hard-stop before upstream call | Strong | Weak, gateway-centric | Weak | Weak | Weak |
+| Works without proxy migration | Strong | Weak | Weak | Weak / partial | Weak |
+| Traditional API + LLM in one product path | Strong | Moderate | Weak | Weak | Moderate |
+| Self-host / data stays on your infra | Strong | Strong-ish | Moderate | Strong | Strong |
+| Governance / workspace policy surface | Partial | Strong | Moderate | Partial | Strong |
+| Observability / tracing / analytics depth | Good | Strong | Strong | Strong | Strong |
+| Multi-language in-process middleware SDKs | Strong | Weak | Weak | Weak | Weak |
+| MCP / agent-tool integration | Not yet | Strong | Strong | Not primary | Strong |
+
+Verdict:
+- RateGuard is strongest at the developer-first middleware wedge.
+- RateGuard is not yet strongest on enterprise governance, routing breadth, or analytics depth.
+- Our durable advantage is narrow but sharp: in-process, self-hosted, cross-language middleware that enforces LLM budgets before the request leaves the app.
 
 What this means:
 - we should not drift back toward proxy-first product thinking
