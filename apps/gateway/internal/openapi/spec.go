@@ -569,8 +569,8 @@ func manifest() artifactSet {
 			TS:   "export interface HandleAvailabilityResponse { available: boolean; suggestions?: string[]; [key: string]: unknown; }\n",
 		},
 		"LoginRequest": {
-			JSON: map[string]any{"type": "object", "properties": map[string]any{"email": map[string]any{"type": "string"}, "password": map[string]any{"type": "string"}}, "required": []string{"email", "password"}, "additionalProperties": true},
-			TS:   "export interface LoginRequest { email: string; password: string; }\n",
+			JSON: map[string]any{"type": "object", "properties": map[string]any{"identifier": map[string]any{"type": "string"}, "email": map[string]any{"type": "string"}, "password": map[string]any{"type": "string"}}, "required": []string{"identifier", "password"}, "additionalProperties": true},
+			TS:   "export interface LoginRequest { identifier: string; email?: string; password: string; }\n",
 		},
 		"UpdateHandleRequest": {
 			JSON: map[string]any{"type": "object", "properties": map[string]any{"handle": map[string]any{"type": "string"}}, "required": []string{"handle"}, "additionalProperties": true},
@@ -589,8 +589,8 @@ func manifest() artifactSet {
 			TS:   "export interface APIConfig { id?: string; name?: string; upstream_url?: string; enabled?: boolean; rate_limit_per_second?: number; burst_size?: number; token_budget_per_hour?: number; token_budget_mode?: string; [key: string]: unknown; }\n",
 		},
 		"CreateAPIConfigRequest": {
-			JSON: map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "upstream_url": map[string]any{"type": "string"}, "enabled": map[string]any{"type": "boolean"}, "token_budget_per_hour": map[string]any{"type": "integer"}, "token_budget_mode": map[string]any{"type": "string"}}, "required": []string{"name", "upstream_url"}, "additionalProperties": true},
-			TS:   "export interface CreateAPIConfigRequest { name: string; upstream_url: string; enabled?: boolean; token_budget_per_hour?: number; token_budget_mode?: string; [key: string]: unknown; }\n",
+			JSON: map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "slug": map[string]any{"type": "string"}, "upstream_url": map[string]any{"type": "string"}, "enabled": map[string]any{"type": "boolean"}, "token_budget_per_hour": map[string]any{"type": "integer"}, "token_budget_mode": map[string]any{"type": "string"}}, "required": []string{"name", "upstream_url"}, "additionalProperties": true},
+			TS:   "export interface CreateAPIConfigRequest { name: string; slug?: string; upstream_url: string; enabled?: boolean; token_budget_per_hour?: number; token_budget_mode?: string; [key: string]: unknown; }\n",
 		},
 		"UpdateAPIConfigRequest": {
 			JSON: map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "upstream_url": map[string]any{"type": "string"}, "enabled": map[string]any{"type": "boolean"}, "token_budget_per_hour": map[string]any{"type": "integer"}, "token_budget_mode": map[string]any{"type": "string"}}, "additionalProperties": true},

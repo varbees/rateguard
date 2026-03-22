@@ -19,7 +19,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CreateAPIState } from "./types";
 import { cn } from "@/lib/utils";
-import { apiClient, TestConnectionResponse } from "@/lib/api";
+import { APIError, apiClient, TestConnectionResponse } from "@/lib/api";
 
 interface BasicConfigurationProps {
   state: CreateAPIState;
@@ -85,16 +85,21 @@ export function BasicConfiguration({
         setTestError(result.error_message || "Connection test failed");
       }
     } catch (err: unknown) {
+      const apiError = err instanceof APIError ? err : null;
       const errorMessage =
-        err instanceof Error
+        apiError?.message ||
+        (err instanceof Error
           ? err.message
-          : "Connection test failed. Please check your credentials.";
+          : "Connection test failed. Please check your credentials.");
+      const errorCode =
+        apiError?.code ||
+        (apiError ? `HTTP_${apiError.statusCode}` : "CLIENT_ERROR");
       setTestError(errorMessage);
       setTestResult({
         success: false,
         latency_ms: 0,
         error_message: errorMessage,
-        error_code: "CLIENT_ERROR",
+        error_code: errorCode,
         tested_at: new Date().toISOString(),
       });
     } finally {

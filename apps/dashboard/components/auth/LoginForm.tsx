@@ -18,29 +18,22 @@ import { Loader2, Mail, Lock, AlertCircle, Shield } from "lucide-react";
 import { toasts, handleApiError } from "@/lib/toast";
 import { useLogin } from "@/lib/hooks/use-api";
 
-// Email validation regex
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export default function LoginForm() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [emailError, setEmailError] = useState("");
+  const [identifierError, setIdentifierError] = useState("");
   const [passwordError, setPasswordError] = useState("");
   
   const loginMutation = useLogin();
 
-  // Validate email format
-  const validateEmail = (email: string): boolean => {
-    if (!email) {
-      setEmailError("Email is required");
+  // Validate identifier presence
+  const validateIdentifier = (identifier: string): boolean => {
+    if (!identifier.trim()) {
+      setIdentifierError("Email or handle is required");
       return false;
     }
-    if (!EMAIL_REGEX.test(email)) {
-      setEmailError("Please enter a valid email address");
-      return false;
-    }
-    setEmailError("");
+    setIdentifierError("");
     return true;
   };
 
@@ -57,20 +50,20 @@ export default function LoginForm() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    setEmailError("");
+    setIdentifierError("");
     setPasswordError("");
 
     // Validate all fields
-    const isEmailValid = validateEmail(email);
+    const isIdentifierValid = validateIdentifier(identifier);
     const isPasswordValid = validatePassword(password);
 
-    if (!isEmailValid || !isPasswordValid) {
+    if (!isIdentifierValid || !isPasswordValid) {
       toasts.validation.failed();
       return;
     }
 
     loginMutation.mutate(
-      { email, password },
+      { identifier: identifier.trim(), password },
       {
         onSuccess: () => {
           toasts.auth.loginSuccess();
@@ -116,33 +109,33 @@ export default function LoginForm() {
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="email" className="text-foreground">
-              Email
+            <Label htmlFor="identifier" className="text-foreground">
+              Email or handle
             </Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-5 h-5" />
               <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
+                id="identifier"
+                type="text"
+                placeholder="you@example.com or your-handle"
+                value={identifier}
                 onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (emailError) setEmailError("");
+                  setIdentifier(e.target.value);
+                  if (identifierError) setIdentifierError("");
                   if (error) setError("");
                 }}
-                onBlur={() => validateEmail(email)}
+                onBlur={() => validateIdentifier(identifier)}
                 className={`pl-10 bg-input border-input text-foreground ring-offset-background focus-visible:ring-ring ${
-                  emailError ? "border-destructive focus-visible:ring-destructive" : ""
+                  identifierError ? "border-destructive focus-visible:ring-destructive" : ""
                 }`}
                 required
                 disabled={loginMutation.isPending}
               />
             </div>
-            {emailError && (
+            {identifierError && (
               <p className="text-xs text-destructive flex items-center gap-1">
                 <AlertCircle className="w-3 h-3" />
-                {emailError}
+                {identifierError}
               </p>
             )}
           </div>

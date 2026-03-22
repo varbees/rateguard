@@ -59,8 +59,9 @@ type CreateUserRequest struct {
 
 // LoginRequest represents user login payload
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Identifier string `json:"identifier" validate:"required"`
+	Email      string `json:"email,omitempty" validate:"omitempty,email"`
+	Password   string `json:"password" validate:"required"`
 }
 
 // LoginResponse represents successful login response

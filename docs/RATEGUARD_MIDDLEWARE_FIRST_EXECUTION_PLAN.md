@@ -156,6 +156,7 @@ Local bootstrap split:
 - `task dev` starts the backend runtime and infrastructure only
 - `task ui:dev` runs the dashboard separately against the local backend
 - gateway startup applies database migrations; Docker Compose does not rely on a SQL init bind mount
+- `task dev` rebuilds the gateway image from source; it is not a hot-reload loop for code changes
 
 Transitional paths still in tree but no longer product-center:
 - legacy billing handlers and `internal/billing/*`
@@ -195,10 +196,14 @@ Status:
 - Completed. The websocket contract was tightened across the dashboard: the shared realtime context and the older dashboard websocket wrapper now derive the transport from the active host configuration, and the frontend event unions only include backend-emitted events (`metrics.update`, `alert.triggered`, `system.health`, `circuit_breaker.state_change`, `api.metrics.update`, `request.completed`, `request.rate_limited`, `request.token_budget_exceeded`, `test.message`).
 - Completed. The remaining user-facing docs and legacy dashboard surfaces were aligned with the live backend routes and data model: the real-time analytics docs now reference `/api/v1/dashboard/alerts`, webhook docs and replay controls now use `/api/v1/webhook/events/:id/replay`, the webhook detail sheet no longer fabricates attempt history, and the websocket debug panel names the real event set.
 - Completed. SDK event parity is restored across Go, Node, and Python: all three middleware SDKs now share the same canonical request event wire surface (`request.completed`, `request.rate_limited`, `request.token_budget_exceeded`), and the older SDK-only `request.circuit_open`, `request.rate_limiter_degraded`, and `request.budget_warning` topics were removed from the control-plane contract.
+- Completed. Login now accepts either email or handle plus password, the dashboard auth form sends the `identifier` payload, and the live smoke passed after restoring the missing `users.country_code` and `users.detected_currency` columns that the current auth and billing lookups expect.
+- Completed. API creation and connection testing are contract-aligned end to end: the dashboard derives `slug` when it is omitted, the gateway accepts the optional slug and returns the derived proxy URL, the `test-connection` body matches the handler contract, and live smoke against `/api/v1/apis/test-connection` plus `/api/v1/apis` passed.
 - Verified. `task test`, `task ui:typecheck`, `task ui:build`, and the live smoke burst against `/api/v1/apis` passed; the stack boots cleanly with `task dev`, and the realtime replay shows the self-protection events.
 - Verified. After the screen audit, `task ui:typecheck`, `task ui:build`, and `task smoke` still passed.
 - Verified. After the websocket and docs cleanup, the dashboard typecheck and build still pass.
 - Verified. The Node SDK test suite and the Python SDK test suite passed after removing the legacy wire events.
+- Verified. `task ui:typecheck` and `task ui:build` passed after the login/email-handle and API-create contract sync patch.
+- Verified. Live smoke passed after the schema migration restored the missing user geo columns: signup, login by handle, login by email, `/api/v1/apis/test-connection`, and `/api/v1/apis` create with derived slug all succeeded.
 
 Ordered implementation plan:
 1. Define the protection boundary.

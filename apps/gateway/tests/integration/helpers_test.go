@@ -31,10 +31,10 @@ func NewTestClient(t *testing.T) *TestClient {
 	return &TestClient{t: t}
 }
 
-// Login authenticates the test client
-func (c *TestClient) Login(email, password string) {
+// Login authenticates the test client using an email address or handle.
+func (c *TestClient) Login(identifier, password string) {
 	payload := map[string]string{
-		"email":    email,
+		"identifier": identifier,
 		"password": password,
 	}
 	body, _ := json.Marshal(payload)

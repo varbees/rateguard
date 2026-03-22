@@ -145,7 +145,7 @@ func ValidateAllowedOrigins(origins []string) error {
 // CreateAPIConfigRequest represents API configuration creation payload
 type CreateAPIConfigRequest struct {
 	Name               string            `json:"name" validate:"required,min=1,max=255"`
-	Slug               string            `json:"slug" validate:"required,min=3,max=30,alphanum_hyphen_underscore"`
+	Slug               string            `json:"slug,omitempty" validate:"omitempty,min=3,max=30,alphanum_hyphen_underscore"`
 	TargetURL          string            `json:"target_url" validate:"required,url"`
 	RateLimitPerSecond int               `json:"rate_limit_per_second" validate:"required,min=1,max=10000"`
 	BurstSize          int               `json:"burst_size" validate:"required,min=1,max=20000"`

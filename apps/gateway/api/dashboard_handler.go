@@ -226,6 +226,21 @@ func (h *DashboardHandler) CreateAPIConfig(c *fiber.Ctx) error {
 	}
 	req.Name = normalizedName
 
+	// Derive a slug from the name when the caller does not provide one.
+	if strings.TrimSpace(req.Slug) == "" {
+		req.Slug = normalizedName
+	} else {
+		normalizedSlug, err := models.NormalizeAndValidateAPIName(req.Slug)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+				Error:     "Invalid API slug",
+				Message:   err.Error(),
+				Timestamp: time.Now(),
+			})
+		}
+		req.Slug = normalizedSlug
+	}
+
 	// Validate allowed origins
 	if len(req.AllowedOrigins) > 0 {
 		if err := models.ValidateAllowedOrigins(req.AllowedOrigins); err != nil {
@@ -237,28 +252,30 @@ func (h *DashboardHandler) CreateAPIConfig(c *fiber.Ctx) error {
 		}
 	}
 
-	// Check policy preset limits using the preset checker.
-	canCreate, message, err := h.presetChecker.CanCreateAPI(c.Context(), user.ID)
-	if err != nil {
-		logger.Error("Failed to check preset limits",
-			zap.String("user_id", user.ID.String()),
-			zap.Error(err),
-		)
-		return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
-			Error:     "Failed to check preset",
-			Message:   "Unable to verify preset limits",
-			Timestamp: time.Now(),
-		})
-	}
-	if !canCreate {
-		// Get current preset for response.
-		preset, _ := h.presetChecker.GetUserPreset(c.Context(), user.ID)
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error":          "Policy limit reached",
-			"message":        message,
-			"docs_url":       "/docs/guides/rate-limiting",
-			"current_preset": preset,
-		})
+	// Check policy preset limits using the preset checker when available.
+	if h.presetChecker != nil {
+		canCreate, message, err := h.presetChecker.CanCreateAPI(c.Context(), user.ID)
+		if err != nil {
+			logger.Error("Failed to check preset limits",
+				zap.String("user_id", user.ID.String()),
+				zap.Error(err),
+			)
+			return c.Status(fiber.StatusInternalServerError).JSON(ErrorResponse{
+				Error:     "Failed to check preset",
+				Message:   "Unable to verify preset limits",
+				Timestamp: time.Now(),
+			})
+		}
+		if !canCreate {
+			// Get current preset for response.
+			preset, _ := h.presetChecker.GetUserPreset(c.Context(), user.ID)
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":          "Policy limit reached",
+				"message":        message,
+				"docs_url":       "/docs/guides/rate-limiting",
+				"current_preset": preset,
+			})
+		}
 	}
 
 	// Set defaults
@@ -271,6 +288,7 @@ func (h *DashboardHandler) CreateAPIConfig(c *fiber.Ctx) error {
 		ID:                 uuid.New(),
 		UserID:             user.ID,
 		Name:               req.Name,
+		Slug:               req.Slug,
 		TargetURL:          req.TargetURL,
 		RateLimitPerSecond: req.RateLimitPerSecond,
 		BurstSize:          req.BurstSize,

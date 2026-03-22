@@ -15,6 +15,7 @@ import type {
     WebhookEvent as ContractWebhookEvent,
     WebhookStats as ContractWebhookStats,
 } from "./contracts/rateguard-sdk";
+import { slugify } from "@/lib/utils-slug";
 
 // Strip the `[key: string]: unknown` catch-all index signature that the
 // generated SDK adds to every interface. Without this, intersecting with
@@ -289,7 +290,8 @@ export interface SignupRequest {
 }
 
 export interface LoginRequest {
-    email: string;
+    identifier: string;
+    email?: string;
     password: string;
 }
 
@@ -694,13 +696,15 @@ class APIClient {
                 const errorData = await response.json().catch(() => ({
                     message: response.statusText || "An error occurred",
                 }));
+                const errorCode = errorData.error_code || errorData.code;
+                const details = errorData.details || errorData.error_message;
 
                 // Create detailed error with status code
                 const error = new APIError(
                     errorData.message || errorData.error || `HTTP ${response.status}`,
                     response.status,
-                    errorData.code,
-                    errorData.details
+                    errorCode,
+                    details
                 );
 
                 throw error;
@@ -898,8 +902,10 @@ class APIClient {
 
     async createAPIConfig(data: Partial<APIConfig>): Promise<APIConfig> {
         // Ensure all field names are in snake_case format as expected by the backend
+        const derivedSlug = data.slug || slugify(String(data.name || ""));
         const formattedData = {
             name: data.name,
+            slug: derivedSlug || undefined,
             target_url: data.target_url,
             rate_limit_per_second: data.rate_limit_per_second,
             burst_size: data.burst_size,

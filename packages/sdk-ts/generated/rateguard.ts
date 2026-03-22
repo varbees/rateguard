@@ -28,7 +28,7 @@ export interface CircuitBreakerStats { [key: string]: unknown; }
 
 export interface CostEstimate { estimated_cost_cents?: number; [key: string]: unknown; }
 
-export interface CreateAPIConfigRequest { name: string; upstream_url: string; enabled?: boolean; token_budget_per_hour?: number; token_budget_mode?: string; [key: string]: unknown; }
+export interface CreateAPIConfigRequest { name: string; slug?: string; upstream_url: string; enabled?: boolean; token_budget_per_hour?: number; token_budget_mode?: string; [key: string]: unknown; }
 
 export interface CreateAPIKeyRequest { key_name: string; }
 
@@ -60,7 +60,7 @@ export interface HandleUpdateResponse { user: User; [key: string]: unknown; }
 
 export interface HealthResponse { status: string; service: string; [key: string]: unknown; }
 
-export interface LoginRequest { email: string; password: string; }
+export interface LoginRequest { identifier: string; email?: string; password: string; }
 
 export interface MessageResponse { message: string; [key: string]: unknown; }
 

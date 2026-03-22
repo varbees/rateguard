@@ -67,7 +67,7 @@ export const AUTH_SIGNUP: EndpointSpec = {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    email: 'user@example.com',
+    identifier: 'user@example.com',
     password: 'SecurePass123!'
   })
 });
@@ -163,16 +163,16 @@ export const AUTH_LOGIN: EndpointSpec = {
   category: "Authentication",
   title: "Login",
   description:
-    "Authenticate user with email and password. Returns user details and API key.",
+    "Authenticate user with email or handle and password. Returns user details and API key.",
   authentication: false,
   requestBody: {
     contentType: "application/json",
     schema: {
-      email: "string (required) - User email address",
+      identifier: "string (required) - User email address or handle",
       password: "string (required) - User password",
     },
     example: {
-      email: "user@example.com",
+      identifier: "user@example.com",
       password: "SecurePass123!",
     },
   },
@@ -219,7 +219,7 @@ export const AUTH_LOGIN: EndpointSpec = {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    email: 'user@example.com',
+    identifier: 'user@example.com',
     password: 'SecurePass123!'
   })
 });
@@ -236,7 +236,7 @@ localStorage.setItem('rateguard_api_key', api_key);`,
 response = requests.post(
     '${API_BASE_URL}/auth/login',
     json={
-        'email': 'user@example.com',
+        'identifier': 'user@example.com',
         'password': 'SecurePass123!'
     }
 )
@@ -253,8 +253,8 @@ api_key = data['api_key']
     APIKey string \`json:"api_key"\`
 }
 
-func login(email, password string) (*LoginResponse, error) {
-    body := map[string]string{"email": email, "password": password}
+func login(identifier, password string) (*LoginResponse, error) {
+    body := map[string]string{"identifier": identifier, "password": password}
     jsonBody, _ := json.Marshal(body)
     
     resp, err := http.Post("${API_BASE_URL}/auth/login",
@@ -274,7 +274,7 @@ func login(email, password string) (*LoginResponse, error) {
       label: "Ruby",
       code: `response = RestClient.post(
   '${API_BASE_URL}/auth/login',
-  { email: 'user@example.com', password: 'SecurePass123!' }.to_json,
+  { identifier: 'user@example.com', password: 'SecurePass123!' }.to_json,
   { content_type: :json }
 )
 
@@ -287,7 +287,7 @@ api_key = data['api_key']
     {
       status: 401,
       error: "Invalid credentials",
-      description: "Email or password is incorrect",
+      description: "Email, handle, or password is incorrect",
       solution:
         "Check your credentials and try again. Use password reset if you've forgotten your password",
     },

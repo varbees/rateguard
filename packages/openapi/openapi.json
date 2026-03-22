@@ -154,6 +154,9 @@
           "name": {
             "type": "string"
           },
+          "slug": {
+            "type": "string"
+          },
           "token_budget_mode": {
             "type": "string"
           },
@@ -347,12 +350,15 @@
           "email": {
             "type": "string"
           },
+          "identifier": {
+            "type": "string"
+          },
           "password": {
             "type": "string"
           }
         },
         "required": [
-          "email",
+          "identifier",
           "password"
         ],
         "type": "object"

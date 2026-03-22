@@ -460,11 +460,26 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get user by email
-	user, err := h.store.GetUserByEmail(c.Context(), req.Email)
+	identifier := strings.TrimSpace(req.Identifier)
+	if identifier == "" {
+		identifier = strings.TrimSpace(req.Email)
+	}
+	if identifier == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(ErrorResponse{
+			Error:     "Invalid request body",
+			Message:   "identifier is required",
+			Timestamp: time.Now(),
+		})
+	}
+	if !strings.Contains(identifier, "@") {
+		identifier = strings.ToLower(identifier)
+	}
+
+	// Get user by email or handle
+	user, err := h.store.GetUserByEmailOrHandle(c.Context(), identifier)
 	if err != nil {
 		logger.Warn("Login attempt with non-existent email",
-			zap.String("email", req.Email),
+			zap.String("identifier", identifier),
 		)
 		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
 			Error:     "Invalid credentials",
@@ -476,7 +491,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
 		logger.Warn("Login attempt with incorrect password",
-			zap.String("email", req.Email),
+			zap.String("identifier", identifier),
 			zap.String("user_id", user.ID.String()),
 		)
 		return c.Status(fiber.StatusUnauthorized).JSON(ErrorResponse{
@@ -506,6 +521,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	logger.Info("User logged in successfully",
 		zap.String("user_id", user.ID.String()),
 		zap.String("email", user.Email),
+		zap.String("identifier", identifier),
 	)
 
 	// Generate JWT tokens
