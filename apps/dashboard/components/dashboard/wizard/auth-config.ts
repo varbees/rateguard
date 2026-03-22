@@ -12,20 +12,66 @@ export function buildWizardAuthConfig(
 ): WizardAuthConfig {
   const apiKey = state.api_key?.trim() || "";
 
-  if (state.provider !== "custom" && apiKey) {
-    return {
-      auth_type: "bearer",
-      auth_credentials: { token: apiKey },
-      requiresKey: true,
-      summary: "Bearer token will be sent as Authorization: Bearer ...",
-    };
+  switch (state.provider) {
+    case "openai":
+      return apiKey
+        ? {
+            auth_type: "bearer",
+            auth_credentials: { token: apiKey },
+            requiresKey: true,
+            summary: "OpenAI expects Authorization: Bearer with your API key.",
+          }
+        : {
+            auth_type: "bearer",
+            requiresKey: true,
+            summary: "OpenAI requires an API key before this proxy can connect.",
+          };
+    case "anthropic":
+      return apiKey
+        ? {
+            auth_type: "api_key",
+            auth_credentials: { header_name: "x-api-key", key: apiKey },
+            requiresKey: true,
+            summary: "Anthropic expects x-api-key plus anthropic-version upstream.",
+          }
+        : {
+            auth_type: "api_key",
+            requiresKey: true,
+            summary: "Anthropic requires an API key before this proxy can connect.",
+          };
+    case "google":
+      return apiKey
+        ? {
+            auth_type: "api_key",
+            auth_credentials: { header_name: "x-goog-api-key", key: apiKey },
+            requiresKey: true,
+            summary: "Gemini expects x-goog-api-key on upstream requests.",
+          }
+        : {
+            auth_type: "api_key",
+            requiresKey: true,
+            summary: "Gemini requires an API key before this proxy can connect.",
+          };
+    case "cohere":
+      return apiKey
+        ? {
+            auth_type: "bearer",
+            auth_credentials: { token: apiKey },
+            requiresKey: true,
+            summary: "Cohere expects Authorization: Bearer with your API key.",
+          }
+        : {
+            auth_type: "bearer",
+            requiresKey: true,
+            summary: "Cohere requires an API key before this proxy can connect.",
+          };
+    default:
+      return {
+        auth_type: state.auth_type || "none",
+        requiresKey: false,
+        summary: "No upstream credential configured.",
+      };
   }
-
-  return {
-    auth_type: state.auth_type || "none",
-    requiresKey: false,
-    summary: "No upstream credential configured.",
-  };
 }
 
 export function isValidHttpUrl(value: string): boolean {

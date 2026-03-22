@@ -304,6 +304,10 @@ func (h *DashboardHandler) CreateAPIConfig(c *fiber.Ctx) error {
 		RetryAttempts:      req.RetryAttempts,
 	}
 
+	if provider := strings.ToLower(strings.TrimSpace(req.Provider)); provider != "" && provider != "custom" {
+		config.Provider = &provider
+	}
+
 	if err := h.store.CreateAPIConfig(c.Context(), config); err != nil {
 		// Check if it's a duplicate API name
 		if errors.Is(err, models.ErrAPIConfigAlreadyExists) {
@@ -1137,9 +1141,11 @@ func (h *DashboardHandler) GetRecentRequests(c *fiber.Ctx) error {
 
 // TestConnectionRequest represents the request body for testing API connections
 type TestConnectionRequest struct {
+	Provider        string            `json:"provider,omitempty"`
 	TargetURL       string            `json:"target_url" validate:"required,url"`
 	AuthType        string            `json:"auth_type" validate:"required,oneof=none bearer api_key basic"`
 	AuthCredentials map[string]string `json:"auth_credentials,omitempty"`
+	CustomHeaders   map[string]string `json:"custom_headers,omitempty"`
 	TimeoutSeconds  int               `json:"timeout_seconds,omitempty"`
 }
 
@@ -1207,6 +1213,8 @@ func (h *DashboardHandler) TestConnection(c *fiber.Ctx) error {
 		})
 	}
 
+	probeURL := buildConnectionProbeURL(req.Provider, req.TargetURL)
+
 	// Set default timeout
 	timeout := 10 * time.Second
 	if req.TimeoutSeconds > 0 && req.TimeoutSeconds <= 30 {
@@ -1227,7 +1235,8 @@ func (h *DashboardHandler) TestConnection(c *fiber.Ctx) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	httpReq, err := http.NewRequestWithContext(ctx, "HEAD", req.TargetURL, nil)
+	method := buildConnectionProbeMethod(req.Provider)
+	httpReq, err := http.NewRequestWithContext(ctx, method, probeURL, nil)
 	if err != nil {
 		return c.JSON(TestConnectionResponse{
 			Success:      false,
@@ -1239,6 +1248,12 @@ func (h *DashboardHandler) TestConnection(c *fiber.Ctx) error {
 
 	// Set User-Agent
 	httpReq.Header.Set("User-Agent", "RateGuard-ConnectionTest/1.0")
+	httpReq.Header.Set("Accept", "application/json, */*")
+
+	// Apply custom headers before auth-specific headers so auth can override if needed.
+	for key, value := range req.CustomHeaders {
+		httpReq.Header.Set(key, value)
+	}
 
 	// Apply authentication based on auth_type
 	switch req.AuthType {
@@ -1323,8 +1338,10 @@ func (h *DashboardHandler) TestConnection(c *fiber.Ctx) error {
 	// Determine success based on status code
 	success := resp.StatusCode >= 200 && resp.StatusCode < 400
 
-	// If HEAD fails, some servers might not support it, try GET
-	if resp.StatusCode == 405 { // Method Not Allowed
+	// If the probe fails, retry once with GET for endpoints that are more
+	// naturally exercised as fetchable resources or where the provider
+	// canonical path is more reliable over GET than HEAD.
+	if resp.StatusCode >= 400 && method != http.MethodGet {
 		httpReq.Method = "GET"
 		startTime = time.Now()
 		resp2, err2 := client.Do(httpReq)
@@ -1364,7 +1381,11 @@ func (h *DashboardHandler) TestConnection(c *fiber.Ctx) error {
 			response.ErrorMessage = "Authentication failed. Please check your credentials."
 			response.ErrorCode = "AUTH_FAILED"
 		case 403:
-			response.ErrorMessage = "Access forbidden. Your API key may not have permission."
+			if strings.EqualFold(strings.TrimSpace(req.AuthType), "none") || len(req.AuthCredentials) == 0 {
+				response.ErrorMessage = "Access forbidden. The endpoint rejected the probe request."
+			} else {
+				response.ErrorMessage = "Access forbidden. Your API key may not have permission."
+			}
 			response.ErrorCode = "FORBIDDEN"
 		case 404:
 			response.ErrorMessage = "Endpoint not found. Please check the URL."
@@ -1386,4 +1407,29 @@ func (h *DashboardHandler) TestConnection(c *fiber.Ctx) error {
 	)
 
 	return c.JSON(response)
+}
+
+func buildConnectionProbeURL(provider, targetURL string) string {
+	baseURL := strings.TrimSuffix(targetURL, "/")
+
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "openai", "anthropic", "google":
+		return baseURL + "/models"
+	case "cohere":
+		if strings.HasSuffix(baseURL, "/v2") {
+			baseURL = strings.TrimSuffix(baseURL, "/v2")
+		}
+		return strings.TrimSuffix(baseURL, "/") + "/v1/models"
+	default:
+		return targetURL
+	}
+}
+
+func buildConnectionProbeMethod(provider string) string {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "", "custom":
+		return http.MethodGet
+	default:
+		return http.MethodHead
+	}
 }

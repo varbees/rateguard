@@ -51,6 +51,29 @@ export default function LLMProvidersPage() {
           </Card>
         </section>
 
+        {/* Gemini */}
+        <section className="space-y-6">
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Sparkles className="size-6 text-primary" />
+            Google Gemini
+          </h2>
+          <p className="text-muted-foreground">
+            Support for Gemini through the native API or the OpenAI-compatible endpoint.
+          </p>
+          <Card className="bg-muted/50">
+            <CardContent className="pt-6 font-mono text-sm space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Native base URL:</span>
+                <span className="text-primary font-bold">{`${DOCS_PROXY_BASE_URL}/google/v1beta`}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">OpenAI-compatible:</span>
+                <span className="text-primary font-bold">{`${DOCS_PROXY_BASE_URL}/google/v1beta/openai/`}</span>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
         {/* Anthropic */}
         <section className="space-y-6">
           <h2 className="text-2xl font-bold flex items-center gap-2">
@@ -83,7 +106,7 @@ export default function LLMProvidersPage() {
             <CardContent className="pt-6 font-mono text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground">Base URL:</span>
-                <span className="text-primary font-bold">{`${DOCS_PROXY_BASE_URL}/cohere/v1`}</span>
+                <span className="text-primary font-bold">{`${DOCS_PROXY_BASE_URL}/cohere/v2`}</span>
               </div>
             </CardContent>
           </Card>

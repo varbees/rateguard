@@ -519,9 +519,11 @@ export type QueueConfig = KnownProps<ContractQueueConfig> & {
 
 // Test Connection Types
 export interface TestConnectionRequest {
+    provider?: string;
     target_url: string;
     auth_type: "none" | "bearer" | "api_key" | "basic";
     auth_credentials?: Record<string, string>;
+    custom_headers?: Record<string, string>;
     timeout_seconds?: number;
 }
 

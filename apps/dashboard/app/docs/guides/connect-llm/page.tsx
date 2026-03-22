@@ -137,6 +137,54 @@ const message = await anthropic.messages.create({
           />
         </section>
 
+        {/* Gemini */}
+        <section className="space-y-6">
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <MessageSquare className="size-6 text-primary" />
+            Gemini (Google AI)
+          </h2>
+          <p className="text-muted-foreground">
+            Gemini works with the native REST API or the OpenAI-compatible endpoint. The upstream API key is sent as <code>x-goog-api-key</code>.
+          </p>
+
+          <CodeTabs
+            examples={[
+              {
+                label: "OpenAI SDK",
+                language: "javascript",
+                code: `import OpenAI from 'openai';
+
+const client = new OpenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+  baseURL: '${DOCS_PROXY_BASE_URL}/google/v1beta/openai/',
+  defaultHeaders: {
+    'X-RG-Key': process.env.RATEGUARD_API_KEY
+  }
+});
+
+const completion = await client.chat.completions.create({
+  model: 'gemini-2.5-flash',
+  messages: [{ role: 'user', content: 'Hello!' }],
+});`,
+              },
+              {
+                label: "REST",
+                language: "bash",
+                code: `curl ${DOCS_PROXY_BASE_URL}/google/v1beta/models/gemini-2.5-flash:generateContent \\
+  --header "content-type: application/json" \\
+  --header "X-RG-Key: $RATEGUARD_API_KEY" \\
+  --header "x-goog-api-key: $GEMINI_API_KEY" \\
+  --data '{
+    "contents": [{
+      "role": "user",
+      "parts": [{"text": "Hello!"}]
+    }]
+  }'`,
+              },
+            ]}
+          />
+        </section>
+
         {/* Supported Endpoints */}
         <section className="space-y-6">
           <h2 className="text-2xl font-bold">Supported Endpoints</h2>

@@ -36,7 +36,7 @@ const PROVIDERS: ProviderOption[] = [
   {
     id: 'google',
     name: 'Google AI',
-    description: 'Gemini Pro, Gemini Ultra',
+    description: 'Gemini API',
   },
   {
     id: 'cohere',
@@ -52,7 +52,15 @@ const PROVIDERS: ProviderOption[] = [
 
 export function ProviderSelection({ state, updateState, onNext }: ProviderSelectionProps) {
   const handleSelect = (provider: APIProvider) => {
-    updateState({ provider });
+    const nextHeaders = { ...state.custom_headers };
+    if (provider !== 'anthropic') {
+      delete nextHeaders['anthropic-version'];
+    }
+
+    updateState({
+      provider,
+      custom_headers: nextHeaders,
+    });
     // Auto-fill target URL and Name for known providers
     if (provider === 'openai') {
       updateState({ 
@@ -62,7 +70,11 @@ export function ProviderSelection({ state, updateState, onNext }: ProviderSelect
     } else if (provider === 'anthropic') {
       updateState({ 
         target_url: 'https://api.anthropic.com/v1',
-        name: 'My Anthropic API'
+        name: 'My Anthropic API',
+        custom_headers: {
+          ...state.custom_headers,
+          'anthropic-version': '2023-06-01',
+        },
       });
     } else if (provider === 'google') {
       updateState({ 
@@ -71,7 +83,7 @@ export function ProviderSelection({ state, updateState, onNext }: ProviderSelect
       });
     } else if (provider === 'cohere') {
       updateState({ 
-        target_url: 'https://api.cohere.ai/v1',
+        target_url: 'https://api.cohere.ai/v2',
         name: 'My Cohere API'
       });
     } else if (provider === 'custom') {

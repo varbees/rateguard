@@ -49,8 +49,13 @@ export function BasicConfiguration({
   const authConfig = buildWizardAuthConfig(state);
   const targetUrlValid = isValidHttpUrl(state.target_url);
   const isTestable = targetUrlValid;
+  const apiKeyRequired = authConfig.requiresKey;
+  const hasApiKey = (state.api_key || "").trim().length > 0;
 
-  const isValid = state.name.trim().length >= 3 && targetUrlValid;
+  const isValid =
+    state.name.trim().length >= 3 &&
+    targetUrlValid &&
+    (!apiKeyRequired || hasApiKey);
 
   const handleTestConnection = async () => {
     setTesting(true);
@@ -59,9 +64,11 @@ export function BasicConfiguration({
 
     try {
       const result = await apiClient.testConnection({
+        provider: state.provider,
         target_url: state.target_url,
         auth_type: authConfig.auth_type,
         auth_credentials: authConfig.auth_credentials,
+        custom_headers: state.custom_headers,
         timeout_seconds: 10,
       }, {
         idempotencyKey: createIdempotencyKey("test-connection"),
@@ -206,6 +213,7 @@ export function BasicConfiguration({
             }
             value={state.api_key || ""}
             onChange={(e) => updateState({ api_key: e.target.value })}
+            required={apiKeyRequired}
           />
           <Alert>
             <Lock className="h-4 w-4" />
@@ -230,7 +238,7 @@ export function BasicConfiguration({
               type="button"
               variant="outline"
               onClick={handleTestConnection}
-              disabled={!isTestable || testing}
+              disabled={!isTestable || testing || (apiKeyRequired && !hasApiKey)}
               className="gap-2"
             >
               {testing ? (
@@ -243,6 +251,11 @@ export function BasicConfiguration({
             {!isTestable && (
               <span className="text-xs text-muted-foreground">
                 Enter a valid API URL to test the connection.
+              </span>
+            )}
+            {apiKeyRequired && !hasApiKey && isTestable && (
+              <span className="text-xs text-muted-foreground">
+                Add the provider API key before testing the connection.
               </span>
             )}
 
