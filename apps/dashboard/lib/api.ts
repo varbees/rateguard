@@ -295,6 +295,10 @@ export interface LoginRequest {
     password: string;
 }
 
+export interface RequestOptions extends RequestInit {
+    idempotencyKey?: string;
+}
+
 export interface LoginResponse {
     user: User;
     access_token: string;
@@ -637,12 +641,16 @@ class APIClient {
 
     private async request<T>(
         endpoint: string,
-        options: RequestInit = {}
+        options: RequestOptions = {}
     ): Promise<T> {
         const headers: Record<string, string> = {
             "Content-Type": "application/json",
             ...(options.headers as Record<string, string>),
         };
+
+        if (options.idempotencyKey) {
+            headers["Idempotency-Key"] = options.idempotencyKey;
+        }
 
         try {
             const response = await fetch(`${this.baseURL}${endpoint}`, {
@@ -900,7 +908,10 @@ class APIClient {
         return this.request<APIConfig>(`/api/v1/apis/${id}`);
     }
 
-    async createAPIConfig(data: Partial<APIConfig>): Promise<APIConfig> {
+    async createAPIConfig(
+        data: Partial<APIConfig>,
+        options: { idempotencyKey?: string } = {}
+    ): Promise<APIConfig> {
         // Ensure all field names are in snake_case format as expected by the backend
         const derivedSlug = data.slug || slugify(String(data.name || ""));
         const formattedData = {
@@ -924,6 +935,7 @@ class APIClient {
         return this.request<APIConfig>(`/api/v1/apis`, {
             method: "POST",
             body: JSON.stringify(formattedData),
+            idempotencyKey: options.idempotencyKey,
         });
     }
 
@@ -1617,13 +1629,15 @@ class APIClient {
 
     // Test Connection - Tests connectivity to a target API endpoint
     async testConnection(
-        data: TestConnectionRequest
+        data: TestConnectionRequest,
+        options: { idempotencyKey?: string } = {}
     ): Promise<TestConnectionResponse> {
         return this.request<TestConnectionResponse>(
             "/api/v1/apis/test-connection",
             {
                 method: "POST",
                 body: JSON.stringify(data),
+                idempotencyKey: options.idempotencyKey,
             }
         );
     }
@@ -1660,12 +1674,13 @@ export const analyticsAPI = {
 export const apiConfigAPI = {
     list: () => apiClient.listAPIConfigs(),
     get: (id: string) => apiClient.getAPIConfig(id),
-    create: (data: Partial<APIConfig>) => apiClient.createAPIConfig(data),
+    create: (data: Partial<APIConfig>, idempotencyKey?: string) =>
+        apiClient.createAPIConfig(data, { idempotencyKey }),
     update: (id: string, data: Partial<APIConfig>) =>
         apiClient.updateAPIConfig(id, data),
     delete: (id: string) => apiClient.deleteAPIConfig(id),
-    testConnection: (data: TestConnectionRequest) =>
-        apiClient.testConnection(data),
+    testConnection: (data: TestConnectionRequest, idempotencyKey?: string) =>
+        apiClient.testConnection(data, { idempotencyKey }),
 };
 
 // NEW: Marketplace Template API

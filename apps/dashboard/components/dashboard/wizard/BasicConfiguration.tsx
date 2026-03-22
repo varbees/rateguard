@@ -20,6 +20,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { CreateAPIState } from "./types";
 import { cn } from "@/lib/utils";
 import { APIError, apiClient, TestConnectionResponse } from "@/lib/api";
+import {
+  buildWizardAuthConfig,
+  createIdempotencyKey,
+  isValidHttpUrl,
+} from "./auth-config";
 
 interface BasicConfigurationProps {
   state: CreateAPIState;
@@ -41,12 +46,11 @@ export function BasicConfiguration({
   const [testError, setTestError] = useState<string | null>(null);
   const [overrideUrl, setOverrideUrl] = useState(false);
 
-  const isTestable =
-    state.target_url.startsWith("http") &&
-    state.api_key &&
-    state.api_key.length > 10;
+  const authConfig = buildWizardAuthConfig(state);
+  const targetUrlValid = isValidHttpUrl(state.target_url);
+  const isTestable = targetUrlValid;
 
-  const isValid = state.name.length >= 3 && isTestable;
+  const isValid = state.name.trim().length >= 3 && targetUrlValid;
 
   const handleTestConnection = async () => {
     setTesting(true);
@@ -54,30 +58,13 @@ export function BasicConfiguration({
     setTestError(null);
 
     try {
-      // Build auth credentials based on auth_type
-      const authCredentials: Record<string, string> = {};
-      if (state.auth_type === "bearer" && state.api_key) {
-        authCredentials.token = state.api_key;
-      } else if (state.auth_type === "api_key" && state.api_key) {
-        authCredentials.key = state.api_key;
-        authCredentials.header_name = "X-API-Key";
-      }
-
-      // For providers with known auth patterns, use bearer
-      const effectiveAuthType =
-        state.provider !== "custom" && state.api_key
-          ? "bearer"
-          : state.auth_type;
-      if (effectiveAuthType === "bearer" && state.api_key) {
-        authCredentials.token = state.api_key;
-      }
-
       const result = await apiClient.testConnection({
         target_url: state.target_url,
-        auth_type: effectiveAuthType || "none",
-        auth_credentials:
-          Object.keys(authCredentials).length > 0 ? authCredentials : undefined,
+        auth_type: authConfig.auth_type,
+        auth_credentials: authConfig.auth_credentials,
         timeout_seconds: 10,
+      }, {
+        idempotencyKey: createIdempotencyKey("test-connection"),
       });
 
       setTestResult(result);
@@ -195,12 +182,21 @@ export function BasicConfiguration({
               endpoint.
             </p>
           )}
+          {!targetUrlValid && state.target_url.trim().length > 0 && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              Enter a valid http:// or https:// URL.
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="api_key">
-            Your {state.provider === "custom" ? "API" : state.provider} API Key{" "}
-            <span className="text-red-500">*</span>
+            {authConfig.requiresKey
+              ? `Your ${state.provider === "custom" ? "API" : state.provider} API Key`
+              : "Optional upstream credential"}
+            {authConfig.requiresKey ? (
+              <span className="text-red-500">*</span>
+            ) : null}
           </Label>
           <Input
             id="api_key"
@@ -215,15 +211,16 @@ export function BasicConfiguration({
             <Lock className="h-4 w-4" />
             <AlertDescription className="text-xs">
               <strong>
-                Paste your actual API key from{" "}
-                {state.provider === "custom" ? "your provider" : state.provider}
-                .
+                {authConfig.requiresKey
+                  ? "Paste the upstream token or key required by this provider."
+                  : "Leave this blank for public endpoints, or add a credential if your upstream requires one."}
               </strong>
               <br />
-              Your key is encrypted at rest and never shown in plain text.
-              Required to proxy requests to the target API.
+              Your credential is encrypted at rest and never shown in plain
+              text.
             </AlertDescription>
           </Alert>
+          <p className="text-xs text-muted-foreground">{authConfig.summary}</p>
         </div>
 
         {/* Test Connection */}
@@ -243,6 +240,11 @@ export function BasicConfiguration({
               )}
               Test Connection
             </Button>
+            {!isTestable && (
+              <span className="text-xs text-muted-foreground">
+                Enter a valid API URL to test the connection.
+              </span>
+            )}
 
             {testResult?.success && (
               <div className="flex items-center gap-2 text-green-600 text-sm font-medium animate-in fade-in">

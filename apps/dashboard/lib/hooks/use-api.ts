@@ -154,7 +154,13 @@ export function useCreateAPI() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: (data: Partial<APIConfig>) => apiClient.createAPIConfig(data as APIConfig),
+    mutationFn: ({
+      data,
+      idempotencyKey,
+    }: {
+      data: Partial<APIConfig>;
+      idempotencyKey?: string;
+    }) => apiClient.createAPIConfig(data, { idempotencyKey }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.apiConfigs });
       toast.success('API created successfully');
@@ -189,7 +195,13 @@ export function useRateLimitObservations(apiId: string) {
 export function useCreateAPIConfig() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<APIConfig>) => apiClient.createAPIConfig(data),
+    mutationFn: ({
+      data,
+      idempotencyKey,
+    }: {
+      data: Partial<APIConfig>;
+      idempotencyKey?: string;
+    }) => apiClient.createAPIConfig(data, { idempotencyKey }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.apiConfigs });
     },

@@ -15,6 +15,7 @@ import { useCreateAPI } from '@/lib/hooks/use-api';
 import { toast } from 'sonner';
 import confetti from 'canvas-confetti';
 import Link from 'next/link';
+import { buildWizardAuthConfig, createIdempotencyKey } from './auth-config';
 
 interface ReviewAndCreateProps {
   state: CreateAPIState;
@@ -35,6 +36,7 @@ export function ReviewAndCreate({ state, onBack, goToStep }: ReviewAndCreateProp
     setCreateError(null);
 
     try {
+      const authConfig = buildWizardAuthConfig(state);
       // Prepare data for API
       const apiData = {
         name: state.name,
@@ -46,15 +48,18 @@ export function ReviewAndCreate({ state, onBack, goToStep }: ReviewAndCreateProp
         rate_limit_per_month: state.rate_limit_per_month || 0,
         allowed_origins: state.allowed_origins.filter(o => o.trim() !== ''),
         custom_headers: state.custom_headers,
-        auth_type: state.auth_type,
-        auth_credentials: state.api_key ? { api_key: state.api_key } : undefined,
+        auth_type: authConfig.auth_type,
+        auth_credentials: authConfig.auth_credentials,
         enabled: true,
         provider: state.provider,
         timeout_seconds: 30,
         retry_attempts: 3,
       };
 
-      const newAPI = await createAPI(apiData);
+      const newAPI = await createAPI({
+        data: apiData,
+        idempotencyKey: createIdempotencyKey("create-api"),
+      });
       
       setSuccessData(newAPI);
       setShowSuccessModal(true);
@@ -97,6 +102,12 @@ export function ReviewAndCreate({ state, onBack, goToStep }: ReviewAndCreateProp
               <p className="text-sm text-muted-foreground mb-1">Provider</p>
               <p className="font-medium capitalize">{state.provider}</p>
             </div>
+            <div>
+              <p className="text-sm text-muted-foreground mb-1">Auth Mode</p>
+              <p className="font-medium capitalize">
+                {buildWizardAuthConfig(state).auth_type}
+              </p>
+            </div>
             <div className="sm:col-span-2">
               <p className="text-sm text-muted-foreground mb-1">Target URL</p>
               <p className="font-mono text-sm bg-muted p-2 rounded break-all">{state.target_url}</p>
@@ -121,6 +132,10 @@ export function ReviewAndCreate({ state, onBack, goToStep }: ReviewAndCreateProp
                 </div>
               </div>
             )}
+            <div className="sm:col-span-2">
+              <p className="text-sm text-muted-foreground mb-1">Upstream Credentials</p>
+              <p className="text-sm">{buildWizardAuthConfig(state).summary}</p>
+            </div>
           </div>
 
           <div className="flex gap-2 pt-4 border-t">
