@@ -11,16 +11,19 @@ RUN apk add --no-cache \
     tzdata
 
 # Set working directory
-WORKDIR /build
+WORKDIR /build/apps/gateway
 
 # Copy go mod files first (better caching)
-COPY go.mod go.sum ./
+COPY apps/gateway/go.mod apps/gateway/go.sum ./
+COPY packages/sdk-go/go.mod ../../packages/sdk-go/go.mod
+COPY packages/sdk-go/go.sum ../../packages/sdk-go/go.sum
 
 # Download dependencies (cached if go.mod/go.sum unchanged)
 RUN go mod download && go mod verify
 
 # Copy source code
-COPY . .
+COPY apps/gateway/. .
+COPY packages/sdk-go/ ../../packages/sdk-go/
 
 # Run tests during build (fail fast if tests fail)
 # Run tests during build (fail fast if tests fail)
@@ -66,9 +69,9 @@ RUN addgroup -g 1000 aggregator && \
 WORKDIR /app
 
 # Copy binary and config from builder
-COPY --from=builder --chown=aggregator:aggregator /build/aggregator .
-COPY --from=builder --chown=aggregator:aggregator /build/config ./config
-COPY --from=builder --chown=aggregator:aggregator /build/migrations ./migrations
+COPY --from=builder --chown=aggregator:aggregator /build/apps/gateway/aggregator .
+COPY --from=builder --chown=aggregator:aggregator /build/apps/gateway/config ./config
+COPY --from=builder --chown=aggregator:aggregator /build/apps/gateway/migrations ./migrations
 
 # Copy monitoring scripts (optional, for debugging)
 # COPY --from=builder --chown=aggregator:aggregator /build/monitoring ./monitoring

@@ -15,6 +15,7 @@ import { BarChart3 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Line } from 'recharts';
 import { format} from 'date-fns';
 import useSWR from 'swr';
+import { apiClient } from '@/lib/api';
 import { useUsageWebSocket } from '@/lib/websocket/use-websocket';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 import { DisconnectionBanner } from './DisconnectionBanner';
@@ -42,10 +43,9 @@ export function UsageChartCard({ apiId, loading = false }: UsageChartCardProps) 
     apiId || 'all'
   );
 
-  // HTTP fallback when realtime is disabled or unavailable
-  const shouldPoll = !hasAccess || status === 'error';
   const { data: fallbackData, error } = useSWR(
-    shouldPoll ? `/api/v1/dashboard/usage/timeline?days=${timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : 30}` : null,
+    ['usage-history', apiId || 'all', timeRange],
+    () => apiClient.getUsageHistory(timeRange),
     { refreshInterval: hasAccess ? 60000 : 30000 }
   );
 
@@ -84,7 +84,14 @@ export function UsageChartCard({ apiId, loading = false }: UsageChartCardProps) 
   // Load fallback data
   useEffect(() => {
     if (fallbackData?.data) {
-      setData(fallbackData.data);
+      setData(
+        fallbackData.data.map((point) => ({
+          timestamp: point.timestamp,
+          requests: point.requests,
+          cost: 0,
+          errors: Math.max(0, Math.round(point.requests * (1 - point.success_rate / 100))),
+        }))
+      );
       setLastUpdate(new Date());
     }
   }, [fallbackData]);

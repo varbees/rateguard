@@ -186,6 +186,13 @@ Why it matters:
 - it gives a live trust signal for demos, onboarding, and enterprise evaluation
 - it makes `task smoke` and local stack validation more representative of actual production usage
 
+Status:
+- Completed. The gateway now routes `/api/v1/*` through `sdk-go` middleware in-process after Redis and Postgres are healthy, while `/health` and `/metrics` stay outside the protected boundary.
+- Completed. The dashboard events screen now consumes the live request feed and websocket event spine, so gateway `request.completed` and `request.rate_limited` activity is visible in the UI instead of mocked.
+- Completed. The dashboard's user-facing data screens now use live backend contracts instead of synthetic defaults: API keys list/create/revoke through `/api/v1/api-keys`, usage analytics come from `/api/v1/dashboard/stats` plus `/api/v1/dashboard/usage/history` and recent requests, budget guardrails read the live cost estimate endpoint, the token summary card uses `/api/v1/dashboard/tokens`, the live analytics widget no longer invents fallback series, and the analytics view aggregates from real dashboard history instead of random series.
+- Verified. `task test`, `task ui:typecheck`, `task ui:build`, and the live smoke burst against `/api/v1/apis` passed; the stack boots cleanly with `task dev`, and the realtime replay shows the self-protection events.
+- Verified. After the screen audit, `task ui:typecheck`, `task ui:build`, and `task smoke` still passed.
+
 Ordered implementation plan:
 1. Define the protection boundary.
    - Apply `sdk-go` middleware to the public `/api/v1/*` surfaces that represent the control plane.
@@ -202,7 +209,7 @@ Ordered implementation plan:
 5. Verify the full loop.
    - Run unit tests for the middleware path.
    - Run `task test`, `task ui:typecheck`, `task ui:build`, and `task smoke`.
-   - Confirm the boot sequence still works when the middleware is enabled.
+   - Confirm the boot sequence still works when the middleware is enabled. This is now verified in the current snapshot.
 6. Document the result.
    - Update the plan doc, README, and any launch docs so they describe the self-protection loop accurately.
 

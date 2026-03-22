@@ -54,10 +54,10 @@ export default function EventsPage() {
               <Zap className="h-4 w-4" />
               Event Stream
             </CardTitle>
-            <CardDescription>WebSocket and SSE activity are surfaced here.</CardDescription>
+            <CardDescription>Gateway request bursts, 429s, and guardrail signals are surfaced here.</CardDescription>
           </CardHeader>
           <CardContent className="text-sm text-muted-foreground">
-            Alerts, request bursts, and guardrail triggers are the first signals to watch.
+            The feed below shows the control plane protecting its own `/api/v1/*` routes in real time.
           </CardContent>
         </Card>
         <Card>

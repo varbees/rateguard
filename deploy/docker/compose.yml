@@ -133,8 +133,8 @@ services:
 
   gateway:
     build:
-      context: ../../apps/gateway
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: apps/gateway/Dockerfile
     image: rateguard/gateway:local
     container_name: rateguard-gateway
     hostname: gateway

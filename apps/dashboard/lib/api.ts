@@ -1002,23 +1002,45 @@ class APIClient {
 
     // Analytics - Get comprehensive analytics data
     async getAnalytics(): Promise<AnalyticsData> {
-        // This will transform the existing dashboard stats into analytics format
-        const dashboardData = await this.getDashboardStats();
+        const [dashboardData, usageHistory, recentRequests] = await Promise.all([
+            this.getDashboardStats(),
+            this.getUsageHistory("30d"),
+            this.getRecentRequests({ limit: 200 }),
+        ]);
 
-        // Transform backend data into analytics format
-        // For now, we'll use mock data structure but call real endpoints
-        // You can enhance this to aggregate multiple endpoint responses
-        return this.transformToAnalytics(dashboardData.stats);
+        return this.transformToAnalytics(
+            dashboardData.stats,
+            usageHistory.data,
+            recentRequests.requests
+        );
     }
 
     // Transform backend stats to analytics format
-    private transformToAnalytics(stats: DashboardStatsData): AnalyticsData {
+    private transformToAnalytics(
+        stats: DashboardStatsData,
+        usageHistory: UsageHistoryPoint[],
+        recentRequests: RecentRequest[]
+    ): AnalyticsData {
         // Calculate metrics
         const errorCount = Math.round(
             stats.total_requests * (1 - stats.success_rate / 100)
         );
         const bandwidthGB = (stats.total_requests * 0.5) / 1024; // Estimate
         const estimatedCost = bandwidthGB * 0.004 + stats.total_requests * 0.0001;
+        const firstHistoryPoint = usageHistory[0];
+        const lastHistoryPoint = usageHistory[usageHistory.length - 1];
+        const firstErrorCount = firstHistoryPoint
+            ? Math.round(
+                  firstHistoryPoint.requests *
+                      (1 - firstHistoryPoint.success_rate / 100)
+              )
+            : errorCount;
+        const lastErrorCount = lastHistoryPoint
+            ? Math.round(
+                  lastHistoryPoint.requests *
+                      (1 - lastHistoryPoint.success_rate / 100)
+              )
+            : errorCount;
 
         return {
             metrics: {
@@ -1029,60 +1051,73 @@ class APIClient {
                 bandwidthGB,
                 estimatedCost,
                 trends: {
-                    requests: { change: 12.5, direction: "up" },
-                    successRate: { change: 2.1, direction: "up" },
-                    avgResponseTime: { change: 5, direction: "down" },
-                    errorCount: { change: 0.8, direction: "down" },
-                    bandwidth: { change: 15, direction: "up" },
-                    cost: { change: 2.1, direction: "up" },
+                    requests: this.calculateTrend(
+                        firstHistoryPoint?.requests,
+                        lastHistoryPoint?.requests
+                    ),
+                    successRate: this.calculateTrend(
+                        firstHistoryPoint?.success_rate,
+                        lastHistoryPoint?.success_rate
+                    ),
+                    avgResponseTime: this.calculateTrend(
+                        firstHistoryPoint?.avg_response_time_ms,
+                        lastHistoryPoint?.avg_response_time_ms,
+                        true
+                    ),
+                    errorCount: this.calculateTrend(
+                        firstErrorCount,
+                        lastErrorCount,
+                        true
+                    ),
+                    bandwidth: this.calculateTrend(
+                        firstHistoryPoint?.requests,
+                        lastHistoryPoint?.requests
+                    ),
+                    cost: this.calculateTrend(
+                        firstHistoryPoint?.requests,
+                        lastHistoryPoint?.requests
+                    ),
                 },
             },
-            requestsOverTime: this.generateTimeSeriesData(stats),
+            requestsOverTime: this.generateTimeSeriesData(
+                usageHistory,
+                stats
+            ),
             requestsPerAPI: stats.usage_by_api.map((api: UsageByAPI) => ({
                 apiId: `api-${api.api_name}`,
                 apiName: api.api_name,
                 requests: api.requests,
-                percentage: (api.requests / stats.total_requests) * 100,
+                percentage:
+                    stats.total_requests > 0
+                        ? (api.requests / stats.total_requests) * 100
+                        : 0,
             })),
-            statusCodes: [
-                {
-                    name: "2xx Success",
-                    code: "2xx",
-                    value: stats.success_rate,
-                    count: Math.round(stats.total_requests * (stats.success_rate / 100)),
-                },
-                {
-                    name: "4xx Client Error",
-                    code: "4xx",
-                    value: (100 - stats.success_rate) * 0.85,
-                    count: Math.round(
-                        stats.total_requests * ((100 - stats.success_rate) / 100) * 0.85
-                    ),
-                },
-                {
-                    name: "5xx Server Error",
-                    code: "5xx",
-                    value: (100 - stats.success_rate) * 0.15,
-                    count: Math.round(
-                        stats.total_requests * ((100 - stats.success_rate) / 100) * 0.15
-                    ),
-                },
-            ],
-            topEndpoints: stats.usage_by_api.map((api: UsageByAPI) => ({
-                path: `/api/v1/${api.api_name.toLowerCase().replace(/\s+/g, "-")}`,
-                method: "GET",
-                requests: api.requests,
-                avgResponseTime: api.avg_duration_ms,
-                errorRate: api.error_rate,
-            })),
+            statusCodes: this.generateStatusCodeDistribution(
+                recentRequests,
+                stats
+            ),
+            topEndpoints: this.generateTopEndpoints(recentRequests, stats),
         };
     }
 
     // Generate time series data from dashboard stats
     private generateTimeSeriesData(
+        history: UsageHistoryPoint[],
         stats: DashboardStatsData
     ): RequestsOverTime[] {
-        // Generate last 7 days of data
+        if (history.length > 0) {
+            return history.map((point) => ({
+                date: new Date(point.timestamp).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                }),
+                timestamp: new Date(point.timestamp).getTime(),
+                requests: point.requests,
+                successRate: point.success_rate,
+            }));
+        }
+
+        // Generate a deterministic fallback from the aggregate stats.
         const result: RequestsOverTime[] = [];
         const now = new Date();
         const avgDaily = stats.total_requests / 30; // Approximate daily average
@@ -1090,6 +1125,7 @@ class APIClient {
         for (let i = 6; i >= 0; i--) {
             const date = new Date(now);
             date.setDate(date.getDate() - i);
+            const offset = (i - 3) * 0.04;
 
             result.push({
                 date: date.toLocaleDateString("en-US", {
@@ -1097,12 +1133,181 @@ class APIClient {
                     day: "numeric",
                 }),
                 timestamp: date.getTime(),
-                requests: Math.round(avgDaily * (0.8 + Math.random() * 0.4)),
-                successRate: stats.success_rate + (Math.random() - 0.5) * 2,
+                requests: Math.max(
+                    0,
+                    Math.round(avgDaily * (1 + offset))
+                ),
+                successRate: Math.max(
+                    0,
+                    Math.min(100, stats.success_rate + offset * 10)
+                ),
             });
         }
 
         return result;
+    }
+
+    private calculateTrend(
+        previous?: number,
+        current?: number,
+        lowerIsBetter = false
+    ): { change: number; direction: "up" | "down" } {
+        const prior = previous ?? 0;
+        const next = current ?? prior;
+
+        if (prior === 0) {
+            return {
+                change: 0,
+                direction: lowerIsBetter ? "down" : "up",
+            };
+        }
+
+        const delta = next - prior;
+        const direction = lowerIsBetter
+            ? delta <= 0
+                ? "down"
+                : "up"
+            : delta >= 0
+                ? "up"
+                : "down";
+
+        return {
+            change: Math.abs((delta / prior) * 100),
+            direction,
+        };
+    }
+
+    private generateStatusCodeDistribution(
+        recentRequests: RecentRequest[],
+        stats: DashboardStatsData
+    ): StatusCodeDistribution[] {
+        if (recentRequests.length === 0) {
+            const successCount = Math.round(
+                stats.total_requests * (stats.success_rate / 100)
+            );
+            const errorCount = Math.max(0, stats.total_requests - successCount);
+            const clientErrors = Math.round(errorCount * 0.85);
+            const serverErrors = Math.max(0, errorCount - clientErrors);
+
+            return [
+                {
+                    name: "2xx Success",
+                    code: "2xx",
+                    value: stats.success_rate,
+                    count: successCount,
+                },
+                {
+                    name: "4xx Client Error",
+                    code: "4xx",
+                    value: errorCount > 0 ? (clientErrors / stats.total_requests) * 100 : 0,
+                    count: clientErrors,
+                },
+                {
+                    name: "5xx Server Error",
+                    code: "5xx",
+                    value: errorCount > 0 ? (serverErrors / stats.total_requests) * 100 : 0,
+                    count: serverErrors,
+                },
+            ];
+        }
+
+        let successCount = 0;
+        let clientErrorCount = 0;
+        let serverErrorCount = 0;
+
+        for (const request of recentRequests) {
+            if (request.status_code >= 200 && request.status_code < 300) {
+                successCount++;
+                continue;
+            }
+
+            if (request.status_code >= 400 && request.status_code < 500) {
+                clientErrorCount++;
+                continue;
+            }
+
+            if (request.status_code >= 500) {
+                serverErrorCount++;
+            }
+        }
+
+        const total = recentRequests.length;
+
+        return [
+            {
+                name: "2xx Success",
+                code: "2xx",
+                value: (successCount / total) * 100,
+                count: successCount,
+            },
+            {
+                name: "4xx Client Error",
+                code: "4xx",
+                value: (clientErrorCount / total) * 100,
+                count: clientErrorCount,
+            },
+            {
+                name: "5xx Server Error",
+                code: "5xx",
+                value: (serverErrorCount / total) * 100,
+                count: serverErrorCount,
+            },
+        ];
+    }
+
+    private generateTopEndpoints(
+        recentRequests: RecentRequest[],
+        stats: DashboardStatsData
+    ): EndpointStats[] {
+        if (recentRequests.length === 0) {
+            return stats.usage_by_api.map((api: UsageByAPI) => ({
+                path: `/api/v1/${api.api_name.toLowerCase().replace(/\s+/g, "-")}`,
+                method: "GET",
+                requests: api.requests,
+                avgResponseTime: api.avg_duration_ms,
+                errorRate: api.error_rate,
+            }));
+        }
+
+        type EndpointBucket = {
+            path: string;
+            method: string;
+            requests: number;
+            totalDuration: number;
+            errorCount: number;
+        };
+
+        const buckets = new Map<string, EndpointBucket>();
+
+        for (const request of recentRequests) {
+            const key = `${request.method} ${request.path}`;
+            const bucket = buckets.get(key) ?? {
+                path: request.path,
+                method: request.method,
+                requests: 0,
+                totalDuration: 0,
+                errorCount: 0,
+            };
+
+            bucket.requests++;
+            bucket.totalDuration += request.response_time_ms;
+            if (request.status_code >= 400) {
+                bucket.errorCount++;
+            }
+
+            buckets.set(key, bucket);
+        }
+
+        return Array.from(buckets.values())
+            .sort((a, b) => b.requests - a.requests)
+            .slice(0, 10)
+            .map((bucket) => ({
+                path: bucket.path,
+                method: bucket.method,
+                requests: bucket.requests,
+                avgResponseTime: bucket.totalDuration / bucket.requests,
+                errorRate: (bucket.errorCount / bucket.requests) * 100,
+            }));
     }
 
     // Settings API methods

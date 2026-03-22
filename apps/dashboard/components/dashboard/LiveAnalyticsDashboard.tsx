@@ -45,23 +45,15 @@ export function LiveAnalyticsDashboard({
   const [timeRange, setTimeRange] = useState<'1h' | '6h' | '24h' | '7d' | '30d'>('24h');
   const [chartType, setChartType] = useState<'line' | 'area' | 'bar'>('area');
 
-  // Mock data if none provided
   const displayMetrics = metrics || {
-    requests: 15234,
-    successRate: 98.5,
-    avgLatency: 245,
-    totalCost: 12.45,
-    errors: 128,
+    requests: 0,
+    successRate: 0,
+    avgLatency: 0,
+    totalCost: 0,
+    errors: 0,
   };
 
-  const displayChartData = chartData.length > 0 ? chartData : [
-    { time: '00:00', requests: 120, errors: 2, latency: 235 },
-    { time: '04:00', requests: 89, errors: 1, latency: 198 },
-    { time: '08:00', requests: 245, errors: 5, latency: 267 },
-    { time: '12:00', requests: 389, errors: 8, latency: 312 },
-    { time: '16:00', requests: 456, errors: 12, latency: 289 },
-    { time: '20:00', requests: 234, errors: 4, latency: 245 },
-  ];
+  const displayChartData = chartData;
 
   const metricCards = [
     {
@@ -103,6 +95,14 @@ export function LiveAnalyticsDashboard({
   ];
 
   const renderChart = () => {
+    if (displayChartData.length === 0) {
+      return (
+        <div className="flex h-[320px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-sm text-muted-foreground">
+          No live analytics data yet. Make a request to populate this chart.
+        </div>
+      );
+    }
+
     const commonProps = {
       data: displayChartData,
       margin: { top: 10, right: 10, left: 0, bottom: 0 },

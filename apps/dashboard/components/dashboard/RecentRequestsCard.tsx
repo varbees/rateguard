@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Activity, ArrowRight, Book } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import useSWR from 'swr';
+import { apiClient, type RecentRequest as ApiRecentRequest } from '@/lib/api';
 import { useRequestsWebSocket } from '@/lib/websocket/use-websocket';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,10 @@ interface RecentRequest {
   latency: number;
   tokens?: number;
   cost?: number;
+  rateLimitApplied?: boolean;
+  rateLimitAllowed?: boolean;
+  circuitBreakerState?: string;
+  retryAfterMs?: number;
 }
 
 interface RecentRequestsCardProps {
@@ -91,10 +96,10 @@ export function RecentRequestsCard({ loading = false, maxRows = 10 }: RecentRequ
   // WebSocket for real-time updates with HTTP fallback
   const { status, subscribe, isConnected, hasAccess } = useRequestsWebSocket();
 
-  // HTTP fallback
-  const shouldPoll = !hasAccess || status === 'error';
+  // HTTP snapshot with realtime overlay
   const { data: fallbackData } = useSWR(
-    shouldPoll ? `/api/v1/dashboard/requests/recent?limit=${maxRows}` : null,
+    ['recent-requests', maxRows],
+    () => apiClient.getRecentRequests({ limit: maxRows }),
     { refreshInterval: hasAccess ? 60000 : 30000 }
   );
 
@@ -102,27 +107,83 @@ export function RecentRequestsCard({ loading = false, maxRows = 10 }: RecentRequ
   useEffect(() => {
     if (!isConnected) return;
 
-    return subscribe('request_completed', (newRequest: RecentRequest) => {
-      setRequests(prev => {
-        // Add new request at the top
-        const updated = [newRequest, ...prev.slice(0, maxRows - 1)];
-        
-        // Highlight the new request
+    const upsertLiveRequest = (newRequest: RecentRequest) => {
+      setRequests((prev) => {
+        const withoutDuplicate = prev.filter((request) => request.id !== newRequest.id);
+        const updated = [newRequest, ...withoutDuplicate].slice(0, maxRows);
+
         setHighlightedId(newRequest.id);
         setTimeout(() => setHighlightedId(null), 2000);
 
         return updated;
       });
+    };
 
-      // Optional: Play sound notification (if enabled in user preferences)
-      // playNotificationSound();
+    const unsubscribeCompleted = subscribe('request.completed', (event) => {
+      const data = event as Record<string, any>;
+      upsertLiveRequest({
+        id: data.request_id || `${data.method || 'GET'}:${data.path || '/'}:${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        apiId: data.route_id || 'gateway',
+        apiName: data.preset || 'Gateway',
+        method: (data.method || 'GET').toUpperCase(),
+        endpoint: data.path || '/',
+        statusCode: Number(data.status_code) || 200,
+        latency: Number(data.latency_ms) || 0,
+        tokens: Number(data.token_total_tokens) || undefined,
+        cost: undefined,
+        rateLimitApplied: Boolean(data.rate_limit_applied),
+        rateLimitAllowed: Boolean(data.rate_limit_allowed),
+        circuitBreakerState: data.circuit_breaker_state,
+        retryAfterMs: Number(data.retry_after_ms) || undefined,
+      });
     });
+
+    const unsubscribeRateLimited = subscribe('request.rate_limited', (event) => {
+      const data = event as Record<string, any>;
+      upsertLiveRequest({
+        id: data.request_id || `${data.method || 'GET'}:${data.path || '/'}:${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        apiId: data.route_id || 'gateway',
+        apiName: data.preset || 'Gateway',
+        method: (data.method || 'GET').toUpperCase(),
+        endpoint: data.path || '/',
+        statusCode: Number(data.status_code) || 429,
+        latency: Number(data.latency_ms) || 0,
+        tokens: Number(data.token_total_tokens) || undefined,
+        cost: undefined,
+        rateLimitApplied: Boolean(data.rate_limit_applied),
+        rateLimitAllowed: Boolean(data.rate_limit_allowed),
+        circuitBreakerState: data.circuit_breaker_state,
+        retryAfterMs: Number(data.retry_after_ms) || undefined,
+      });
+    });
+
+    return () => {
+      unsubscribeCompleted();
+      unsubscribeRateLimited();
+    };
   }, [isConnected, subscribe, maxRows]);
 
   // Load fallback data
   useEffect(() => {
     if (fallbackData?.requests) {
-      setRequests(fallbackData.requests);
+      setRequests(
+        fallbackData.requests.map((request: ApiRecentRequest) => ({
+          id: request.id,
+          timestamp: request.timestamp,
+          apiId: request.api_id,
+          apiName: request.api_name,
+          method: request.method as RecentRequest['method'],
+          endpoint: request.path,
+          statusCode: request.status_code,
+          latency: request.response_time_ms,
+          rateLimitApplied: undefined,
+          rateLimitAllowed: undefined,
+          circuitBreakerState: undefined,
+          retryAfterMs: undefined,
+        }))
+      );
     }
   }, [fallbackData]);
 

@@ -62,6 +62,8 @@ func New(cfg Config) *SDK {
 	switch {
 	case cfg.DisableRateLimit:
 		limiter = NoopLimiter{}
+	case cfg.RedisClient != nil:
+		limiter = newRedisGCRALimiter(cfg.RedisClient)
 	default:
 		limiter = NewMemoryLimiter()
 	}

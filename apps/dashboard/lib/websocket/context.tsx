@@ -16,6 +16,12 @@ export type WebSocketEventType =
   | "circuit_breaker.state_change"
   | "system.health"
   | "api.metrics.update"
+  | "request.completed"
+  | "request.rate_limited"
+  | "request.circuit_open"
+  | "request.rate_limiter_degraded"
+  | "request.budget_warning"
+  | "request.token_budget_exceeded"
   | "test.message";
 
 /**

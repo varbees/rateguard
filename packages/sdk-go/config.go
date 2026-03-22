@@ -1,9 +1,11 @@
 package rateguard
 
 import (
+	"context"
 	"net/http"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
@@ -21,6 +23,11 @@ func (systemClock) Now() time.Time {
 
 // KeyFunc builds the rate limit key for a request.
 type KeyFunc func(*http.Request) string
+
+// RedisLimiterClient is the minimal Redis contract required by the SDK limiter.
+type RedisLimiterClient interface {
+	Eval(ctx context.Context, script string, keys []string, args ...interface{}) *redis.Cmd
+}
 
 // Config controls SDK behavior.
 type Config struct {
@@ -46,6 +53,7 @@ type Config struct {
 	KeyFunc             KeyFunc
 	TokenUsageExtractor TokenUsageExtractor
 	BudgetWaiter        BudgetWaiter
+	RedisClient         RedisLimiterClient
 
 	OTLPCollectorEndpoint string
 	ServiceName           string

@@ -3,12 +3,15 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	"github.com/varbees/rateguard/api"
 	"github.com/varbees/rateguard/api/middleware"
 	"github.com/varbees/rateguard/config"
@@ -27,6 +30,7 @@ import (
 	"github.com/varbees/rateguard/internal/webhook"
 	"github.com/varbees/rateguard/internal/websocket"
 	"github.com/varbees/rateguard/pkg/logger"
+	rateguardsdk "github.com/varbees/rateguard/sdk-go"
 	"go.uber.org/zap"
 )
 
@@ -53,6 +57,7 @@ type Runtime struct {
 	alertDetector       *analytics.AlertDetector
 	costEstimator       *analytics.CostEstimator
 	webhookWorker       *webhook.WebhookWorker
+	selfProtectionSDK   *rateguardsdk.SDK
 	cleanupDone         chan struct{}
 }
 
@@ -182,7 +187,11 @@ func (r *Runtime) build() error {
 	idempotencyMiddleware := middleware.NewIdempotencyMiddleware(r.redisClient)
 	meteringMiddleware := middleware.NewMeteringMiddleware(r.usageTracker)
 	corsMiddleware := middleware.NewCORSMiddleware(r.dbStore, r.allowedOrigins())
-	globalRateLimitMiddleware := middleware.NewGlobalRateLimitMiddleware(r.redisLimiter)
+	var globalRateLimitMiddleware *middleware.GlobalRateLimitMiddleware
+	if r.redisLimiter != nil {
+		globalRateLimitMiddleware = middleware.NewGlobalRateLimitMiddleware(r.redisLimiter)
+	}
+	selfProtectionMiddleware := r.buildSelfProtectionMiddleware()
 	logger.Info("✅ Middleware initialized")
 
 	// Create Fiber app
@@ -243,6 +252,7 @@ func (r *Runtime) build() error {
 		r.telemetryMiddleware,
 		corsMiddleware,
 		globalRateLimitMiddleware,
+		selfProtectionMiddleware,
 		healthHandler,
 		r.webhookHandler(),
 		webSocketHandler,
@@ -440,6 +450,63 @@ func (r *Runtime) webhookHandler() *api.WebhookHandler {
 	return api.NewWebhookHandler(r.dbStore, r.webhookWorker, webhookConfig)
 }
 
+func (r *Runtime) buildSelfProtectionMiddleware() fiber.Handler {
+	if r.redisClient == nil || r.webSocketHub == nil {
+		logger.Info("Self-protection middleware disabled",
+			zap.Bool("redis_available", r.redisClient != nil),
+			zap.Bool("websocket_hub_available", r.webSocketHub != nil),
+		)
+		return nil
+	}
+
+	r.selfProtectionSDK = rateguardsdk.New(rateguardsdk.Config{
+		Preset:      rateguardsdk.PresetStrictUpstreamProtect,
+		TenantID:    "gateway",
+		UpstreamID:  "control-plane",
+		RedisClient: r.redisClient.GetClient(),
+		EventEmitter: &gatewaySelfProtectionEmitter{
+			hub: r.webSocketHub,
+		},
+	})
+
+	return func(c *fiber.Ctx) error {
+		req, err := adaptor.ConvertRequest(c, true)
+		if err != nil {
+			return err
+		}
+
+		recorder := httptest.NewRecorder()
+		calledNext := false
+		var routeErr error
+
+		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			calledNext = true
+			c.Request().Header.SetMethod(req.Method)
+			c.Request().SetRequestURI(req.RequestURI)
+			c.Request().SetHost(req.Host)
+			c.Request().Header.SetHost(req.Host)
+			for key, values := range req.Header {
+				for _, value := range values {
+					c.Request().Header.Set(key, value)
+				}
+			}
+
+			if routeErr = c.Next(); routeErr != nil {
+				return
+			}
+
+			copyFiberResponseToHTTPWriter(c, w)
+		})
+
+		r.selfProtectionSDK.HTTPMiddleware(next).ServeHTTP(recorder, req)
+		if !calledNext {
+			copyHTTPRecorderToFiber(c, recorder)
+		}
+
+		return routeErr
+	}
+}
+
 // Run starts the HTTP server and handles graceful shutdown.
 func (r *Runtime) Run() {
 	serverAddr := r.cfg.GetServerAddress()
@@ -558,7 +625,104 @@ func (r *Runtime) Shutdown() {
 		}
 	}
 
+	if r.selfProtectionSDK != nil {
+		if err := r.selfProtectionSDK.Shutdown(shutdownCtx); err != nil {
+			logger.Warn("Failed to flush self-protection SDK telemetry", zap.Error(err))
+		}
+	}
+
 	logger.Info("✨ Graceful shutdown complete. Goodbye!",
 		zap.Duration("shutdown_timeout", r.cfg.GetShutdownTimeout()),
 	)
+}
+
+type gatewaySelfProtectionEmitter struct {
+	hub *websocket.Hub
+}
+
+func (e *gatewaySelfProtectionEmitter) Emit(_ context.Context, event rateguardsdk.EventEnvelope) error {
+	if e == nil || e.hub == nil {
+		return nil
+	}
+
+	payload := map[string]any{
+		"request_id":            event.Payload.RequestID,
+		"method":                event.Payload.Method,
+		"path":                  event.Payload.Path,
+		"status_code":           event.Payload.StatusCode,
+		"latency_ms":            event.Payload.LatencyMS,
+		"rate_limit_applied":    event.Payload.RateLimitApplied,
+		"rate_limit_allowed":    event.Payload.RateLimitAllowed,
+		"rate_limit_limit":      event.Payload.RateLimitLimit,
+		"rate_limit_remaining":  event.Payload.RateLimitRemaining,
+		"preset":                event.Payload.Preset,
+		"circuit_breaker_state": event.Payload.CircuitBreakerState,
+		"queue_depth":           event.Payload.QueueDepth,
+		"token_budget_applied":  event.Payload.TokenBudgetApplied,
+		"token_budget_queued":   event.Payload.TokenBudgetQueued,
+	}
+	if event.Payload.RetryAfterMS > 0 {
+		payload["retry_after_ms"] = event.Payload.RetryAfterMS
+	}
+	if event.Payload.TokenProvider != "" {
+		payload["token_provider"] = event.Payload.TokenProvider
+	}
+	if event.Payload.TokenModel != "" {
+		payload["token_model"] = event.Payload.TokenModel
+	}
+	if event.Payload.TokenInputTokens > 0 {
+		payload["token_input_tokens"] = event.Payload.TokenInputTokens
+	}
+	if event.Payload.TokenOutputTokens > 0 {
+		payload["token_output_tokens"] = event.Payload.TokenOutputTokens
+	}
+	if event.Payload.TokenTotalTokens > 0 {
+		payload["token_total_tokens"] = event.Payload.TokenTotalTokens
+	}
+	if event.Payload.TokenBudgetMode != "" {
+		payload["token_budget_mode"] = event.Payload.TokenBudgetMode
+	}
+	if event.Payload.TokenBudgetWaitMS > 0 {
+		payload["token_budget_wait_ms"] = event.Payload.TokenBudgetWaitMS
+	}
+	if event.Payload.TokenBudgetLimit > 0 {
+		payload["token_budget_limit"] = event.Payload.TokenBudgetLimit
+	}
+	if event.Payload.TokenBudgetRemaining > 0 {
+		payload["token_budget_remaining"] = event.Payload.TokenBudgetRemaining
+	}
+
+	return e.hub.Publish(websocket.WebSocketEvent{
+		EventID:    event.EventID,
+		EventType:  event.EventType,
+		TenantID:   event.TenantID,
+		RouteID:    event.RouteID,
+		UpstreamID: event.UpstreamID,
+		TraceID:    event.TraceID,
+		OccurredAt: event.OccurredAt,
+		Payload:    payload,
+	})
+}
+
+func copyFiberResponseToHTTPWriter(c *fiber.Ctx, w http.ResponseWriter) {
+	resp := c.Response()
+	resp.Header.VisitAll(func(key, value []byte) {
+		w.Header().Add(string(key), string(value))
+	})
+	w.WriteHeader(resp.StatusCode())
+	_, _ = w.Write(resp.Body())
+}
+
+func copyHTTPRecorderToFiber(c *fiber.Ctx, recorder *httptest.ResponseRecorder) {
+	if c == nil || recorder == nil {
+		return
+	}
+
+	for key, values := range recorder.Header() {
+		for _, value := range values {
+			c.Response().Header.Add(key, value)
+		}
+	}
+	c.Status(recorder.Code)
+	c.Response().SetBodyRaw(recorder.Body.Bytes())
 }

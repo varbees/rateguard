@@ -73,7 +73,11 @@ export function useWebSocket(
 
     // Create WebSocket manager
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8008';
-    const fullUrl = `${wsUrl}/ws${endpoint}`;
+    const fullUrl = `${wsUrl}/ws`;
+
+    if (endpoint && endpoint !== '/dashboard' && process.env.NODE_ENV === 'development') {
+      console.debug(`[useWebSocket] Ignoring endpoint hint "${endpoint}" and connecting to shared /ws socket`);
+    }
 
     const manager = new WebSocketManager({
       url: fullUrl,

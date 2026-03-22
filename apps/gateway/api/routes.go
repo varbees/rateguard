@@ -31,6 +31,7 @@ func SetupRoutes(
 	telemetryMiddleware *middleware.TelemetryMiddleware,
 	corsMiddleware *middleware.CORSMiddleware,
 	globalRateLimitMiddleware *middleware.GlobalRateLimitMiddleware, // NEW: Global rate limit
+	selfProtectionMiddleware fiber.Handler,
 	healthHandler *HealthHandler,
 	webhookHandler *WebhookHandler,
 	webSocketHandler *WebSocketHandler,
@@ -51,7 +52,15 @@ func SetupRoutes(
 	}
 
 	// Global Rate Limiting (before CORS/Auth)
-	app.Use(globalRateLimitMiddleware.Limit)
+	app.Use(func(c *fiber.Ctx) error {
+		if strings.HasPrefix(c.Path(), "/api/v1/") {
+			return c.Next()
+		}
+		if globalRateLimitMiddleware == nil {
+			return c.Next()
+		}
+		return globalRateLimitMiddleware.Limit(c)
+	})
 
 	// Global CORS for non-proxy routes (auth, dashboard, health)
 	// Note: Per-API CORS is applied to proxy routes after authentication
@@ -105,6 +114,10 @@ func SetupRoutes(
 	// API v1 routes
 	v1 := app.Group("/api/v1")
 	{
+		if selfProtectionMiddleware != nil {
+			v1.Use(selfProtectionMiddleware)
+		}
+
 		v1.Get("/openapi.json", func(c *fiber.Ctx) error {
 			doc, err := openapi.JSON()
 			if err != nil {
@@ -194,7 +207,7 @@ func SetupRoutes(
 		apiKeys := v1.Group("/api-keys")
 		apiKeys.Use(authMiddleware.Authenticate)
 		{
-			apiKeys.Get("/", apiKeysHandler.ListAPIKeys)        // List all keys
+			apiKeys.Get("/", apiKeysHandler.ListAPIKeys)                                       // List all keys
 			apiKeys.Post("/", idempotencyMiddleware.Enforce, apiKeysHandler.CreateAPIKey)      // Create new key
 			apiKeys.Delete("/:id", idempotencyMiddleware.Enforce, apiKeysHandler.RevokeAPIKey) // Revoke key
 		}
@@ -247,7 +260,7 @@ func SetupRoutes(
 			test := v1.Group("/test")
 			test.Use(authMiddleware.Authenticate)
 			{
-			test.Post("/broadcast", idempotencyMiddleware.Enforce, webSocketHandler.TestBroadcast)
+				test.Post("/broadcast", idempotencyMiddleware.Enforce, webSocketHandler.TestBroadcast)
 			}
 		}
 

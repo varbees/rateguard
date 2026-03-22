@@ -19,7 +19,7 @@ interface OnboardingStep {
 export function EmptyStateView() {
   const { user } = useUser();
 
-  // Mock onboarding progress - in real app, fetch from API
+  // Static onboarding checklist for first-run guidance.
   const steps: OnboardingStep[] = [
     { label: 'Create account', done: true },
     { label: 'Create first API', done: false },

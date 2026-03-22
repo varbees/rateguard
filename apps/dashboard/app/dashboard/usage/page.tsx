@@ -1,8 +1,12 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import type { DashboardStats, UsageByAPI } from "@/lib/api";
-import { dashboardAPI } from "@/lib/api";
+import * as React from "react";
+import type { RecentRequest, UsageByAPI } from "@/lib/api";
+import {
+  useDashboardStats,
+  useRecentRequests,
+  useUsageHistory,
+} from "@/lib/hooks/use-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,82 +23,110 @@ import {
   Line,
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
 } from "recharts";
 
-// Mock data for detailed analytics
-const usageOverTime = [
-  { date: "2025-11-15", requests: 1200, success: 1150, errors: 50 },
-  { date: "2025-11-16", requests: 1800, success: 1720, errors: 80 },
-  { date: "2025-11-17", requests: 2200, success: 2100, errors: 100 },
-  { date: "2025-11-18", requests: 1900, success: 1820, errors: 80 },
-  { date: "2025-11-19", requests: 2500, success: 2400, errors: 100 },
-  { date: "2025-11-20", requests: 2800, success: 2700, errors: 100 },
-  { date: "2025-11-21", requests: 3200, success: 3100, errors: 100 },
+const API_USAGE_COLORS = [
+  "hsl(var(--chart-1))",
+  "hsl(var(--chart-2))",
+  "hsl(var(--chart-3))",
+  "hsl(var(--chart-4))",
+  "hsl(var(--chart-5))",
 ];
 
-const apiUsageBreakdown = [
-  {
-    name: "JSONPlaceholder",
-    requests: 770,
-    percentage: 45,
-    colorClass: "bg-chart-1",
-  },
-  {
-    name: "Stripe API",
-    requests: 520,
-    percentage: 30,
-    colorClass: "bg-chart-3",
-  },
-  {
-    name: "GitHub API",
-    requests: 340,
-    percentage: 20,
-    colorClass: "bg-chart-2",
-  },
-  {
-    name: "Others",
-    requests: 85,
-    percentage: 5,
-    colorClass: "bg-muted-foreground",
-  },
-];
+function calculateAverage(values: number[]) {
+  if (values.length === 0) return 0;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
 
-const responseTimeData = [
-  { time: "00:00", avg: 120, p95: 180, p99: 250 },
-  { time: "04:00", avg: 110, p95: 160, p99: 220 },
-  { time: "08:00", avg: 140, p95: 200, p99: 280 },
-  { time: "12:00", avg: 160, p95: 240, p99: 320 },
-  { time: "16:00", avg: 150, p95: 220, p99: 300 },
-  { time: "20:00", avg: 130, p95: 190, p99: 260 },
-];
+function calculatePercentile(values: number[], percentile: number) {
+  if (values.length === 0) return 0;
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.ceil((percentile / 100) * sorted.length) - 1;
+  return sorted[Math.min(Math.max(index, 0), sorted.length - 1)];
+}
+
+function buildResponseTimeData(requests: RecentRequest[]) {
+  if (requests.length === 0) return [];
+
+  const sorted = [...requests].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
+  const bucketCount = Math.min(6, sorted.length);
+  const bucketSize = Math.ceil(sorted.length / bucketCount);
+
+  return Array.from({ length: bucketCount }, (_, index) => {
+    const bucket = sorted.slice(index * bucketSize, (index + 1) * bucketSize);
+    const durations = bucket.map((request) => request.response_time_ms);
+    const label = bucket[0]
+      ? new Date(bucket[0].timestamp).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : `Bucket ${index + 1}`;
+
+    return {
+      time: label,
+      avg: calculateAverage(durations),
+      p95: calculatePercentile(durations, 95),
+      p99: calculatePercentile(durations, 99),
+    };
+  });
+}
 
 export default function UsagePage() {
-  const { data: stats, isLoading } = useQuery<DashboardStats>({
-    queryKey: ["dashboard-stats"],
-    queryFn: dashboardAPI.stats,
-    refetchInterval: 30000,
-  });
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: usageHistory, isLoading: usageHistoryLoading } =
+    useUsageHistory("30d");
+  const { data: recentRequests } = useRecentRequests({ limit: 200 });
 
-  const { data: usage } = useQuery({
-    queryKey: ["dashboard-usage"],
-    queryFn: dashboardAPI.usage,
-    refetchInterval: 30000,
-  });
+  const isLoading = statsLoading || usageHistoryLoading;
+
+  const usageOverTime = React.useMemo(() => {
+    return (
+      usageHistory?.data.map((point) => {
+        const success = Math.round(point.requests * (point.success_rate / 100));
+
+        return {
+          date: new Date(point.timestamp).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+          }),
+          requests: point.requests,
+          success,
+          errors: Math.max(0, point.requests - success),
+        };
+      }) ?? []
+    );
+  }, [usageHistory]);
+
+  const apiUsageBreakdown = React.useMemo(() => {
+    const usageByApi: UsageByAPI[] = stats?.stats.usage_by_api ?? [];
+    const totalRequests = stats?.stats.total_requests ?? 0;
+
+    return usageByApi.map((api, index) => ({
+      name: api.api_name,
+      requests: api.requests,
+      percentage:
+        totalRequests > 0 ? (api.requests / totalRequests) * 100 : 0,
+      colorClass: API_USAGE_COLORS[index % API_USAGE_COLORS.length],
+    }));
+  }, [stats]);
+
+  const responseTimeData = React.useMemo(
+    () => buildResponseTimeData(recentRequests?.requests ?? []),
+    [recentRequests]
+  );
+
   const usageByApi: UsageByAPI[] = stats?.stats.usage_by_api ?? [];
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
@@ -122,7 +154,6 @@ export default function UsagePage() {
         </div>
       </div>
 
-      {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="bg-card border-border">
           <CardContent className="p-6">
@@ -137,7 +168,7 @@ export default function UsagePage() {
                     : (stats?.stats.total_requests || 0).toLocaleString()}
                 </p>
                 <p className="text-xs text-primary mt-1">
-                  +12% from last month
+                  Live data from /api/v1/dashboard/stats
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-primary/10">
@@ -160,7 +191,7 @@ export default function UsagePage() {
                     : `${(stats?.stats.success_rate || 0).toFixed(1)}%`}
                 </p>
                 <p className="text-xs text-primary mt-1">
-                  +2.1% from last month
+                  Same runtime contract the gateway exposes
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-primary/10">
@@ -183,7 +214,7 @@ export default function UsagePage() {
                     : `${(stats?.stats.avg_response_time_ms || 0).toFixed(0)}ms`}
                 </p>
                 <p className="text-xs text-destructive mt-1">
-                  +5ms from last month
+                  From the live dashboard stats endpoint
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-accent">
@@ -206,7 +237,7 @@ export default function UsagePage() {
                     : `${(100 - (stats?.stats.success_rate || 0)).toFixed(1)}%`}
                 </p>
                 <p className="text-xs text-primary mt-1">
-                  -0.8% from last month
+                  Derived from the backend success rate
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-destructive/10">
@@ -217,7 +248,6 @@ export default function UsagePage() {
         </Card>
       </div>
 
-      {/* Usage Over Time */}
       <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="text-card-foreground">
@@ -288,9 +318,7 @@ export default function UsagePage() {
         </CardContent>
       </Card>
 
-      {/* API Usage Breakdown and Response Times */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* API Usage Breakdown */}
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-card-foreground">
@@ -305,7 +333,10 @@ export default function UsagePage() {
                   className="flex items-center justify-between"
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${api.colorClass}`} />
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: api.colorClass }}
+                    />
                     <span className="text-foreground">{api.name}</span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -316,7 +347,7 @@ export default function UsagePage() {
                       variant="secondary"
                       className="bg-secondary text-secondary-foreground"
                     >
-                      {api.percentage}%
+                      {api.percentage.toFixed(1)}%
                     </Badge>
                   </div>
                 </div>
@@ -325,7 +356,6 @@ export default function UsagePage() {
           </CardContent>
         </Card>
 
-        {/* Response Time Trends */}
         <Card className="bg-card border-border">
           <CardHeader>
             <CardTitle className="text-card-foreground">
@@ -376,15 +406,14 @@ export default function UsagePage() {
         </Card>
       </div>
 
-      {/* Recent Activity */}
       <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="text-card-foreground">
             Recent Activity
           </CardTitle>
         </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
+        <CardContent>
+          <div className="space-y-4">
             {usageByApi.length > 0 ? (
               usageByApi.map((api, index) => (
                 <div

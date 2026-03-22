@@ -132,6 +132,11 @@ export default function BudgetPage() {
     },
   });
 
+  const { data: costEstimate } = useQuery({
+    queryKey: ["budget", "cost-estimate"],
+    queryFn: () => apiClient.getCostEstimate(),
+  });
+
   // Populate form from existing config
   React.useEffect(() => {
     if (budgetConfig) {
@@ -186,23 +191,44 @@ export default function BudgetPage() {
     },
   });
 
-  // Calculate current spend (mock - would come from actual usage)
-  const currentSpendCents = budgetConfig
-    ? Math.round((budgetConfig.monthly_budget_cents * 0.65)) // 65% of budget
-    : 0;
-  const currentSpend = currentSpendCents / 100;
+  const currentSpend = costEstimate?.mtd_cost ?? 0;
   const budgetAmount = budgetConfig ? budgetConfig.monthly_budget_cents / 100 : 0;
   const spendPercentage = budgetAmount > 0 ? (currentSpend / budgetAmount) * 100 : 0;
 
   // Unacknowledged alerts
   const activeAlerts = alerts?.filter((a: BudgetAlert) => !a.acknowledged) || [];
 
-  // Mock spend over time data
-  const spendData = Array.from({ length: 30 }, (_, i) => ({
-    day: `Day ${i + 1}`,
-    spend: Math.random() * 50 + (i * 2),
-    budget: budgetAmount / 30,
-  }));
+  const spendData = React.useMemo(() => {
+    const daysInMonth = Math.max(
+      1,
+      new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+    );
+    const daysElapsed = Math.max(1, new Date().getDate());
+    const projectedSpend = costEstimate?.monthly_projection ?? 0;
+    const monthToDateSpend = costEstimate?.mtd_cost ?? 0;
+    const dailyBudget = budgetAmount / daysInMonth;
+    const projectedSlope = projectedSpend / daysInMonth;
+    const actualSlope = monthToDateSpend / daysElapsed;
+
+    return Array.from({ length: daysInMonth }, (_, index) => {
+      const day = index + 1;
+      const budget = dailyBudget * day;
+      const spend =
+        day <= daysElapsed
+          ? actualSlope * day
+          : monthToDateSpend +
+            Math.max(0, day - daysElapsed) *
+              ((projectedSpend - monthToDateSpend) /
+                Math.max(daysInMonth - daysElapsed, 1));
+
+      return {
+        day: `Day ${day}`,
+        spend: Number(spend.toFixed(2)),
+        budget: Number(budget.toFixed(2)),
+        projected: Number((projectedSlope * day).toFixed(2)),
+      };
+    });
+  }, [budgetAmount, costEstimate]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -335,7 +361,7 @@ export default function BudgetPage() {
               <CardHeader>
                 <CardTitle>Spend Over Time</CardTitle>
                 <CardDescription>
-                  Daily spending vs budget target
+                  Daily spend projection vs budget target
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -368,6 +394,13 @@ export default function BudgetPage() {
                       stroke="hsl(var(--primary))"
                       strokeWidth={2}
                       name="Actual Spend"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="projected"
+                      stroke="hsl(var(--chart-2))"
+                      strokeDasharray="5 5"
+                      name="Projected Spend"
                     />
                     <Line
                       type="monotone"

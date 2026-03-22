@@ -22,6 +22,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/stripe/stripe-go/v81 v81.4.0
+	github.com/varbees/rateguard/sdk-go v0.0.0
 	go.opentelemetry.io/otel v1.39.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.39.0
 	go.opentelemetry.io/otel/metric v1.39.0
@@ -32,6 +33,8 @@ require (
 	golang.org/x/crypto v0.45.0
 	golang.org/x/time v0.14.0
 )
+
+replace github.com/varbees/rateguard/sdk-go => ../../packages/sdk-go
 
 require (
 	atomicgo.dev/cursor v0.2.0 // indirect
