@@ -129,6 +129,7 @@ Latest verification snapshot:
 - `task ui:typecheck`: passed after the active docs wording sweep and repository rename cleanup
 - `task ui:typecheck`: passed after adding route type regeneration to the task so a clean checkout does not depend on stale `.next` output
 - `task ui:typecheck`: passed again after the queue/circuit-breaker/cache hardening pass
+- `task ui:typecheck`: passed again after the dashboard guardrail rename and realtime events screen wiring
 - `task openapi:generate`: passed after switching generated URL templating from `replaceAll` to `split/join` for the current TS target
 - `task dev`: passed in a normal local environment after removing the broken SQL init bind mount and moving Grafana off the conflicting host port
 - `task smoke`: passed in a normal local environment against the booted stack
@@ -192,9 +193,9 @@ Completed:
 
 In progress:
 - post-launch cleanup is now mostly limited to archived docs/examples and small wording polish
-- remaining frontend cleanup is now mostly optional team/org UX polish, the `/dashboard/events` placeholder, `Plan*` component naming, and any archival-only docs/examples that still need wording cleanup
+- remaining frontend cleanup is now mostly optional team/org UX polish and any archival-only docs/examples that still need wording cleanup
 - bounded-context extraction is complete for the launch-critical surfaces; any further slicing is optional
-- residual compatibility is now mostly storage-only, plus the dashboard `plan_limit` usage-stats shim and the live `Plan*` component names
+- residual compatibility is now mostly storage-only, plus the dashboard `plan_limit` usage-stats shim
 - algorithmic hardening is complete for the current launch scope; the remaining work is release validation and small UI/docs polish
 
 Next:
@@ -205,7 +206,7 @@ Next:
 - keep archived or historical docs/examples clearly labeled so they do not read as live product copy
 - preserve the storage-only legacy columns for now until a future schema migration is explicitly scheduled
 - schedule any schema migration or storage cleanup as a separate post-launch workstream only if the team decides the compatibility cost is worth removing
-- keep the remaining live frontend naming shims (`plan_limit`, `Plan*`) limited to compatibility until a later cleanup pass
+- keep the remaining live frontend compatibility shim (`plan_limit`) limited to compatibility until a later cleanup pass
 - if the team resumes feature work before launch validation, keep it limited to polish and any newly discovered correctness issues
 
 ## Launch Readiness Audit
@@ -250,9 +251,9 @@ Confirmed audit findings so far:
 - mutating API routes now enforce an `Idempotency-Key` contract on the advertised mutating surfaces
 - queue config now enforces `max_queue_length` at admission time and returns a clean 429 when capacity is exhausted
 - streaming token extraction still exists as a helper, but the proxy streaming path does not wire it end-to-end yet; streaming metrics are recorded, token budgets are not
-- the logged-in dashboard still has a visible `/dashboard/events` placeholder route in the nav, so the realtime events screen is still a frontend gap
+- the logged-in dashboard now has a live `/dashboard/events` realtime screen in the nav, so the frontend gap has been closed
 - dashboard usage stats still expose `plan_limit` in the backend model and frontend contract as a compatibility shim; the active UI copy has moved to guardrail/preset language, but the payload shape is still legacy-compatible
-- the `Plan*` dashboard components are still live transitional names (`PlanStatusBanner`, `PlanLimitsCard`) even though their content now speaks guardrails and presets
+- the dashboard guardrail components now use `UsageGuardrailsBanner` and `UsageGuardrailsCard`; only the `plan_limit` field remains as a compatibility shim
 - the architecture docs page still contains an over-strong claim about "unbounded goroutines" on the middleware path; that wording is product-copy debt rather than a runtime claim
 
 ## Phase Ledger
@@ -447,7 +448,7 @@ Latest verified state:
 - listener-dependent, miniredis-dependent, and `TEST_DATABASE_URL`-dependent tests skip when the environment does not provide the required local resources
 - refresh-token rotation is now strict: missing DB state returns unauthorized instead of continuing in a grace mode
 - launch gate status: reached
-- the live dashboard still has one placeholder route (`/dashboard/events`) and a few legacy compatibility names (`plan_limit`, `PlanStatusBanner`, `PlanLimitsCard`) that are safe but not yet fully renamed
+- the live dashboard now has a real `/dashboard/events` realtime screen; the remaining legacy compatibility name is `plan_limit`
 
 ## Capacity Plan
 
