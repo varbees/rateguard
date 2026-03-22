@@ -1,0 +1,15 @@
+.git
+.gitignore
+.env
+.env.*
+!/.env.example
+node_modules
+.next
+coverage
+*.log
+*.tmp
+*.tsbuildinfo
+FILES_CREATED.txt
+INSTALL_DEPENDENCIES.sh
+README*.md
+*.md

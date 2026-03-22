@@ -1,0 +1,21 @@
+{
+  "sources": [
+    {
+      "name": "API with Custom Headers",
+      "url": "https://httpbin.org/headers",
+      "method": "GET",
+      "headers": {
+        "X-Custom-Header": "CustomValue",
+        "User-Agent": "Go-Concurrent-Aggregator/1.0"
+      }
+    },
+    {
+      "name": "API with Bearer Token",
+      "url": "https://httpbin.org/bearer",
+      "method": "GET",
+      "headers": {
+        "Authorization": "Bearer your-token-here"
+      }
+    }
+  ]
+}

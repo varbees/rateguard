@@ -1,0 +1,35 @@
+{
+  "sources": [
+    {
+      "name": "GitHub User",
+      "url": "https://api.github.com/users/torvalds",
+      "method": "GET",
+      "headers": {
+        "User-Agent": "Go-Concurrent-Aggregator"
+      }
+    },
+    {
+      "name": "GitHub Repos",
+      "url": "https://api.github.com/users/torvalds/repos",
+      "method": "GET",
+      "headers": {
+        "User-Agent": "Go-Concurrent-Aggregator"
+      }
+    },
+    {
+      "name": "Public IP",
+      "url": "https://api.ipify.org?format=json",
+      "method": "GET"
+    },
+    {
+      "name": "Random User",
+      "url": "https://randomuser.me/api/",
+      "method": "GET"
+    },
+    {
+      "name": "Jokes API",
+      "url": "https://official-joke-api.appspot.com/random_joke",
+      "method": "GET"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: 'rateguard'
+    static_configs:
+      - targets: ['aggregator:8080']
+    metrics_path: /metrics
+
+  - job_name: 'rateguard-keda'
+    static_configs:
+      - targets: ['aggregator:8080']
+    metrics_path: /metrics/keda

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rateguard
+  namespace: default
+  labels:
+    app: rateguard
+spec:
+  type: ClusterIP
+  selector:
+    app: rateguard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  sessionAffinity: None

@@ -1,0 +1,312 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rateguard
+  namespace: default
+  labels:
+    app: rateguard
+    version: "2.0.0"
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: rateguard
+  template:
+    metadata:
+      labels:
+        app: rateguard
+        version: "2.0.0"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8008"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: rateguard
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: rateguard
+          image: rateguard:2.0.0
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - name: http
+              containerPort: 8008
+              protocol: TCP
+
+          # ===== RESOURCE LIMITS (PRODUCTION) =====
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+          # ===== HEALTH CHECKS =====
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+            successThreshold: 1
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+            successThreshold: 1
+
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+              scheme: HTTP
+            initialDelaySeconds: 0
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+
+          # ===== GRACEFUL SHUTDOWN =====
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 15"]
+
+          # ===== SECURITY CONTEXT =====
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
+
+          # ===== ENVIRONMENT VARIABLES =====
+          env:
+            # Server Configuration
+            - name: AGG_SERVER_HOST
+              value: "0.0.0.0"
+            - name: AGG_SERVER_PORT
+              value: "8008"
+            - name: AGG_SERVER_READ_TIMEOUT_SEC
+              value: "30"
+            - name: AGG_SERVER_WRITE_TIMEOUT_SEC
+              value: "30"
+            - name: AGG_SERVER_SHUTDOWN_TIMEOUT_SEC
+              value: "30"
+
+            # Logging Configuration
+            - name: AGG_LOGGING_LEVEL
+              value: "info"
+            - name: AGG_LOGGING_FORMAT
+              value: "json"
+            - name: AGG_LOGGING_DEVELOPMENT
+              value: "false"
+
+            # Timeouts Configuration
+            - name: AGG_TIMEOUTS_API_REQUEST_SEC
+              value: "10"
+            - name: AGG_TIMEOUTS_AGGREGATION_SEC
+              value: "30"
+            - name: AGG_TIMEOUTS_HTTP_CLIENT_SEC
+              value: "30"
+            - name: AGG_TIMEOUTS_IDLE_CONN_SEC
+              value: "90"
+
+            # Worker Pool Configuration
+            - name: AGG_WORKER_POOL_WORKER_COUNT
+              value: "20"
+            - name: AGG_WORKER_POOL_QUEUE_SIZE
+              value: "200"
+
+            # Rate Limiter Configuration
+            - name: AGG_RATE_LIMITER_REQUESTS_PER_SECOND
+              value: "100"
+            - name: AGG_RATE_LIMITER_BURST_SIZE
+              value: "200"
+            - name: AGG_RATE_LIMITER_ENABLED
+              value: "true"
+
+            # RateGuard Configuration
+            - name: AGG_RATEGUARD_ENABLE_MULTI_LIMITER
+              value: "true"
+            - name: AGG_RATEGUARD_CLEANUP_INTERVAL_MIN
+              value: "60"
+            - name: AGG_RATEGUARD_RATELIMIT_BACKEND
+              value: "redis"
+
+            # Circuit Breaker Configuration
+            - name: AGG_RATEGUARD_CIRCUIT_BREAKER_MAX_FAILURES
+              value: "5"
+            - name: AGG_RATEGUARD_CIRCUIT_BREAKER_TIMEOUT_SECONDS
+              value: "60"
+            - name: AGG_RATEGUARD_CIRCUIT_BREAKER_MAX_CONCURRENT_REQUESTS_HALF_OPEN
+              value: "1"
+            - name: AGG_RATEGUARD_CIRCUIT_BREAKER_SUCCESS_THRESHOLD_HALF_OPEN
+              value: "2"
+
+            # Database Configuration
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: rateguard-config
+                  key: db.host
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: rateguard-config
+                  key: db.port
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: rateguard-config
+                  key: db.name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: db.user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: db.password
+            - name: DB_SSL_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: rateguard-config
+                  key: db.ssl_mode
+
+            # Redis Configuration
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: rateguard-config
+                  key: redis.host
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: rateguard-config
+                  key: redis.port
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: redis.password
+                  optional: true
+            - name: REDIS_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: rateguard-config
+                  key: redis.db
+            - name: REDIS_POOL_SIZE
+              value: "10"
+            - name: REDIS_MIN_IDLE_CONNS
+              value: "5"
+            - name: REDIS_MAX_RETRIES
+              value: "3"
+            - name: REDIS_DIAL_TIMEOUT_SEC
+              value: "5"
+            - name: REDIS_READ_TIMEOUT_SEC
+              value: "3"
+            - name: REDIS_WRITE_TIMEOUT_SEC
+              value: "3"
+
+            # Authentication & Security
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: jwt.secret
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: encryption.key
+
+            # Payment Configuration
+            - name: RAZORPAY_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: razorpay.key_id
+                  optional: true
+            - name: RAZORPAY_KEY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: razorpay.key_secret
+                  optional: true
+            - name: RAZORPAY_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: razorpay.webhook_secret
+                  optional: true
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: stripe.secret_key
+                  optional: true
+            - name: STRIPE_PUBLISHABLE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: stripe.publishable_key
+                  optional: true
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: rateguard-secrets
+                  key: stripe.webhook_secret
+                  optional: true
+
+          # ===== VOLUME MOUNTS =====
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /app/cache
+
+      # ===== VOLUMES =====
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
+
+      # ===== POD DISRUPTION BUDGET =====
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - rateguard
+                topologyKey: kubernetes.io/hostname
+
+      terminationGracePeriodSeconds: 45

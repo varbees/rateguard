@@ -1,0 +1,72 @@
+import { Metadata } from "next";
+import { HelpCircle } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+
+export const metadata: Metadata = {
+  title: "Product FAQ | RateGuard Documentation",
+  description: "Frequently asked questions about RateGuard.",
+};
+
+export default function ProductFaqPage() {
+  return (
+    <div className="min-h-screen bg-background space-y-12 max-w-5xl mx-auto">
+      {/* Hero Section */}
+      <div className="border-b bg-muted/30 pb-8 pt-12 rounded-xl px-8">
+        <div className="flex items-start gap-4 mb-6">
+          <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+            <HelpCircle className="size-8 text-primary" />
+          </div>
+          <div className="flex-1">
+            <h1 className="text-4xl font-bold tracking-tight mb-3">
+              Product FAQ
+            </h1>
+            <p className="text-xl text-muted-foreground leading-relaxed">
+              You have questions. We have answers. (Mostly).
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-12 px-4">
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="latency">
+            <AccordionTrigger>Does RateGuard add latency?</AccordionTrigger>
+            <AccordionContent>
+              Technically, yes. Everything adds latency. But we&apos;re talking
+              about milliseconds. The middleware path is designed to stay out of the way, and the proxy path adds only a small amount of overhead.
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="uptime">
+            <AccordionTrigger>What is your uptime guarantee?</AccordionTrigger>
+            <AccordionContent>
+              Availability depends on your deployment and infrastructure. The control plane exposes health checks so you can monitor it directly.
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="data-privacy">
+            <AccordionTrigger>Do you store my API data?</AccordionTrigger>
+            <AccordionContent>
+              We store metadata (headers, timestamps, token counts) for
+              analytics. We do NOT store request or response bodies unless you
+              explicitly enable &quot;Debug Mode&quot; for troubleshooting.
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="streaming">
+            <AccordionTrigger>Do you support streaming?</AccordionTrigger>
+            <AccordionContent>
+              Yes! We support Server-Sent Events (SSE) for LLM streaming. We
+              count tokens on the fly without buffering the entire response.
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+    </div>
+  );
+}

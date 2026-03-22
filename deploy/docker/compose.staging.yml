@@ -1,0 +1,23 @@
+services:
+  gateway:
+    environment:
+      AGG_WORKER_POOL_WORKER_COUNT: ${AGG_WORKER_POOL_WORKER_COUNT:-30}
+      AGG_WORKER_POOL_QUEUE_SIZE: ${AGG_WORKER_POOL_QUEUE_SIZE:-300}
+      AGG_RATE_LIMITER_REQUESTS_PER_SECOND: ${AGG_RATE_LIMITER_REQUESTS_PER_SECOND:-150}
+      AGG_RATE_LIMITER_BURST_SIZE: ${AGG_RATE_LIMITER_BURST_SIZE:-300}
+      AGG_LOGGING_LEVEL: ${AGG_LOGGING_LEVEL:-info}
+      AGG_LOGGING_FORMAT: ${AGG_LOGGING_FORMAT:-json}
+      AGG_LOGGING_DEVELOPMENT: ${AGG_LOGGING_DEVELOPMENT:-false}
+    restart: always
+
+  dashboard:
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8008}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8008}
+    restart: always
+
+  prometheus:
+    restart: always
+
+  grafana:
+    restart: always

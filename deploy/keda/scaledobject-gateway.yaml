@@ -1,0 +1,41 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: rateguard-gateway
+  namespace: default
+  labels:
+    app: rateguard
+spec:
+  scaleTargetRef:
+    name: rateguard
+  pollingInterval: 15
+  cooldownPeriod: 60
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  advanced:
+    restoreToOriginalReplicaCount: true
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.default.svc.cluster.local:9090
+        metricName: queue_depth_per_upstream
+        query: max(queue_depth_per_upstream)
+        threshold: "25"
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.default.svc.cluster.local:9090
+        metricName: p95_latency_per_upstream
+        query: max(p95_latency_per_upstream)
+        threshold: "250"
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.default.svc.cluster.local:9090
+        metricName: circuit_breaker_open_rate
+        query: max(circuit_breaker_open_rate)
+        threshold: "1"
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.default.svc.cluster.local:9090
+        metricName: error_burst_rate_1m
+        query: sum(error_burst_rate_1m)
+        threshold: "25"

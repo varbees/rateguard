@@ -1,0 +1,68 @@
+# Git files
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Test files and results
+*_test.go
+test-scenarios/
+test-results/
+coverage.out
+*.test
+
+# Development files
+.env
+.env.*
+!.env.example
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+aggregator
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Docker files (except Dockerfile)
+docker-compose*.yml
+.dockerignore
+
+# Scripts (not needed in image)
+scripts/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.circleci/
+
+# Monitoring (already copied separately)
+monitoring/
+
+# Examples (not needed at runtime)
+examples/
+
+# Temporary files
+tmp/
+temp/
+*.tmp

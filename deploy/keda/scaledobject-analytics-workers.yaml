@@ -1,0 +1,26 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: rateguard-analytics-workers
+  namespace: default
+  labels:
+    app: rateguard
+spec:
+  # This target is expected to be the worker-only deployment that consumes Redis Streams.
+  # The current repo still runs the consumer inside the main binary; this manifest defines
+  # the scaling contract for the worker deployment cut.
+  scaleTargetRef:
+    name: rateguard-analytics-workers
+  pollingInterval: 15
+  cooldownPeriod: 120
+  minReplicaCount: 1
+  maxReplicaCount: 6
+  advanced:
+    restoreToOriginalReplicaCount: true
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus.default.svc.cluster.local:9090
+        metricName: redis_stream_lag
+        query: max(redis_stream_lag)
+        threshold: "100"
