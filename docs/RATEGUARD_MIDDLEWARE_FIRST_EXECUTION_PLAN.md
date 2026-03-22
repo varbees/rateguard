@@ -340,6 +340,7 @@ Current state:
 - the plan doc is the source of truth for the audit scope and completed deliverables
 - release validation passed in a normal local environment
 - schema migration is explicitly deferred for this workstream
+- GitHub Actions CI is still absent; the badge is a post-launch polish item, not a launch blocker
 - audit findings should be reflected back into this file as post-launch cleanup or future work
 
 ## Immediate Next Actions
@@ -449,6 +450,7 @@ Latest verified state:
 - refresh-token rotation is now strict: missing DB state returns unauthorized instead of continuing in a grace mode
 - launch gate status: reached
 - the live dashboard now has a real `/dashboard/events` realtime screen and the stats contract uses `monthly_request_limit`
+- the repo still does not ship a GitHub Actions workflow, so the CI badge remains a post-launch polish item
 
 ## Capacity Plan
 
