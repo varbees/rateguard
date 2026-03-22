@@ -16,6 +16,8 @@ type CORSMiddleware struct {
 	allowedOrigins []string
 }
 
+const corsAllowedHeaders = "Origin,Content-Type,Accept,Authorization,X-API-Key,Idempotency-Key"
+
 // NewCORSMiddleware creates a new CORS middleware instance
 func NewCORSMiddleware(store *storage.PostgresStore, allowedOrigins []string) *CORSMiddleware {
 	if len(allowedOrigins) == 0 {
@@ -118,8 +120,12 @@ func (m *CORSMiddleware) checkAPIOrigin(c *fiber.Ctx, apiName, origin string) bo
 func (m *CORSMiddleware) setCORSHeaders(c *fiber.Ctx, origin string) {
 	c.Set("Access-Control-Allow-Origin", origin)
 	c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-	c.Set("Access-Control-Allow-Headers", "Origin,Content-Type,Accept,Authorization,X-API-Key")
+	c.Set("Access-Control-Allow-Headers", corsAllowedHeaders)
 	c.Set("Access-Control-Expose-Headers", "X-RateGuard-Request-ID,X-RateGuard-Duration-Ms,X-RateGuard-Preset,X-RateGuard-Limit,X-RateGuard-Usage,X-RateGuard-Remaining")
 	c.Set("Access-Control-Allow-Credentials", "true")
 	c.Set("Access-Control-Max-Age", "3600")
+}
+
+func (m *CORSMiddleware) AllowedHeaders() string {
+	return corsAllowedHeaders
 }

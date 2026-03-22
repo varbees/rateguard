@@ -49,4 +49,15 @@ func TestSetCORSHeadersExposesPresetHeaders(t *testing.T) {
 			t.Fatalf("exposed headers = %q, missing %q", exposed, want)
 		}
 	}
+
+	allowed := resp.Header.Get("Access-Control-Allow-Headers")
+	for _, want := range []string{
+		"Authorization",
+		"X-API-Key",
+		"Idempotency-Key",
+	} {
+		if !strings.Contains(allowed, want) {
+			t.Fatalf("allowed headers = %q, missing %q", allowed, want)
+		}
+	}
 }

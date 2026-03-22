@@ -76,7 +76,7 @@ func SetupRoutes(
 
 			c.Set("Access-Control-Allow-Origin", origin)
 			c.Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-			c.Set("Access-Control-Allow-Headers", "Origin,Content-Type,Accept,Authorization,X-API-Key")
+			c.Set("Access-Control-Allow-Headers", corsMiddleware.AllowedHeaders())
 			c.Set("Access-Control-Allow-Credentials", "true")
 			c.Set("Access-Control-Max-Age", "3600")
 
