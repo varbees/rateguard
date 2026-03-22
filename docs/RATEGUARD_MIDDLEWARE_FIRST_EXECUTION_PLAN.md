@@ -89,6 +89,7 @@ Active paths:
 - `packages/openapi/`
 - `deploy/docker/`
 - `docs/`
+- `AGENTS.md` plus `agent_docs/` is the lightweight repo-operating contract for future tasks
 
 SDK reality:
 - `packages/sdk-go` is the only in-process middleware SDK in the repo today
@@ -112,6 +113,7 @@ Current strategic read:
 - the remaining launch risk is not architecture invention, it is release validation plus a small amount of contract and UI polish
 - any future work should preserve the SDK wedge and avoid re-centralizing the product around the proxy
 - the biggest post-launch SDK expansion opportunity is no longer adding SDKs from scratch; it is keeping the Go, Node, and Python middleware contracts aligned as the repo evolves
+- the new root `AGENTS.md` file should stay small, with specialized guidance split across `agent_docs/`
 
 Release gates:
 - `task test`
