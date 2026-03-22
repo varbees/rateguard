@@ -69,6 +69,41 @@ Verdict:
 - RateGuard is not yet strongest on enterprise governance, routing breadth, or analytics depth.
 - Our durable advantage is narrow but sharp: in-process, self-hosted, cross-language middleware that enforces LLM budgets before the request leaves the app.
 
+## Agent Governance Framing
+
+The goal we are walking toward is not "just API rate limiting."
+The sharper category we want to own is:
+
+- AI Agent Traffic Control Plane
+- AI governance infrastructure for existing apps
+- in-process enforcement for runaway agent loops
+
+This direction is credible because the repo already has the core enforcement primitives:
+
+- hard-stop before upstream call
+- circuit breaker for unhealthy loops and failing dependencies
+- token-budget enforcement
+- realtime observability and replay
+- self-hosted gateway/control plane
+- Go, Node, and Python middleware contracts
+
+What this means for positioning:
+- do not market RateGuard as a proxy migration tool
+- do not market it as a pure observability layer
+- do not overclaim unique governance features that competitor gateways already have in gateway/proxy form
+- do market the in-process enforcement point as the differentiator
+
+Recommended execution order for the framing pivot:
+1. Update public-facing copy to lead with agent governance and runaway-spend prevention.
+2. Keep the comparison table honest: competitors have strong gateway features, but RateGuard owns the in-process middleware wedge.
+3. Make the self-protection loop visible so the product dogfoods its own contract.
+4. Add the MCP bridge only as a follow-on integration layer when the schedule can support it.
+5. Add any ergonomic SDK sugar, such as budget enforcement helpers, only if it keeps the in-process contract simpler for developers.
+6. Produce the demo assets around a real runaway-agent scenario rather than an abstract gateway comparison.
+
+Do not use unverified TAM or revenue numbers inside the repo docs unless they are separately sourced in marketing collateral.
+The source of truth here should stay on architecture, contracts, and what the repo can actually do.
+
 What this means:
 - we should not drift back toward proxy-first product thinking
 - the core moat is the SDK integration path plus the realtime control plane
