@@ -12,12 +12,10 @@ import {
   Check,
   Download,
   RotateCw,
-  Trash2
 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetFooter,
@@ -26,8 +24,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
-import { useWebhookEvent, useRetryWebhookEvent, useDeleteWebhookEvent } from '@/lib/hooks/use-webhooks';
+import { useWebhookEvent, useRetryWebhookEvent } from '@/lib/hooks/use-webhooks';
 import { cn } from '@/lib/utils';
 import { toast } from '@/lib/toast';
 
@@ -39,8 +36,7 @@ interface WebhookEventDetailsSheetProps {
 
 export function WebhookEventDetailsSheet({ eventId, isOpen, onClose }: WebhookEventDetailsSheetProps) {
   const { data: event, isLoading } = useWebhookEvent(eventId || '');
-  const retryMutation = useRetryWebhookEvent();
-  const deleteMutation = useDeleteWebhookEvent();
+  const replayMutation = useRetryWebhookEvent();
   const [copied, setCopied] = useState(false);
 
   const handleCopyPayload = () => {
@@ -68,15 +64,7 @@ export function WebhookEventDetailsSheet({ eventId, isOpen, onClose }: WebhookEv
 
   const handleRetry = () => {
     if (eventId) {
-      retryMutation.mutate(eventId);
-    }
-  };
-
-  const handleDelete = () => {
-    if (eventId && confirm('Are you sure you want to delete this event?')) {
-      deleteMutation.mutate(eventId, {
-        onSuccess: () => onClose(),
-      });
+      replayMutation.mutate(eventId);
     }
   };
 
@@ -215,6 +203,14 @@ export function WebhookEventDetailsSheet({ eventId, isOpen, onClose }: WebhookEv
                       </div>
                     </div>
                   </div>
+
+                  <div className="mt-4 rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
+                    {event.retries > 0
+                      ? event.last_attempt_at
+                        ? "Attempt-level timestamps are limited to the last attempt, delivery time, and next retry. The backend does not expose a full attempt log yet."
+                        : "Retry count is recorded, but the backend does not expose a full attempt log yet."
+                      : "No retry history recorded for this event."}
+                  </div>
                 </ScrollArea>
               </TabsContent>
             </Tabs>
@@ -223,20 +219,12 @@ export function WebhookEventDetailsSheet({ eventId, isOpen, onClose }: WebhookEv
 
         <SheetFooter className="pt-4 border-t">
           <div className="flex w-full justify-between gap-2">
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete
+            <Button variant="outline" onClick={onClose}>
+              Close
             </Button>
-            <Button
-              onClick={handleRetry}
-              disabled={retryMutation.isPending || event?.status === 'delivered'}
-            >
-              <RotateCw className={cn("mr-2 h-4 w-4", retryMutation.isPending && "animate-spin")} />
-              Retry Delivery
+            <Button onClick={handleRetry} disabled={replayMutation.isPending}>
+              <RotateCw className={cn("mr-2 h-4 w-4", replayMutation.isPending && "animate-spin")} />
+              Replay Event
             </Button>
           </div>
         </SheetFooter>

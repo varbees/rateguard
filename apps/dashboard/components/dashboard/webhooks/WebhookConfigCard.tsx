@@ -1,266 +1,175 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Copy, Check, Zap, Save } from "lucide-react";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
+import { useState } from "react";
+import { Check, Copy, Info, Send } from "lucide-react";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  useWebhookConfig,
-  useUpdateWebhookConfig,
-  useTestWebhookDelivery,
-} from "@/lib/hooks/use-webhooks";
+import { useCreateWebhookEvent } from "@/lib/hooks/use-webhooks";
 import { toast } from "@/lib/toast";
 
+const defaultPayload = JSON.stringify(
+  {
+    event: "demo.created",
+    message: "Hello from RateGuard",
+    timestamp: new Date().toISOString(),
+  },
+  null,
+  2
+);
+
 export function WebhookConfigCard() {
-  const { data: config, isLoading } = useWebhookConfig();
-  const updateConfig = useUpdateWebhookConfig();
-  const testDelivery = useTestWebhookDelivery();
-
-  const [destinationUrl, setDestinationUrl] = useState("");
-  const [enabled, setEnabled] = useState(false);
-  const [retryPolicy, setRetryPolicy] = useState<"auto" | "custom">("auto");
-  const [deadLetterAction, setDeadLetterAction] = useState<
-    "store" | "discard" | "email"
-  >("store");
+  const createEvent = useCreateWebhookEvent();
   const [copied, setCopied] = useState(false);
+  const [source, setSource] = useState("demo-app");
+  const [eventType, setEventType] = useState("demo.created");
+  const [targetUrl, setTargetUrl] = useState("https://example.com/webhooks");
+  const [payload, setPayload] = useState(defaultPayload);
+  const [headersJson, setHeadersJson] = useState("{}");
 
-  // Initialize state from fetched config
-  useEffect(() => {
-    if (config) {
-      setDestinationUrl(config.destination_url || "");
-      setEnabled(config.enabled ?? false);
-      setRetryPolicy(config.retry_policy || "auto");
-      setDeadLetterAction(config.dead_letter_action || "store");
-    }
-  }, [config]);
+  const inboxUrl = `${
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008"
+  }/api/v1/webhook/inbox`;
 
-  const handleCopyInbox = () => {
-    if (config?.inbox_url) {
-      navigator.clipboard.writeText(config.inbox_url);
+  const handleCopyInbox = async () => {
+    try {
+      await navigator.clipboard.writeText(inboxUrl);
       setCopied(true);
       toast.success("Inbox URL copied to clipboard");
-      setTimeout(() => setCopied(false), 2000);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Failed to copy inbox URL");
     }
   };
 
-  const handleSave = () => {
-    if (!destinationUrl) {
-      toast.error("Destination URL is required");
+  const handleSend = () => {
+    let parsedPayload: Record<string, unknown>;
+    let parsedHeaders: Record<string, string> | undefined;
+
+    try {
+      parsedPayload = JSON.parse(payload);
+    } catch {
+      toast.error("Payload must be valid JSON");
       return;
     }
 
-    updateConfig.mutate({
-      destination_url: destinationUrl,
-      enabled,
-      retry_policy: retryPolicy,
-      dead_letter_action: deadLetterAction,
+    if (headersJson.trim()) {
+      try {
+        parsedHeaders = JSON.parse(headersJson);
+      } catch {
+        toast.error("Headers must be valid JSON");
+        return;
+      }
+    }
+
+    createEvent.mutate({
+      source: source.trim(),
+      event_type: eventType.trim(),
+      payload: parsedPayload,
+      target_url: targetUrl.trim(),
+      headers: parsedHeaders,
     });
   };
-
-  const handleTest = () => {
-    if (!destinationUrl) return;
-
-    testDelivery.mutate({
-      target_url: destinationUrl,
-      payload: {
-        event: "test.ping",
-        timestamp: new Date().toISOString(),
-        message: "This is a test webhook from RateGuard",
-      },
-    });
-  };
-
-  if (isLoading) {
-    return (
-      <Card className="animate-pulse">
-        <CardHeader>
-          <div className="h-6 w-1/3 bg-muted rounded mb-2"></div>
-          <div className="h-4 w-1/2 bg-muted rounded"></div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="h-10 bg-muted rounded"></div>
-          <div className="h-10 bg-muted rounded"></div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle>Webhook Configuration</CardTitle>
-            <CardDescription>
-              Configure how you receive and process webhook events.
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label htmlFor="enabled-toggle" className="text-sm font-medium">
-              {enabled ? "Active" : "Inactive"}
-            </Label>
-            <Switch
-              id="enabled-toggle"
-              checked={enabled}
-              onCheckedChange={setEnabled}
-            />
-          </div>
-        </div>
+        <CardTitle>Webhook Inbox</CardTitle>
+        <CardDescription>
+          The backend currently exposes inbox, status, event details, and replay. Use this panel to send a sample inbound event.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Inbox URL */}
+        <Alert>
+          <Info className="h-4 w-4" />
+          <AlertDescription>
+            There is no live webhook configuration endpoint yet, so this card stays honest and exercises the real inbox route.
+          </AlertDescription>
+        </Alert>
+
         <div className="space-y-2">
           <Label>Webhook Inbox URL</Label>
           <div className="flex gap-2">
-            <Input
-              value={
-                config?.inbox_url ||
-                `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8008"}/webhook/inbox/wh_...`
-              }
-              readOnly
-              className="font-mono text-sm bg-muted/50"
-            />
+            <Input value={inboxUrl} readOnly className="font-mono text-sm bg-muted/50" />
             <Button variant="outline" size="icon" onClick={handleCopyInbox}>
-              {copied ? (
-                <Check className="h-4 w-4 text-green-500" />
-              ) : (
-                <Copy className="h-4 w-4" />
-              )}
+              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Send events to this URL to ingest them into RateGuard's relay
-            system.
+            This is the real authenticated endpoint used to ingest webhook events into the relay.
           </p>
         </div>
 
-        {/* Destination URL */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="source">Source</Label>
+            <Input
+              id="source"
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
+              placeholder="stripe"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="event-type">Event Type</Label>
+            <Input
+              id="event-type"
+              value={eventType}
+              onChange={(e) => setEventType(e.target.value)}
+              placeholder="payment.succeeded"
+            />
+          </div>
+        </div>
+
         <div className="space-y-2">
-          <Label>
-            Destination URL <span className="text-red-500">*</span>
-          </Label>
-          <div className="flex gap-2">
-            <Input
-              placeholder="https://your-app.com/api/webhooks"
-              value={destinationUrl}
-              onChange={(e) => setDestinationUrl(e.target.value)}
-            />
-            <Button
-              variant="secondary"
-              onClick={handleTest}
-              disabled={!destinationUrl || testDelivery.isPending}
-            >
-              {testDelivery.isPending ? (
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-              ) : (
-                <Zap className="h-4 w-4 mr-2" />
-              )}
-              Test
-            </Button>
-          </div>
+          <Label htmlFor="target-url">Target URL</Label>
+          <Input
+            id="target-url"
+            value={targetUrl}
+            onChange={(e) => setTargetUrl(e.target.value)}
+            placeholder="https://example.com/webhooks"
+          />
         </div>
 
-        {/* Advanced Settings */}
-        <div className="grid gap-6 md:grid-cols-2 pt-4 border-t">
-          {/* Retry Policy */}
-          <div className="space-y-3">
-            <Label>Retry Policy</Label>
-            <Select
-              value={retryPolicy}
-              onValueChange={(val: "auto" | "custom") => setRetryPolicy(val)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="auto">
-                  Automatic (Exponential Backoff)
-                </SelectItem>
-                <SelectItem value="custom">Custom Configuration</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {retryPolicy === "auto"
-                ? "Retries up to 10 times with increasing delays (1s, 5s, 1m, ...)"
-                : "Configure your own retry schedule and max attempts."}
-            </p>
-          </div>
-
-          {/* Dead Letter Action */}
-          <div className="space-y-3">
-            <Label>Dead Letter Action</Label>
-            <Select
-              value={deadLetterAction}
-              onValueChange={(val: "store" | "discard" | "email") =>
-                setDeadLetterAction(val)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="store">Store for Manual Retry</SelectItem>
-                <SelectItem value="email">Email Alert & Store</SelectItem>
-                <SelectItem value="discard">
-                  Discard (Not Recommended)
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              What to do when all retry attempts fail.
-            </p>
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="payload">Payload JSON</Label>
+          <Textarea
+            id="payload"
+            value={payload}
+            onChange={(e) => setPayload(e.target.value)}
+            className="min-h-40 font-mono text-sm"
+          />
         </div>
 
-        {/* Signature Secret */}
-        <div className="space-y-2 pt-4 border-t">
-          <Label>Signature Secret</Label>
-          <div className="flex gap-2">
-            <Input
-              type="password"
-              value={config?.signature_secret || "whsec_..."}
-              readOnly
-              className="font-mono text-sm bg-muted/50"
-            />
-            <Button variant="outline">Rotate</Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Used to sign webhook payloads so you can verify they came from
-            RateGuard.
-          </p>
+        <div className="space-y-2">
+          <Label htmlFor="headers">Headers JSON optional</Label>
+          <Textarea
+            id="headers"
+            value={headersJson}
+            onChange={(e) => setHeadersJson(e.target.value)}
+            className="min-h-24 font-mono text-sm"
+          />
         </div>
       </CardContent>
-      <CardFooter className="flex justify-between border-t bg-muted/20 px-6 py-4">
-        <div className="flex items-center text-sm text-muted-foreground">
-          {updateConfig.isPending && (
-            <span className="animate-pulse">Saving changes...</span>
-          )}
-        </div>
-        <Button onClick={handleSave} disabled={updateConfig.isPending}>
-          {updateConfig.isPending ? (
-            <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
+      <CardFooter className="flex items-center justify-between gap-3 border-t px-6 py-4">
+        <p className="text-xs text-muted-foreground">
+          Events created here will appear in the table below once accepted by the backend.
+        </p>
+        <Button onClick={handleSend} disabled={createEvent.isPending}>
+          {createEvent.isPending ? (
+            <>
+              <Send className="mr-2 h-4 w-4 animate-pulse" />
+              Sending...
+            </>
           ) : (
-            <Save className="h-4 w-4 mr-2" />
+            <>
+              <Send className="mr-2 h-4 w-4" />
+              Send Sample Event
+            </>
           )}
-          Save Configuration
         </Button>
       </CardFooter>
     </Card>

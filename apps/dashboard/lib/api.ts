@@ -1001,10 +1001,10 @@ class APIClient {
     }
 
     // Analytics - Get comprehensive analytics data
-    async getAnalytics(): Promise<AnalyticsData> {
+    async getAnalytics(period: string = "30d"): Promise<AnalyticsData> {
         const [dashboardData, usageHistory, recentRequests] = await Promise.all([
             this.getDashboardStats(),
-            this.getUsageHistory("30d"),
+            this.getUsageHistory(period),
             this.getRecentRequests({ limit: 200 }),
         ]);
 
@@ -1330,7 +1330,7 @@ class APIClient {
             weekly_report: boolean;
         };
     }> {
-        const response = await fetch(`${this.baseURL}/dashboard/settings`, {
+        const response = await fetch(`${this.baseURL}/api/v1/dashboard/settings`, {
             method: "GET",
             credentials: "include",
             headers: {
@@ -1351,7 +1351,7 @@ class APIClient {
         error_alerts?: boolean;
         weekly_report?: boolean;
     }): Promise<{ success: boolean; message: string }> {
-        const response = await fetch(`${this.baseURL}/dashboard/settings`, {
+        const response = await fetch(`${this.baseURL}/api/v1/dashboard/settings`, {
             method: "PUT",
             credentials: "include",
             headers: {
@@ -1372,7 +1372,7 @@ class APIClient {
         new_password: string;
     }): Promise<{ success: boolean; message: string }> {
         const response = await fetch(
-            `${this.baseURL}/dashboard/settings/password`,
+            `${this.baseURL}/api/v1/dashboard/settings/password`,
             {
                 method: "POST",
                 credentials: "include",
@@ -1420,7 +1420,7 @@ class APIClient {
         api_key: string;
     }> {
         const response = await fetch(
-            `${this.baseURL}/dashboard/api-key/regenerate`,
+            `${this.baseURL}/api/v1/dashboard/api-key/regenerate`,
             {
                 method: "POST",
                 credentials: "include",
@@ -1587,60 +1587,12 @@ class APIClient {
     }
 
     async retryWebhookEvent(eventId: string): Promise<{
-        success: boolean;
         message: string;
-        next_attempt_at: string;
+        id: string;
+        status: string;
     }> {
-        return this.request(`/api/v1/webhook/events/${eventId}/retry`, {
+        return this.request(`/api/v1/webhook/events/${eventId}/replay`, {
             method: "POST",
-        });
-    }
-
-    async deleteWebhookEvent(
-        eventId: string
-    ): Promise<{ success: boolean; message: string }> {
-        return this.request(`/api/v1/webhook/events/${eventId}`, {
-            method: "DELETE",
-        });
-    }
-
-    async bulkRetryWebhookEvents(eventIds: string[]): Promise<{
-        success: boolean;
-        message: string;
-        retried_count: number;
-    }> {
-        return this.request("/api/v1/webhook/events/bulk-retry", {
-            method: "POST",
-            body: JSON.stringify({ event_ids: eventIds }),
-        });
-    }
-
-    async getWebhookConfig(): Promise<WebhookConfig> {
-        return this.request<WebhookConfig>("/api/v1/webhook/config");
-    }
-
-    async updateWebhookConfig(
-        config: Partial<WebhookConfig>
-    ): Promise<WebhookConfig> {
-        return this.request<WebhookConfig>("/api/v1/webhook/config", {
-            method: "PUT",
-            body: JSON.stringify(config),
-        });
-    }
-
-    async testWebhookDelivery(data: {
-        target_url: string;
-        payload: Record<string, unknown>;
-        headers?: Record<string, string>;
-    }): Promise<{
-        success: boolean;
-        status_code: number;
-        latency_ms: number;
-        response_body: string;
-    }> {
-        return this.request("/api/v1/webhook/test", {
-            method: "POST",
-            body: JSON.stringify(data),
         });
     }
 
@@ -1696,7 +1648,7 @@ export const dashboardAPI = {
 };
 
 export const analyticsAPI = {
-    get: () => apiClient.getAnalytics(),
+    get: (period?: string) => apiClient.getAnalytics(period),
 };
 
 export const apiConfigAPI = {
@@ -1757,16 +1709,6 @@ export const webhookAPI = {
     get: (eventId: string) => apiClient.getWebhookEvent(eventId),
     create: (data: WebhookInboxRequest) => apiClient.createWebhookEvent(data),
     retry: (eventId: string) => apiClient.retryWebhookEvent(eventId),
-    delete: (eventId: string) => apiClient.deleteWebhookEvent(eventId),
-    bulkRetry: (eventIds: string[]) => apiClient.bulkRetryWebhookEvents(eventIds),
-    getConfig: () => apiClient.getWebhookConfig(),
-    updateConfig: (config: Partial<WebhookConfig>) =>
-        apiClient.updateWebhookConfig(config),
-    test: (data: {
-        target_url: string;
-        payload: Record<string, unknown>;
-        headers?: Record<string, string>;
-    }) => apiClient.testWebhookDelivery(data),
 };
 
 // Query Client Configuration

@@ -29,13 +29,17 @@ export default function StreamingDashboardPage() {
 
   // Filter APIs for dropdown
   const apis = apiData?.apis || [];
+  const visibleApis =
+    selectedAPI === "all"
+      ? apis
+      : apis.filter((api) => api.api_id === selectedAPI);
 
   const handleExportCSV = () => {
-    if (apis.length > 0) {
+    if (visibleApis.length > 0) {
       const filename = `streaming-data-${period}-${
         new Date().toISOString().split("T")[0]
       }.csv`;
-      exportToCSV(apis, filename);
+      exportToCSV(visibleApis, filename);
     }
   };
 
@@ -108,7 +112,7 @@ export default function StreamingDashboardPage() {
             {/* Export Button */}
             <button
               onClick={handleExportCSV}
-              disabled={apis.length === 0}
+              disabled={visibleApis.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Download className="w-4 h-4" />
@@ -145,7 +149,7 @@ export default function StreamingDashboardPage() {
               Top Streaming APIs
             </h3>
 
-            {apis.length === 0 ? (
+            {visibleApis.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <p>No streaming data available for the selected period</p>
               </div>
@@ -172,7 +176,7 @@ export default function StreamingDashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {apis.map((api) => (
+                    {visibleApis.map((api) => (
                       <tr
                         key={api.api_id}
                         className="hover:bg-accent/50 transition-colors"

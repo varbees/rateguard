@@ -7,7 +7,6 @@ import {
   Clock,
   RotateCw,
   MoreVertical,
-  Trash2,
   RefreshCw,
   AlertTriangle
 } from 'lucide-react';
@@ -25,20 +24,16 @@ import { cn } from '@/lib/utils';
 
 interface WebhookEventRowProps {
   event: WebhookEvent;
-  onRetry: (id: string) => void;
-  onDelete: (id: string) => void;
+  onReplay: (id: string) => void;
   onViewDetails: (id: string) => void;
   isRetrying?: boolean;
-  isDeleting?: boolean;
 }
 
 export function WebhookEventRow({
   event,
-  onRetry,
-  onDelete,
+  onReplay,
   onViewDetails,
   isRetrying,
-  isDeleting,
 }: WebhookEventRowProps) {
   const statusConfig = {
     delivered: { icon: CheckCircle2, color: 'text-green-500', badge: 'bg-green-500/10 text-green-500 hover:bg-green-500/20' },
@@ -86,19 +81,11 @@ export function WebhookEventRow({
               View Details
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => onRetry(event.id)}
+              onClick={() => onReplay(event.id)}
               disabled={isRetrying || event.status === 'delivered'}
             >
               <RotateCw className={cn("mr-2 h-4 w-4", isRetrying && "animate-spin")} />
-              Retry Delivery
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => onDelete(event.id)}
-              className="text-red-600 focus:text-red-600"
-              disabled={isDeleting}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete Event
+              Replay Event
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

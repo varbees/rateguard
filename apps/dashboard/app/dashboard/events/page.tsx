@@ -13,11 +13,13 @@ export default function EventsPage() {
 
   const metrics = useMemo(() => {
     return {
-      requests: stats?.total_requests ?? 15234,
-      successRate: stats?.success_rate ?? 98.5,
-      avgLatency: stats?.avg_response_time_ms ?? 245,
+      requests: stats?.total_requests ?? 0,
+      successRate: stats?.success_rate ?? 0,
+      avgLatency: stats?.avg_response_time_ms ?? 0,
       totalCost: Number(((stats?.monthly_usage ?? 0) / 1000).toFixed(2)),
-      errors: stats ? Math.max(0, Math.round(stats.total_requests * (1 - stats.success_rate / 100))) : 128,
+      errors: stats
+        ? Math.max(0, Math.round(stats.total_requests * (1 - stats.success_rate / 100)))
+        : 0,
     };
   }, [stats]);
 

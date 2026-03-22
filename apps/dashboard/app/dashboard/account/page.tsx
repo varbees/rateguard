@@ -37,9 +37,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toasts, copyToClipboard } from "@/lib/toast";
-import { settingsAPI, apiClient } from "@/lib/api";
+import { settingsAPI, apiClient, handleAPI } from "@/lib/api";
 import type { APIKey } from "@/lib/api";
-import { useDashboardStats } from "@/lib/hooks/use-api";
+import { useDashboardStats, useUser } from "@/lib/hooks/use-api";
 import { ButtonLoading } from "@/components/loading";
 import {
   User,
@@ -89,6 +89,7 @@ export default function SettingsPage() {
   const [errorAlerts, setErrorAlerts] = useState(true);
   const [weeklyReport, setWeeklyReport] = useState(false);
   const [isSavingNotifications, setIsSavingNotifications] = useState(false);
+  const { data: currentUser } = useUser();
   const { data: dashboardStats } = useDashboardStats();
 
   // Load settings on mount
@@ -99,7 +100,7 @@ export default function SettingsPage() {
 
         // Set user data
         setEmail(data.user.email);
-        setName(data.user.name || data.user.email);
+        setName(currentUser?.handle || data.user.name || data.user.email);
 
         // Set notification preferences
         setEmailAlerts(data.notifications.email_alerts);
@@ -113,14 +114,16 @@ export default function SettingsPage() {
     };
 
     loadSettings();
-  }, []);
+  }, [currentUser]);
 
   // Profile handlers
   const handleSaveProfile = async () => {
     setIsSavingProfile(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      toasts.config.saved();
+      const updatedUser = await handleAPI.update(name.trim());
+      setName(updatedUser.handle);
+      queryClient.invalidateQueries({ queryKey: ["user"] });
+      toasts.generic.success("Handle updated", "Your public handle was saved successfully");
     } catch {
       toasts.config.importFailed();
     } finally {
@@ -307,14 +310,17 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">Public Handle</Label>
                 <Input
                   id="name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="bg-accent border-slate-700"
-                  placeholder="Enter your full name"
+                  placeholder="Enter your public handle"
                 />
+                <p className="text-xs text-muted-foreground">
+                  This handle powers your public proxy URLs.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -337,13 +343,13 @@ export default function SettingsPage() {
                   <div className="w-20 h-20 rounded-full bg-blue-500/10 border-2 border-blue-500/20 flex items-center justify-center text-blue-500 text-2xl font-bold">
                     {name.charAt(0).toUpperCase()}
                   </div>
-                  <Button variant="outline" size="sm" className="gap-2">
+                  <Button variant="outline" size="sm" className="gap-2" disabled title="Avatar uploads are not backed by the OSS control plane yet">
                     <Upload className="w-4 h-4" />
-                    Upload Image
+                    Avatar upload unavailable
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  JPG, PNG or GIF. Max 2MB.
+                  Avatar uploads are not backed by the OSS control plane yet.
                 </p>
               </div>
 
@@ -354,7 +360,7 @@ export default function SettingsPage() {
                 loadingText="Saving..."
                 onClick={handleSaveProfile}
               >
-                Save Changes
+                Save Handle
               </ButtonLoading>
             </CardContent>
           </Card>
@@ -780,7 +786,7 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => setActiveTab("apikeys") }>
                   View Keys
                 </Button>
               </div>

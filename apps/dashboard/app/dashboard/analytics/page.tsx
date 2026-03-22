@@ -61,7 +61,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { analyticsAPI, apiClient, type AnalyticsData } from "@/lib/api";
+import { analyticsAPI, type AnalyticsData } from "@/lib/api";
 
 type DateRange = "today" | "7d" | "30d" | "custom";
 type SortField = "path" | "requests" | "avgResponseTime" | "errorRate";
@@ -78,7 +78,7 @@ export default function AnalyticsPage() {
   // Fetch analytics data
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["analytics", dateRange],
-    queryFn: () => analyticsAPI.get(),
+    queryFn: () => analyticsAPI.get(dateRange),
     refetchInterval: 60000, // Refresh every minute
   });
 

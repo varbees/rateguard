@@ -191,6 +191,7 @@ Status:
 - Completed. The dashboard events screen now consumes the live request feed and websocket event spine, so gateway `request.completed` and `request.rate_limited` activity is visible in the UI instead of mocked.
 - Completed. The dashboard's user-facing data screens now use live backend contracts instead of synthetic defaults: API keys list/create/revoke through `/api/v1/api-keys`, usage analytics come from `/api/v1/dashboard/stats` plus `/api/v1/dashboard/usage/history` and recent requests, budget guardrails read the live cost estimate endpoint, the token summary card uses `/api/v1/dashboard/tokens`, the live analytics widget no longer invents fallback series, and the analytics view aggregates from real dashboard history instead of random series.
 - Completed. The dashboard realtime provider now falls back from WebSocket to the authenticated SSE stream at `/api/v1/events/stream` when websocket reconnects exhaust, and the visible dashboard cards subscribe only to backend-emitted event names (`metrics.update`, `alert.triggered`, `system.health`, `circuit_breaker.state_change`, `api.metrics.update`, `request.*`) instead of guessed UI-only topics.
+- Completed. The authenticated dashboard screens were audited end to end against the live backend contracts, and the remaining user-facing drift was removed: settings now target `/api/v1/dashboard/settings`, the webhook screen only exposes the real inbox/status/details/replay flow, the account screen uses the live handle update path, the API and queue screens stay on supported control-plane routes, and no frontend control now advertises unsupported backend behavior as if it were live.
 - Verified. `task test`, `task ui:typecheck`, `task ui:build`, and the live smoke burst against `/api/v1/apis` passed; the stack boots cleanly with `task dev`, and the realtime replay shows the self-protection events.
 - Verified. After the screen audit, `task ui:typecheck`, `task ui:build`, and `task smoke` still passed.
 
@@ -247,12 +248,14 @@ Latest verification snapshot:
 - `task ui:typecheck`: passed again after the queue/circuit-breaker/cache hardening pass
 - `task ui:typecheck`: passed again after the dashboard guardrail rename and realtime events screen wiring
 - `task ui:typecheck`: passed again after the realtime events empty-state polish
+- `task ui:typecheck`: passed again after the authenticated dashboard contract audit and webhook/account/UI drift cleanup
 - `packages/sdk-node`: `bun run typecheck`, `bun run test`, and `bun run build` passed after the Node middleware SDK package was added
 - `packages/sdk-python`: `task sdk-python:test` passed after adding the local editable backend and a test-only `iniconfig` shim; `task sdk-python:typecheck` runs strict mypy when available and falls back to compileall in this tool-limited container
 - `task openapi:generate`: passed after switching generated URL templating from `replaceAll` to `split/join` for the current TS target
 - `task dev`: passed in a normal local environment after removing the broken SQL init bind mount and moving Grafana off the conflicting host port
 - `task smoke`: passed in a normal local environment against the booted stack
 - `task ui:build`: passed in a normal local environment after the dashboard build and static generation completed successfully
+- `task ui:build`: passed after the authenticated dashboard contract audit and webhook/account/UI drift cleanup
 
 ## Status At A Glance
 

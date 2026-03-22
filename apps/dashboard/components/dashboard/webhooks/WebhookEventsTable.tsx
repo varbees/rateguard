@@ -31,7 +31,6 @@ import {
   Clock,
   AlertTriangle,
   RotateCw,
-  Trash2,
   Eye,
   Inbox,
   Loader2,
@@ -39,10 +38,10 @@ import {
 import {
   useWebhookStatus,
   useRetryWebhookEvent,
-  useDeleteWebhookEvent,
 } from "@/lib/hooks/use-webhooks";
 import { cn } from "@/lib/utils";
 import type { WebhookEvent } from "@/lib/api";
+import { WebhookEventDetailsSheet } from "./WebhookEventDetailsSheet";
 
 // Status badge component
 function StatusBadge({ status }: { status: string }) {
@@ -96,16 +95,16 @@ function StatusBadge({ status }: { status: string }) {
 // Event row component with animations
 function EventRow({
   event,
-  onRetry,
-  onDelete,
+  onViewDetails,
+  onReplay,
   isRetrying,
 }: {
   event: WebhookEvent;
-  onRetry: (id: string) => void;
-  onDelete: (id: string) => void;
+  onViewDetails: (id: string) => void;
+  onReplay: (id: string) => void;
   isRetrying: boolean;
 }) {
-  const canRetry = ["failed", "dead_letter"].includes(event.status);
+  const canReplay = event.status !== "delivered";
 
   return (
     <motion.div
@@ -157,12 +156,12 @@ function EventRow({
 
       {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        {canRetry && (
+        {canReplay && (
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8"
-            onClick={() => onRetry(event.id)}
+            onClick={() => onReplay(event.id)}
             disabled={isRetrying}
           >
             <RotateCw className={cn("w-4 h-4", isRetrying && "animate-spin")} />
@@ -175,23 +174,16 @@ function EventRow({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewDetails(event.id)}>
               <Eye className="w-4 h-4 mr-2" />
               View Details
             </DropdownMenuItem>
-            {canRetry && (
-              <DropdownMenuItem onClick={() => onRetry(event.id)}>
+            {canReplay && (
+              <DropdownMenuItem onClick={() => onReplay(event.id)}>
                 <RotateCw className="w-4 h-4 mr-2" />
-                Retry Now
+                Replay Event
               </DropdownMenuItem>
             )}
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() => onDelete(event.id)}
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -219,6 +211,7 @@ export function WebhookEventsTable() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
 
   const pageSize = 10;
 
@@ -230,17 +223,10 @@ export function WebhookEventsTable() {
     source: sourceFilter || undefined,
   });
 
-  const retryMutation = useRetryWebhookEvent();
-  const deleteMutation = useDeleteWebhookEvent();
+  const replayMutation = useRetryWebhookEvent();
 
-  const handleRetry = (id: string) => {
-    retryMutation.mutate(id);
-  };
-
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this event?")) {
-      deleteMutation.mutate(id);
-    }
+  const handleReplay = (id: string) => {
+    replayMutation.mutate(id);
   };
 
   const events = data?.events ?? [];
@@ -338,9 +324,9 @@ export function WebhookEventsTable() {
               <EventRow
                 key={event.id}
                 event={event}
-                onRetry={handleRetry}
-                onDelete={handleDelete}
-                isRetrying={retryMutation.isPending}
+                onViewDetails={setSelectedEventId}
+                onReplay={handleReplay}
+                isRetrying={replayMutation.isPending}
               />
             ))}
           </AnimatePresence>
@@ -375,6 +361,12 @@ export function WebhookEventsTable() {
           </div>
         </div>
       )}
+
+      <WebhookEventDetailsSheet
+        eventId={selectedEventId}
+        isOpen={!!selectedEventId}
+        onClose={() => setSelectedEventId(null)}
+      />
     </div>
   );
 }
