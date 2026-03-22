@@ -514,6 +514,7 @@ Current state:
    - Remaining cleanup is mostly archive-only wording or small edge-case polish.
 3. Keep the runtime contract canonical. Any remaining storage-only legacy columns should stay behind storage helpers until a schema migration is scheduled.
 4. Keep `task test`, `task ui:typecheck`, `task ui:build`, and `task smoke` as the regression gates for repo-level changes.
+   - Treat clean package-manager install smokes and deployment smokes as the next-stage validation layer for release candidates and staging/prod promotion.
 5. Keep `CORS_ALLOWED_ORIGINS` and `WS_ALLOWED_ORIGINS` explicit in env examples so browser and websocket clients stay reproducible across local and staging runs.
 6. Keep active docs and generated examples aligned with the runtime contract; reserve legacy wording for archived material only.
 7. Expand the examples area only after the core contracts are stable enough to teach from.
@@ -598,6 +599,28 @@ Latest verified state:
 - launch gate status: reached
 - the live dashboard now has a real `/dashboard/events` realtime screen and the stats contract uses `monthly_request_limit`
 - the repo still does not ship a GitHub Actions workflow, so the CI badge remains a post-launch polish item
+
+## Deferred Verification Matrix
+
+These checks are not part of the release-gate loop above, but they must stay visible for later-stage release, staging, and production hardening:
+
+- Clean package-install smoke for published SDKs:
+  - Python: `pip install rateguard` from a fresh Python 3.10+ environment
+  - Node: `npm install @rateguard/node` and `bun add @rateguard/node`
+  - Go: verify the published middleware import path from a clean module cache once the public release path is finalized
+- Standalone SDK smoke:
+  - Python and Node must still work with no control-plane URL configured
+  - hard-stop budget enforcement must not emit connection warnings when the dashboard is absent
+- Staging / production smoke:
+  - `/health` and `/metrics` stay public while `/api/v1/*` stays protected
+  - browser preflight still allows `Idempotency-Key` on mutating proxy routes
+  - websocket and SSE event delivery both keep the dashboard realtime screen truthful
+  - docs copy still distinguishes standalone SDK mode from proxy/control-plane mode
+- Upgrade-path smoke:
+  - a developer should be able to move from standalone SDK mode to control-plane-backed mode without changing the public API surface of their app code
+- Failure-mode smoke:
+  - invalid provider URLs, missing upstream keys, and expired control-plane settings should fail with honest errors that match the docs
+  - package-install or runtime failures discovered in staging/prod should be written back into this plan in the same workstream
 
 ## Capacity Plan
 
