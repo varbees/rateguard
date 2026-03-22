@@ -92,7 +92,7 @@ Active paths:
 - `AGENTS.md` plus `agent_docs/` is the lightweight repo-operating contract for future tasks
 
 SDK reality:
-- `packages/sdk-go` is the only in-process middleware SDK in the repo today
+- `packages/sdk-go` is the reference in-process middleware SDK in the repo; the gateway dogfooding plan centers on this implementation
 - `packages/sdk-node` is a real Node.js middleware SDK package in the repo, built against the same middleware-first contract model
 - `packages/sdk-python` is now a Python middleware SDK package in the repo, with FastAPI, Flask, Django, WSGI/ASGI, and decorator support
 - `packages/sdk-ts` is a generated TypeScript control-plane client, not a middleware SDK
@@ -114,6 +114,47 @@ Current strategic read:
 - any future work should preserve the SDK wedge and avoid re-centralizing the product around the proxy
 - the biggest post-launch SDK expansion opportunity is no longer adding SDKs from scratch; it is keeping the Go, Node, and Python middleware contracts aligned as the repo evolves
 - the new root `AGENTS.md` file should stay small, with specialized guidance split across `agent_docs/`
+- the next strategic product move is to dogfood `packages/sdk-go` inside the gateway process so RateGuard protects its own control plane routes with the same middleware contract it ships to users
+
+## Self-Protection Loop
+
+This is the highest-leverage product loop now that the launch-scope hardening work is complete.
+
+Goal:
+- run RateGuard's own gateway API through `sdk-go` middleware in-process
+- keep the control plane self-protected without introducing a circular dependency
+- use the dashboard to make the loop visible in real time
+- keep the gateway boot sequence safe by initializing middleware only after Redis and Postgres are healthy
+
+Why it matters:
+- it proves the SDK is not just a library, but the same runtime contract RateGuard depends on internally
+- it collapses gateway and SDK correctness into one test surface
+- it gives a live trust signal for demos, onboarding, and enterprise evaluation
+- it makes `task smoke` and local stack validation more representative of actual production usage
+
+Ordered implementation plan:
+1. Define the protection boundary.
+   - Apply `sdk-go` middleware to the public `/api/v1/*` surfaces that represent the control plane.
+   - Keep health and bootstrap endpoints outside the protected path so the stack can still recover and report status.
+2. Wire the middleware at bootstrap.
+   - Register the SDK after storage and Redis are ready.
+   - Keep route assembly and middleware registration explicit in `internal/app/bootstrap` or the route setup path so startup ordering stays readable.
+3. Reuse the live runtime contract.
+   - Keep rate limiting, circuit breaking, and token-budget semantics identical between the gateway's internal paths and the SDK behavior shipped to users.
+   - Avoid adding a second gateway-specific implementation if the SDK already owns the contract.
+4. Surface the loop in observability.
+   - Ensure the realtime spine and dashboard can show the gateway being protected by its own middleware.
+   - Keep the event envelope and metrics visible so the dogfood loop is auditable, not just implied.
+5. Verify the full loop.
+   - Run unit tests for the middleware path.
+   - Run `task test`, `task ui:typecheck`, `task ui:build`, and `task smoke`.
+   - Confirm the boot sequence still works when the middleware is enabled.
+6. Document the result.
+   - Update the plan doc, README, and any launch docs so they describe the self-protection loop accurately.
+
+Future extension:
+- MCP server support is a possible follow-on layer over the same control plane API.
+- Treat MCP as an expansion path for agentic integrations, not as part of the current launch-scope dogfooding work unless it is explicitly scheduled.
 
 Release gates:
 - `task test`
