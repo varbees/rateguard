@@ -39,9 +39,12 @@ export function middleware(options: RateGuardOptions | RateGuardRuntime = {}): (
     const request = buildRequestContext(runtime, req);
     const preflight = await runtime.admit(request);
     if (!preflight.allowed) {
+      writeAdmissionHeaders(res, runtime, preflight.rateLimit?.limit ?? runtime.config.rateLimit.requestsPerSecond + runtime.config.rateLimit.burst, preflight.rateLimit?.remaining ?? 0, runtime.config.rateLimit.burst, preflight.retryAfterMs ?? 0);
       writeDeniedResponse(res, preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0);
       return;
     }
+
+    writeAdmissionHeaders(res, runtime, preflight.rateLimit?.limit ?? runtime.config.rateLimit.requestsPerSecond + runtime.config.rateLimit.burst, preflight.rateLimit?.remaining ?? 0, runtime.config.rateLimit.burst, 0);
 
     const capture = patchResponse(res);
     const startedAt = runtime.config.clock.now();
@@ -106,6 +109,16 @@ function buildRequestContext(runtime: RateGuardRuntime, req: ExpressLikeRequest)
   };
 }
 
+function writeAdmissionHeaders(res: ExpressLikeResponse, runtime: RateGuardRuntime, limit: number, remaining: number, burst: number, retryAfterMs: number): void {
+  res.setHeader('X-RateGuard-Preset', runtime.config.preset.name);
+  res.setHeader('X-RateGuard-Limit', String(limit));
+  res.setHeader('X-RateGuard-Burst', String(burst));
+  res.setHeader('X-RateGuard-Remaining', String(Math.max(0, remaining)));
+  if (retryAfterMs > 0) {
+    res.setHeader('Retry-After', formatRetryAfterMs(retryAfterMs));
+  }
+}
+
 function writeDeniedResponse(res: ExpressLikeResponse, statusCode: number, retryAfterMs: number): void {
   if (typeof res.status === 'function') {
     res.status(statusCode);
@@ -118,8 +131,9 @@ function writeDeniedResponse(res: ExpressLikeResponse, statusCode: number, retry
     res.setHeader('X-Retry-After-Ms', String(retryAfterMs));
   }
   const body = JSON.stringify({
-    error: statusCode === 503 ? 'circuit_open' : 'rate_limit_exceeded',
-    retry_after_ms: retryAfterMs > 0 ? retryAfterMs : undefined,
+    error: statusCode === 503 ? 'circuit_open' : 'rate_limited',
+    retry_after: retryAfterMs > 0 ? Math.max(1, Math.ceil(retryAfterMs / 1000)) : undefined,
+    message: statusCode === 503 ? 'RateGuard opened the circuit breaker.' : 'RateGuard rate limited this request.',
   });
   if (typeof res.json === 'function') {
     res.json(JSON.parse(body));

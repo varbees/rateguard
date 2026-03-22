@@ -4,6 +4,6 @@ go 1.24.0
 
 toolchain go1.24.9
 
-require github.com/varbees/rateguard/sdk-go v0.0.0
+require github.com/rateguard/sdk-go v0.0.0
 
-replace github.com/varbees/rateguard/sdk-go => ../../packages/sdk-go
+replace github.com/rateguard/sdk-go => ../../packages/sdk-go

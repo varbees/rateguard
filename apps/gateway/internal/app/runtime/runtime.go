@@ -30,7 +30,7 @@ import (
 	"github.com/varbees/rateguard/internal/webhook"
 	"github.com/varbees/rateguard/internal/websocket"
 	"github.com/varbees/rateguard/pkg/logger"
-	rateguardsdk "github.com/varbees/rateguard/sdk-go"
+	rateguardsdk "github.com/rateguard/sdk-go"
 	"go.uber.org/zap"
 )
 

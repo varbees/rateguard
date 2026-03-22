@@ -60,6 +60,12 @@ func TestHTTPMiddlewareAllowsAndEmitsEvent(t *testing.T) {
 	if got := rr.Header().Get("X-RateGuard-Preset"); got != "standard" {
 		t.Fatalf("X-RateGuard-Preset = %q, want %q", got, "standard")
 	}
+	if got := rr.Header().Get("X-RateGuard-Limit"); got != "100" {
+		t.Fatalf("X-RateGuard-Limit = %q, want %q", got, "100")
+	}
+	if got := rr.Header().Get("X-RateGuard-Remaining"); got == "" {
+		t.Fatal("X-RateGuard-Remaining should be set")
+	}
 
 	events := emitter.Events()
 	if len(events) != 1 {
@@ -138,6 +144,12 @@ func TestHTTPMiddlewareRejectsWhenLimitExceeded(t *testing.T) {
 	if got := secondRes.Header().Get("Retry-After"); got == "" {
 		t.Fatal("Retry-After header should be set on rate limit rejection")
 	}
+	if got := secondRes.Header().Get("X-RateGuard-Limit"); got != "1" {
+		t.Fatalf("X-RateGuard-Limit = %q, want %q", got, "1")
+	}
+	if got := secondRes.Header().Get("X-RateGuard-Remaining"); got != "0" {
+		t.Fatalf("X-RateGuard-Remaining = %q, want %q", got, "0")
+	}
 
 	events := emitter.Events()
 	if len(events) != 2 {
@@ -168,6 +180,28 @@ func TestChiMiddlewareSharesHTTPBehavior(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/chi", nil)
 
 	sdk.ChiMiddleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusAccepted)
+	})).ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("status code = %d, want %d", rr.Code, http.StatusAccepted)
+	}
+}
+
+func TestMiddlewareAliasSharesHTTPBehavior(t *testing.T) {
+	t.Parallel()
+
+	sdk := New(Config{
+		Preset:            "dev",
+		RequestsPerSecond: 100,
+		Burst:             100,
+		EventEmitter:      &recordingEmitter{},
+	})
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/chi", nil)
+
+	sdk.Middleware()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusAccepted)
 	})).ServeHTTP(rr, req)
 

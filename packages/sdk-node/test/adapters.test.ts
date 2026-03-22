@@ -26,6 +26,10 @@ describe('adapters', () => {
       firstResponse.status(200).end('ok');
     });
 
+    expect(firstResponse.getHeader('X-RateGuard-Limit')).toBe('1');
+    expect(firstResponse.getHeader('X-RateGuard-Remaining')).toBe('0');
+    expect(firstResponse.getHeader('Retry-After')).toBeUndefined();
+
     const secondResponse = new FakeExpressResponse();
     await middleware(req, secondResponse, async () => {
       nextCalled += 1;
@@ -35,6 +39,13 @@ describe('adapters', () => {
     expect(nextCalled).toBe(1);
     expect(secondResponse.statusCode).toBe(429);
     expect(secondResponse.getHeader('Retry-After')).toBeDefined();
+    expect(secondResponse.getHeader('X-RateGuard-Limit')).toBe('1');
+    expect(secondResponse.getHeader('X-RateGuard-Remaining')).toBe('0');
+
+    const body = JSON.parse(secondResponse.body()) as { error: string; retry_after?: number; message?: string };
+    expect(body.error).toBe('rate_limited');
+    expect(body.retry_after).toBeGreaterThan(0);
+    expect(body.message).toMatch(/RateGuard/i);
   });
 
   it('express middleware hard-stops token budgets before next() without emitting warning events in soft-stop mode', async () => {

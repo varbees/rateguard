@@ -258,6 +258,9 @@ Known environment caveats:
 - the Python SDK typecheck task now runs strict mypy when available and falls back to compileall in this tool-limited container
 
 Latest verification snapshot:
+- `packages/sdk-go`: `go test ./...` passed after the quickstart/header contract sync and the `rg.Middleware()` alias addition
+- `packages/sdk-node`: `bun test` passed after the Express adapter started emitting standard headers and `rate_limited` response bodies on 429
+- `examples/http-middleware-demo`: `go test ./...` passed after updating the example import path to `github.com/rateguard/sdk-go`
 - `task test`: passed after the rateguard naming cleanup, including the new circuit-breaker cleanup, transparent proxy streaming regression tests, and the Redis limiter migration to atomic GCRA Lua
 - `task test`: passed again after the Redis limiter GCRA rewrite and retry-after propagation update
 - `task test`: passed again after wiring streamed SSE token accounting into the transparent proxy response path
@@ -306,6 +309,7 @@ Completed:
 - auth signup/login/me payloads now expose `handle` and `preset`, and handle availability/update routes are restored
 - OpenAPI generation and the generated TS SDK no longer rely on `replaceAll`, so the emitted client stays compatible with the current dashboard TypeScript target
 - the Node SDK package is wired into the workspace and Taskfile, with dedicated `test`, `build`, and `typecheck` tasks
+- the Go SDK quickstart now matches the published middleware contract: `github.com/rateguard/sdk-go` exposes `rg.Middleware()` for chi/http.Handler, and the standard rate-limit headers are documented as part of the response contract
 - backend composition root extraction
 - gateway request-shaping extraction
 - HTTP adapter extraction for retry/parsing/streaming/transport dispatch
@@ -394,6 +398,7 @@ Confirmed audit findings so far:
 - the repository now contains a complete end-to-end example app under `examples/http-middleware-demo`
 - the repository now contains a working `packages/sdk-node` middleware package for Express, Fastify, Hono, and Next.js route handlers
 - the repository now contains a scaffolded `packages/sdk-python` middleware package for FastAPI, Flask, Django, raw WSGI/ASGI, and decorators
+- the Go and Node middleware quickstarts now match the public import paths and runtime contract: `github.com/rateguard/sdk-go` exposes `rg.Middleware()` for chi/http.Handler, `@rateguard/node` sets the standard rate-limit headers on Express responses, and both READMEs now teach the GCRA one-sentence explanation plus the standalone/no-control-plane default
 - the root README previously overstated the TypeScript package as Node middleware; it is now corrected to a generated client surface
 - mutating API routes now enforce an `Idempotency-Key` contract on the advertised mutating surfaces
 - queue config now enforces `max_queue_length` at admission time and returns a clean 429 when capacity is exhausted
@@ -599,6 +604,8 @@ Latest verified state:
 - launch gate status: reached
 - the live dashboard now has a real `/dashboard/events` realtime screen and the stats contract uses `monthly_request_limit`
 - the repo still does not ship a GitHub Actions workflow, so the CI badge remains a post-launch polish item
+- the Go and Node middleware quickstarts now match the public import paths and runtime contract: `github.com/rateguard/sdk-go` exposes `rg.Middleware()` for chi/http.Handler, `@rateguard/node` sets the standard rate-limit headers on Express responses, and both READMEs now teach the GCRA one-sentence explanation plus the standalone/no-control-plane default
+- `packages/sdk-go` and `packages/sdk-node` test suites passed after the quickstart/header contract alignment; the Go example module also compiled against the renamed Go SDK import path
 
 ## Deferred Verification Matrix
 

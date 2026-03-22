@@ -17,8 +17,10 @@ without forcing a traffic reroute or a full architecture change.
 Go middleware:
 
 ```bash
-go get github.com/varbees/rateguard/sdk-go
+go get github.com/rateguard/sdk-go
 ```
+
+If your app already uses chi, that is the only new RateGuard dependency for the Go quickstart.
 
 Node middleware:
 
@@ -111,6 +113,37 @@ The example wraps a small `net/http` app with RateGuard middleware and exposes:
 
 - `GET /healthz`
 - `GET /hello`
+
+The Go middleware quick-start is:
+
+```go
+package main
+
+import (
+	"net/http"
+
+	"github.com/go-chi/chi/v5"
+	rateguard "github.com/rateguard/sdk-go"
+)
+
+func main() {
+	rg := rateguard.New(rateguard.Config{Preset: "standard"})
+
+	r := chi.NewRouter()
+	r.Use(rg.Middleware())
+	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	http.ListenAndServe(":8080", r)
+}
+```
+
+`rg.Middleware()` applies the same in-process enforcement to every route in the chi router, and the default preset works without Redis or any external service.
+
+GCRA in one sentence:
+
+- It is a rate limiter that refills at a constant rate instead of resetting all at once.
 
 ## Verify The Backend
 

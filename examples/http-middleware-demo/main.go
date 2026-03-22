@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	rateguard "github.com/varbees/rateguard/sdk-go"
+	rateguard "github.com/rateguard/sdk-go"
 )
 
 func main() {

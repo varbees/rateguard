@@ -137,6 +137,11 @@ func (s *SDK) ChiMiddleware() func(http.Handler) http.Handler {
 	}
 }
 
+// Middleware is a convenience alias for ChiMiddleware so quickstarts can use the shorter naming.
+func (s *SDK) Middleware() func(http.Handler) http.Handler {
+	return s.ChiMiddleware()
+}
+
 func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	start := s.clock.Now()
 	key := s.admissionKey(r)
