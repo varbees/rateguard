@@ -130,6 +130,7 @@ Latest verification snapshot:
 - `task ui:typecheck`: passed after adding route type regeneration to the task so a clean checkout does not depend on stale `.next` output
 - `task ui:typecheck`: passed again after the queue/circuit-breaker/cache hardening pass
 - `task ui:typecheck`: passed again after the dashboard guardrail rename and realtime events screen wiring
+- `task ui:typecheck`: passed again after the realtime events empty-state polish
 - `task openapi:generate`: passed after switching generated URL templating from `replaceAll` to `split/join` for the current TS target
 - `task dev`: passed in a normal local environment after removing the broken SQL init bind mount and moving Grafana off the conflicting host port
 - `task smoke`: passed in a normal local environment against the booted stack
