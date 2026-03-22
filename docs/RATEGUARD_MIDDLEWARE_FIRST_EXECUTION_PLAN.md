@@ -204,6 +204,7 @@ Status:
 - Completed. The dashboard provider docs and templates were refreshed to match the current upstream URLs: Gemini now has native and OpenAI-compatible proxy URLs in the docs, and Cohere moved to the current `v2` endpoint in both the wizard and template screen.
 - Completed. The create-API test-connection flow is now provider-aware end to end: the dashboard sends `provider`, `custom_headers`, and `Idempotency-Key`, the gateway probes canonical model paths for OpenAI/Anthropic/Google/Cohere, and custom REST APIs now probe with `GET` so public endpoints like Fakestore are tested with a request that matches their actual contract.
 - Completed. The final create payload now persists the selected provider metadata into the API config record, so the dashboard review step, stored API state, and proxy defaults stay in sync instead of dropping the provider field on the floor.
+- Completed. The local compose stack now ships a valid base64-encoded dev `ENCRYPTION_KEY`, so template-driven proxy creation can persist upstream credentials without tripping the storage guardrail.
 - Verified. `task test`, `task ui:typecheck`, `task ui:build`, and the live smoke burst against `/api/v1/apis` passed; the stack boots cleanly with `task dev`, and the realtime replay shows the self-protection events.
 - Verified. After the screen audit, `task ui:typecheck`, `task ui:build`, and `task smoke` still passed.
 - Verified. After the websocket and docs cleanup, the dashboard typecheck and build still pass.

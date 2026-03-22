@@ -53,7 +53,8 @@ x-gateway-env: &gateway-env
   OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-rateguard-control-plane}
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-otel-collector:4317}
   JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret}
-  ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dev-encryption-key}
+  # Default dev key must be a valid base64-encoded 32-byte AES-256 key.
+  ENCRYPTION_KEY: ${ENCRYPTION_KEY:-XCIzDyguG121pB5B8Cs5ublmkp4V10hXbA1w+qvKsGE=}
   RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
   RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
   RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
