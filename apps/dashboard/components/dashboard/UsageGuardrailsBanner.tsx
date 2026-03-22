@@ -20,7 +20,7 @@ interface AlertData {
   dismissible: boolean;
 }
 
-export function PlanStatusBanner() {
+export function UsageGuardrailsBanner() {
   const { data: dashboardStats } = useDashboardStats();
   const [alerts, setAlerts] = useState<AlertData[]>([]);
   const { subscribe, isConnected } = useAlertsWebSocket();
@@ -30,7 +30,6 @@ export function PlanStatusBanner() {
       ? (stats.monthly_usage / stats.plan_limit) * 100
       : 0;
 
-  // Subscribe to alert notifications
   useEffect(() => {
     if (!isConnected) return;
 
@@ -41,7 +40,6 @@ export function PlanStatusBanner() {
       };
 
       setAlerts(prev => {
-        // Prevent duplicates
         if (prev.some(a => a.message === newAlert.message)) {
           return prev;
         }
@@ -50,7 +48,6 @@ export function PlanStatusBanner() {
     });
   }, [isConnected, subscribe]);
 
-  // Check usage warnings from the live dashboard stats
   useEffect(() => {
     if (!stats || usagePercent < 80) return;
 
@@ -76,12 +73,9 @@ export function PlanStatusBanner() {
 
   const dismissAlert = (id: string) => {
     setAlerts(prev => prev.filter(a => a.id !== id));
-
-    // Store dismissal in localStorage
     localStorage.setItem(`alert_dismissed_${id}`, new Date().toISOString());
   };
 
-  // Show most critical alert first
   const sortedAlerts = [...alerts].sort((a, b) => {
     const severityOrder: Record<string, number> = { error: 0, warning: 1, info: 2 };
     return severityOrder[a.severity] - severityOrder[b.severity];
@@ -91,18 +85,7 @@ export function PlanStatusBanner() {
 
   if (!alertToShow) return null;
 
-  const getIcon = () => {
-    switch (alertToShow.severity) {
-      case 'warning':
-        return AlertTriangle;
-      case 'info':
-        return AlertTriangle;
-      case 'error':
-        return AlertTriangle;
-    }
-  };
-
-  const Icon = getIcon();
+  const Icon = AlertTriangle;
 
   return (
     <Alert

@@ -12,7 +12,7 @@ import {
   SearchAndFilterBar,
   BulkActionsToolbar,
   EmptyStateView,
-  PlanStatusBanner,
+  UsageGuardrailsBanner,
   SkeletonAPITable,
 } from "@/components/dashboard";
 import { FilterState } from "@/components/dashboard/SearchAndFilterBar";
@@ -171,7 +171,7 @@ export default function APIsPage() {
         </Button>
       </div>
 
-      <PlanStatusBanner />
+      <UsageGuardrailsBanner />
 
       {/* Search & Filter */}
       <SearchAndFilterBar

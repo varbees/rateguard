@@ -6,11 +6,11 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import type { DashboardStatsData } from "@/lib/api";
 
-interface PlanLimitsCardProps {
+interface UsageGuardrailsCardProps {
   stats: DashboardStatsData;
 }
 
-export function PlanLimitsCard({ stats }: PlanLimitsCardProps) {
+export function UsageGuardrailsCard({ stats }: UsageGuardrailsCardProps) {
   const router = useRouter();
 
   const requestUsagePercent =
