@@ -88,6 +88,12 @@ Active paths:
 - `deploy/docker/`
 - `docs/`
 
+SDK reality:
+- `packages/sdk-go` is the only in-process middleware SDK in the repo today
+- `packages/sdk-ts` is a generated TypeScript control-plane client, not a middleware SDK
+- there is no `packages/sdk-node` or `packages/sdk-python` tree in the repo yet
+- Node/Python middleware SDKs are future expansion ideas, not current launch-scope deliverables
+
 Local bootstrap split:
 - `task dev` starts the backend runtime and infrastructure only
 - `task ui:dev` runs the dashboard separately against the local backend
@@ -102,6 +108,7 @@ Current strategic read:
 - the repo is already credible as middleware-first OSS
 - the remaining launch risk is not architecture invention, it is release validation plus a small amount of contract and UI polish
 - any future work should preserve the SDK wedge and avoid re-centralizing the product around the proxy
+- the biggest post-launch SDK expansion opportunities are Node.js middleware and Python middleware, but those are not part of the current repo state
 
 Release gates:
 - `task test`
