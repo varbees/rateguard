@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+import pytest
+
+from rateguard import RateGuard, TokenBudget
+from rateguard.exceptions import RateGuardException
+
+from .helpers import Chunk, FixedClock, RecorderEmitter, Usage
+
+
+@pytest.mark.asyncio
+async def test_token_budget_hard_stop_blocks_before_call() -> None:
+    emitter = RecorderEmitter()
+    budget = TokenBudget(
+        clock=FixedClock(),
+        hour_limit=0,
+        day_limit=0,
+        month_limit=10,
+        mode="hard-stop",
+        soft_stop_at=0.8,
+        event_emitter=emitter,
+    )
+    budget.record("user:one", 10)
+
+    with pytest.raises(RateGuardException):
+        async with budget.enforce("user:one"):
+            raise AssertionError("should not execute")
+
+
+@pytest.mark.asyncio
+async def test_token_budget_soft_stop_emits_warning_and_allows() -> None:
+    emitter = RecorderEmitter()
+    budget = TokenBudget(
+        clock=FixedClock(),
+        hour_limit=0,
+        day_limit=0,
+        month_limit=10,
+        mode="soft-stop",
+        soft_stop_at=0.8,
+        event_emitter=emitter,
+    )
+    budget.record("user:one", 8)
+
+    async with budget.enforce("user:one"):
+        pass
+
+    assert emitter.events
+    assert emitter.events[0].event_type == "request.budget_warning"
+
+
+@pytest.mark.asyncio
+async def test_token_budget_streaming_extracts_openai_and_anthropic_usage() -> None:
+    clock = FixedClock()
+    budget = TokenBudget(
+        clock=clock,
+        hour_limit=0,
+        day_limit=0,
+        month_limit=100,
+        mode="hard-stop",
+        soft_stop_at=0.8,
+        event_emitter=RecorderEmitter(),
+    )
+
+    async def openai_stream():
+        yield 'data: {"usage":{"total_tokens":7,"input_tokens":2,"output_tokens":5}}\n\n'
+
+    async for _ in budget.track_stream(openai_stream(), "openai-user"):
+        pass
+
+    usage = budget.usage("openai-user")
+    assert usage["month"] == 7
+
+    async def anthropic_stream():
+        yield 'data: {"usage":{"input_tokens":2,"output_tokens":5,"total_tokens":7}}\n\n'
+
+    async for _ in budget.track_stream(anthropic_stream(), "anthropic-user"):
+        pass
+
+    usage = budget.usage("anthropic-user")
+    assert usage["month"] == 7
+

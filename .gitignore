@@ -41,3 +41,8 @@ coverage/
 *.log
 *.out
 *.tmp
+
+# Python SDK artifacts
+packages/sdk-python/__pycache__/
+packages/sdk-python/**/*.pyc
+packages/sdk-python/.pytest_cache/
