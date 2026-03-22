@@ -1,35 +1,28 @@
 /**
  * RateLimitObservationCard Component
- * 
- * Real-time rate limit monitoring with visual progress bars
+ *
+ * Shows the most recent rate-limit observations from the backend HTTP API.
+ * There is no realtime websocket event for this view, so this card stays on
+ * the actual observations endpoint instead of inventing one.
  */
 
 'use client';
 
-import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, Activity } from 'lucide-react';
-import { useAPIRateLimitsWebSocket } from '@/lib/websocket/use-api-websocket';
-import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
-import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { AlertTriangle, Activity, ExternalLink } from 'lucide-react';
+import Link from 'next/link';
+import { useRateLimitObservations } from '@/lib/hooks/use-api';
 
-interface RateLimitTier {
-  used: number;
-  limit: number;
-  percentage: number;
-}
-
-interface RateLimitData {
-  perSecond?: RateLimitTier;
-  perHour?: RateLimitTier;
-  perDay?: RateLimitTier;
-  perMonth?: RateLimitTier;
-  recentThrottles: number;
-  burstUsed: number;
-  burstLimit: number;
+interface RateLimitObservation {
+  id: string;
+  source_header?: string;
+  observed_at: string;
+  response_status: number;
+  limit_per_window?: number;
+  window_seconds?: number;
 }
 
 interface RateLimitObservationCardProps {
@@ -37,70 +30,32 @@ interface RateLimitObservationCardProps {
   loading?: boolean;
 }
 
-function RateLimitRow({
-  label,
-  tier,
-  warn = 80,
-  critical = 95,
-}: {
-  label: string;
-  tier?: RateLimitTier;
-  warn?: number;
-  critical?: number;
-}) {
-  if (!tier) return null;
-
-  const getColor = () => {
-    if (tier.percentage >= critical) return 'bg-red-500';
-    if (tier.percentage >= warn) return 'bg-yellow-500';
-    return 'bg-primary';
-  };
-
-  const getTextColor = () => {
-    if (tier.percentage >= critical) return 'text-red-600';
-    if (tier.percentage >= warn) return 'text-yellow-600';
-    return 'text-foreground';
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <span className="text-muted-foreground">{label}</span>
-        <span className={cn("font-medium", getTextColor())}>
-          {tier.percentage.toFixed(0)}% ({tier.used.toLocaleString()}/{tier.limit.toLocaleString()})
-        </span>
-      </div>
-      <div className="relative">
-        <Progress 
-          value={tier.percentage} 
-          className={cn("h-2", getColor())}
-        />
-      </div>
-    </div>
-  );
+function formatWindow(seconds?: number): string {
+  if (!seconds) return 'unknown window';
+  if (seconds === 1) return 'per second';
+  if (seconds === 60) return 'per minute';
+  if (seconds === 3600) return 'per hour';
+  if (seconds === 86400) return 'per day';
+  return `per ${seconds}s`;
 }
 
-export function RateLimitObservationCard({ apiId, loading = false }: RateLimitObservationCardProps) {
-  const [rateLimits, setRateLimits] = useState<RateLimitData | null>(null);
-  const { status, subscribe, isConnected } = useAPIRateLimitsWebSocket(apiId);
+export function RateLimitObservationCard({
+  apiId,
+  loading = false,
+}: RateLimitObservationCardProps) {
+  const { data, isLoading } = useRateLimitObservations(apiId);
+  const observations = (data ?? []) as RateLimitObservation[];
+  const latest = observations[0];
 
-  useEffect(() => {
-    if (!isConnected) return;
-
-    return subscribe('rate_limit_observation', (data: RateLimitData) => {
-      setRateLimits(data);
-    });
-  }, [isConnected, subscribe]);
-
-  if (loading || !rateLimits) {
+  if (loading || isLoading) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Rate Limit Status</CardTitle>
+          <CardTitle>Rate Limit Observations</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[1, 2, 3].map(i => (
+            {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-12" />
             ))}
           </div>
@@ -109,81 +64,86 @@ export function RateLimitObservationCard({ apiId, loading = false }: RateLimitOb
     );
   }
 
-  // Determine highest usage tier
-  const highestUsage = Math.max(
-    rateLimits.perSecond?.percentage || 0,
-    rateLimits.perHour?.percentage || 0,
-    rateLimits.perDay?.percentage || 0,
-    rateLimits.perMonth?.percentage || 0
-  );
+  if (!latest) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Activity className="size-5" />
+            Rate Limit Observations
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              No rate-limit observations have been recorded for this API yet.
+            </p>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/apis/${apiId}/rate-limit/observations`}>
+                View observations
+                <ExternalLink className="ml-2 size-4" />
+              </Link>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
-  const showWarning = highestUsage >= 80;
-  const showCritical = highestUsage >= 95;
+  const throttledCount = observations.filter((observation) => observation.response_status === 429).length;
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              Rate Limit Status
-              {showCritical && (
-                <span className="text-xs font-normal text-red-600">
-                  <AlertTriangle className="inline h-3 w-3 mr-1" />
-                  Critical
-                </span>
-              )}
-              {showWarning && !showCritical && (
-                <span className="text-xs font-normal text-yellow-600">
-                  <AlertTriangle className="inline h-3 w-3 mr-1" />
-                  Warning
-                </span>
-              )}
-            </CardTitle>
-          </div>
-          <ConnectionStatusIndicator status={status} showLabel={false} />
-        </div>
+        <CardTitle className="flex items-center gap-2">
+          <AlertTriangle className="size-5 text-yellow-600" />
+          Rate Limit Observations
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Alert for high usage */}
-        {showWarning && (
-          <Alert variant={showCritical ? "destructive" : "default"}>
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              {showCritical 
-                ? `Critical: You're using ${highestUsage.toFixed(0)}% of your rate limit. Requests may be throttled.`
-                : `Warning: You're using ${highestUsage.toFixed(0)}% of your rate limit.`
-              }
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {/* Rate limit bars */}
-        <div className="space-y-4">
-          <RateLimitRow label="Per Second" tier={rateLimits.perSecond} />
-          <RateLimitRow label="Per Hour" tier={rateLimits.perHour} />
-          <RateLimitRow label="Per Day" tier={rateLimits.perDay} />
-          <RateLimitRow label="Per Month" tier={rateLimits.perMonth} />
-        </div>
-
-        {/* Additional info */}
-        <div className="pt-4 border-t grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs text-muted-foreground">Recent Throttles (1h)</p>
-            <p className={cn(
-              "text-lg font-semibold",
-              rateLimits.recentThrottles > 0 ? "text-red-600" : "text-green-600"
-            )}>
-              {rateLimits.recentThrottles}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Observations</p>
+            <p className="text-lg font-semibold">{observations.length}</p>
+          </div>
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">429 Responses</p>
+            <p className="text-lg font-semibold">{throttledCount}</p>
+          </div>
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Latest Header</p>
+            <p className="text-sm font-medium">
+              {latest.source_header || 'Unavailable'}
             </p>
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Burst Available</p>
-            <p className="text-lg font-semibold">
-              {rateLimits.burstLimit - rateLimits.burstUsed}/{rateLimits.burstLimit}
+          <div className="rounded-lg border p-3">
+            <p className="text-xs text-muted-foreground">Latest Window</p>
+            <p className="text-sm font-medium">
+              {latest.limit_per_window
+                ? `${latest.limit_per_window} ${formatWindow(latest.window_seconds)}`
+                : 'Unavailable'}
             </p>
           </div>
         </div>
+
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">Most Recent</p>
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge variant={latest.response_status >= 400 ? 'destructive' : 'secondary'}>
+              {latest.response_status}
+            </Badge>
+            <span className="text-muted-foreground">
+              {new Date(latest.observed_at).toLocaleString()}
+            </span>
+          </div>
+        </div>
+
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/dashboard/apis/${apiId}/rate-limit/observations`}>
+            Open full observations page
+            <ExternalLink className="ml-2 size-4" />
+          </Link>
+        </Button>
       </CardContent>
     </Card>
   );

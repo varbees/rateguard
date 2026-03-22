@@ -39,7 +39,7 @@ interface UseWebSocketReturn {
  * 
  * useEffect(() => {
  *   if (isConnected) {
- *     return subscribe('stats_update', (data) => {
+ *     return subscribe('metrics.update', (data) => {
  *       console.log('New stats:', data);
  *     });
  *   }

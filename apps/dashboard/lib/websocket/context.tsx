@@ -82,6 +82,83 @@ interface WebSocketContextValue {
 
 const WebSocketContext = createContext<WebSocketContextValue | null>(null);
 
+const realtimeEventTypes: WebSocketEventType[] = [
+  "metrics.update",
+  "alert.triggered",
+  "circuit_breaker.state_change",
+  "system.health",
+  "api.metrics.update",
+  "request.completed",
+  "request.rate_limited",
+  "request.circuit_open",
+  "request.rate_limiter_degraded",
+  "request.budget_warning",
+  "request.token_budget_exceeded",
+  "test.message",
+];
+
+type IncomingRealtimeEvent = Record<string, any> & {
+  event_type?: string;
+  event_id?: string;
+  occurred_at?: string;
+  payload?: Record<string, any>;
+  data?: Record<string, any>;
+  user_id?: string;
+  timestamp?: number;
+};
+
+function dispatchRealtimeEvent(
+  subscribersRef: React.MutableRefObject<
+    Map<string, Set<(event: WebSocketEvent) => void>>
+  >,
+  setLastMessage: React.Dispatch<React.SetStateAction<WebSocketEvent | null>>,
+  message: WebSocketEvent
+) {
+  setLastMessage(message);
+
+  const typeSubscribers = subscribersRef.current.get(message.type);
+  if (typeSubscribers) {
+    typeSubscribers.forEach((callback) => callback(message));
+  }
+
+  const wildcardSubscribers = subscribersRef.current.get("*");
+  if (wildcardSubscribers) {
+    wildcardSubscribers.forEach((callback) => callback(message));
+  }
+}
+
+function normalizeIncomingEvent(
+  rawEvent: IncomingRealtimeEvent | null | undefined,
+  fallbackType?: string
+): WebSocketEvent | null {
+  if (!rawEvent || typeof rawEvent !== "object") {
+    return null;
+  }
+
+  const type = (rawEvent.event_type || rawEvent.type || fallbackType || "") as
+    | WebSocketEventType
+    | "";
+  if (!type) {
+    return null;
+  }
+
+  const timestamp =
+    typeof rawEvent.timestamp === "number"
+      ? rawEvent.timestamp
+      : rawEvent.occurred_at
+        ? Date.parse(rawEvent.occurred_at)
+        : Date.now();
+
+  const data = rawEvent.data || rawEvent.payload || {};
+
+  return {
+    type,
+    timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+    data,
+    user_id: rawEvent.user_id,
+  };
+}
+
 /**
  * Hook to access WebSocket context
  */
@@ -133,6 +210,7 @@ export function WebSocketProvider({
   const [lastError, setLastError] = useState<WebSocketError | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const subscribersRef = useRef<
     Map<string, Set<(event: WebSocketEvent) => void>>
@@ -177,19 +255,142 @@ export function WebSocketProvider({
     return delay;
   }, []);
 
+  const getApiBaseUrl = useCallback(() => {
+    return (
+      process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+      window.location.origin
+    );
+  }, []);
+
+  const handleIncomingMessage = useCallback(
+    (rawMessage: IncomingRealtimeEvent | string, fallbackType?: string) => {
+      const parsed =
+        typeof rawMessage === "string"
+          ? (() => {
+              try {
+                return JSON.parse(rawMessage) as IncomingRealtimeEvent;
+              } catch {
+                return null;
+              }
+            })()
+          : rawMessage;
+
+      const message = normalizeIncomingEvent(parsed, fallbackType);
+      if (!message) {
+        return;
+      }
+
+      if (debug || process.env.NODE_ENV === "development") {
+        console.log(
+          "[WebSocket] Message received:",
+          message.type,
+          message.data
+        );
+      }
+
+      dispatchRealtimeEvent(subscribersRef, setLastMessage, message);
+    },
+    [debug]
+  );
+
+  const connectSSEFallback = useCallback(() => {
+    if (!enabled) return;
+    if (typeof window === "undefined") return;
+
+    if (
+      eventSourceRef.current?.readyState === EventSource.OPEN ||
+      eventSourceRef.current?.readyState === EventSource.CONNECTING
+    ) {
+      return;
+    }
+
+    const streamUrl = `${getApiBaseUrl()}/api/v1/events/stream`;
+
+    if (debug || process.env.NODE_ENV === "development") {
+      console.warn("[WebSocket] Falling back to SSE:", streamUrl);
+    }
+
+    setConnectionStatus("connecting");
+
+    try {
+      const source = new EventSource(streamUrl, { withCredentials: true });
+      eventSourceRef.current = source;
+      maxRetriesReachedRef.current = true;
+
+      const handleEvent = (event: MessageEvent<string>, fallbackType?: string) => {
+        handleIncomingMessage(event.data, fallbackType);
+      };
+
+      realtimeEventTypes.forEach((eventType) => {
+        source.addEventListener(eventType, (event) => {
+          handleEvent(event as MessageEvent<string>, eventType);
+        });
+      });
+
+      source.addEventListener("replay", (event) => {
+        handleEvent(event as MessageEvent<string>, "replay");
+      });
+
+      source.onopen = () => {
+        setConnectionStatus("connected");
+        setLastError(null);
+        reconnectAttemptsRef.current = 0;
+      };
+
+      source.onerror = () => {
+        if (debug || process.env.NODE_ENV === "development") {
+          console.warn("[WebSocket] SSE stream temporarily unavailable");
+        }
+        if (source.readyState === EventSource.CLOSED) {
+          setConnectionStatus("disconnected");
+          setLastError({
+            code: "SSE_STREAM_CLOSED",
+            message: "Realtime SSE stream closed",
+            timestamp: Date.now(),
+            details: {
+              url: streamUrl,
+            },
+          });
+        }
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      const sseError: WebSocketError = {
+        code: "SSE_CONNECTION_FAILED",
+        message: `Failed to create realtime SSE stream: ${errorMessage}`,
+        timestamp: Date.now(),
+        details: {
+          url: streamUrl,
+        },
+      };
+
+      console.error("[WebSocket] Failed to create SSE fallback:", sseError);
+      setLastError(sseError);
+      setConnectionStatus("error");
+    }
+  }, [debug, enabled, getApiBaseUrl, handleIncomingMessage]);
+
   /**
    * Connect to WebSocket server
    */
   const connect = useCallback(() => {
     if (!enabled) return;
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (
+      wsRef.current?.readyState === WebSocket.OPEN ||
+      wsRef.current?.readyState === WebSocket.CONNECTING
+    ) {
+      return;
+    }
+    if (
+      eventSourceRef.current?.readyState === EventSource.OPEN ||
+      eventSourceRef.current?.readyState === EventSource.CONNECTING
+    ) {
+      return;
+    }
     // Don't attempt to reconnect if max retries already reached
     if (maxRetriesReachedRef.current) {
-      if (debug || process.env.NODE_ENV === "development") {
-        console.log(
-          "[WebSocket] Max retries already reached, skipping reconnection"
-        );
-      }
+      connectSSEFallback();
       return;
     }
 
@@ -225,32 +426,15 @@ export function WebSocketProvider({
         console.log("[WebSocket] Connected successfully");
         setConnectionStatus("connected");
         reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful connection
+        if (eventSourceRef.current) {
+          eventSourceRef.current.close();
+          eventSourceRef.current = null;
+        }
       };
 
       ws.onmessage = (event) => {
         try {
-          const message: WebSocketEvent = JSON.parse(event.data);
-          if (debug || process.env.NODE_ENV === "development") {
-            console.log(
-              "[WebSocket] Message received:",
-              message.type,
-              message.data
-            );
-          }
-
-          setLastMessage(message);
-
-          // Notify subscribers
-          const typeSubscribers = subscribersRef.current.get(message.type);
-          if (typeSubscribers) {
-            typeSubscribers.forEach((callback) => callback(message));
-          }
-
-          // Also notify wildcard subscribers
-          const wildcardSubscribers = subscribersRef.current.get("*");
-          if (wildcardSubscribers) {
-            wildcardSubscribers.forEach((callback) => callback(message));
-          }
+          handleIncomingMessage(event.data);
         } catch (error) {
           const errorMessage =
             error instanceof Error ? error.message : "Unknown error";
@@ -322,22 +506,7 @@ export function WebSocketProvider({
           }, delay);
         } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
           // Mark that max retries have been reached - stop all reconnection attempts
-          maxRetriesReachedRef.current = true;
-          const finalError: WebSocketError = {
-            code: "MAX_RETRIES_EXCEEDED",
-            message: `Failed to connect after ${maxReconnectAttempts} attempts`,
-            timestamp: Date.now(),
-            details: {
-              lastCloseCode: closeCode,
-              lastCloseReason: closeReason,
-            },
-          };
-          setLastError(finalError);
-          console.error(
-            "[WebSocket] Max reconnect attempts reached:",
-            finalError.message,
-            "- WebSocket will not attempt to reconnect automatically"
-          );
+          connectSSEFallback();
         }
       };
     } catch (error) {
@@ -355,9 +524,17 @@ export function WebSocketProvider({
 
       console.error("[WebSocket] Failed to create WebSocket:", wsError);
       setLastError(wsError);
-      setConnectionStatus("error");
+      connectSSEFallback();
     }
-  }, [enabled, url, getToken, getReconnectDelay, debug]);
+  }, [
+    enabled,
+    url,
+    getToken,
+    getReconnectDelay,
+    debug,
+    connectSSEFallback,
+    handleIncomingMessage,
+  ]);
 
   /**
    * Disconnect from WebSocket server
@@ -377,8 +554,18 @@ export function WebSocketProvider({
       wsRef.current = null;
     }
 
+    if (eventSourceRef.current) {
+      try {
+        eventSourceRef.current.close();
+      } catch (error) {
+        console.warn("[WebSocket] Error closing SSE stream:", error);
+      }
+      eventSourceRef.current = null;
+    }
+
     setConnectionStatus("disconnected");
     setLastError(null);
+    maxRetriesReachedRef.current = false;
   }, []);
 
   /**
@@ -426,9 +613,14 @@ export function WebSocketProvider({
    */
   const sendMessage = useCallback((message: any) => {
     if (!wsRef.current) {
-      console.warn(
-        "[WebSocket] Cannot send message: WebSocket not initialized"
-      );
+      if (eventSourceRef.current) {
+        console.warn(
+          "[WebSocket] Cannot send message: SSE fallback is read-only"
+        );
+        return;
+      }
+
+      console.warn("[WebSocket] Cannot send message: WebSocket not initialized");
       return;
     }
 

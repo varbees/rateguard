@@ -11,7 +11,7 @@ import { Activity, AlertCircle, CheckCircle2, Pause, Circle } from 'lucide-react
 import { Badge } from '@/components/ui/badge';
 
 export type APIHealthStatus = 'healthy' | 'degraded' | 'down' | 'unknown';
-export type CircuitBreakerState = 'closed' | 'open' | 'half_open';
+export type CircuitBreakerState = 'closed' | 'open' | 'half_open' | 'unknown';
 
 interface APIStatusBadgeProps {
   enabled: boolean;
@@ -61,6 +61,16 @@ export function APIStatusBadge({
         icon: Activity,
         color: 'text-yellow-600',
         dotColor: 'bg-yellow-500',
+      };
+    }
+
+    if (circuitBreakerState === 'unknown') {
+      return {
+        label: 'Unknown',
+        variant: 'outline' as const,
+        icon: Circle,
+        color: 'text-gray-500',
+        dotColor: 'bg-gray-500',
       };
     }
 
@@ -152,6 +162,8 @@ export function APIStatusDot({
         return 'bg-yellow-500';
       case 'down':
         return 'bg-red-500';
+      case 'unknown':
+        return 'bg-gray-500';
       default:
         return 'bg-gray-500';
     }

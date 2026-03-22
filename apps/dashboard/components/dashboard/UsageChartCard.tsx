@@ -53,7 +53,19 @@ export function UsageChartCard({ apiId, loading = false }: UsageChartCardProps) 
   useEffect(() => {
     if (!isConnected) return;
 
-    return subscribe('usage_datapoint', (newPoint: UsageDataPoint) => {
+    return subscribe('metrics.update', (event) => {
+      const data = event.data as Record<string, any>;
+      const newPoint: UsageDataPoint = {
+        timestamp:
+          typeof data.timestamp === 'number'
+            ? new Date(data.timestamp).toISOString()
+            : new Date().toISOString(),
+        requests: Number(data.requests) || 0,
+        tokens: Number(data.tokens) || undefined,
+        cost: Number(data.cost) || 0,
+        errors: Number(data.error_count) || 0,
+      };
+
       setData(prev => {
         // Aggregate by minute for display
         const lastPoint = prev[prev.length - 1];

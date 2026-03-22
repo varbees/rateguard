@@ -20,15 +20,31 @@ export function TokenMetricsCard() {
   const { subscribe, isConnected } = useWebSocket();
 
   React.useEffect(() => {
-    // Subscribe to token usage updates via WebSocket
-    const unsubscribe = subscribe("metrics.update", (event) => {
-      // Refetch token data when metrics update
-      if (event.data?.tokens_updated) {
-        refetch();
-      }
+    const unsubscribeCompleted = subscribe("request.completed", () => {
+      refetch();
     });
 
-    return unsubscribe;
+    const unsubscribeRateLimited = subscribe("request.rate_limited", () => {
+      refetch();
+    });
+
+    const unsubscribeBudgetExceeded = subscribe(
+      "request.token_budget_exceeded",
+      () => {
+        refetch();
+      }
+    );
+
+    const unsubscribeBudgetWarning = subscribe("request.budget_warning", () => {
+      refetch();
+    });
+
+    return () => {
+      unsubscribeCompleted();
+      unsubscribeRateLimited();
+      unsubscribeBudgetExceeded();
+      unsubscribeBudgetWarning();
+    };
   }, [subscribe, refetch]);
 
   if (isLoading) {

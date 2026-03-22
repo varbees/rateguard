@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Activity, TrendingUp, TrendingDown, Zap, CheckCircle2, Clock, DollarSign } from 'lucide-react';
-import { useAPIMetricsWebSocket } from '@/lib/websocket/use-api-websocket';
+import { useAPIMetricsWebSocket } from '@/lib/hooks/use-api-metrics-websocket';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 import { cn } from '@/lib/utils';
 
@@ -90,24 +90,33 @@ export function APIOverviewCard({ apiId, loading = false }: APIOverviewCardProps
   const [ previousMetrics, setPreviousMetrics] = useState<APIMetrics | null>(null);
   const [updatingMetric, setUpdatingMetric] = useState<string | null>(null);
 
-  const { status, subscribe, isConnected } = useAPIMetricsWebSocket(apiId);
+  const { liveMetrics, isLive } = useAPIMetricsWebSocket(apiId);
 
   useEffect(() => {
-    if (!isConnected) return;
+    if (!liveMetrics) return;
 
-    return subscribe('overview_update', (data: APIMetrics) => {
-      // Store previous for trend calculation
-      if (metrics) {
-        setPreviousMetrics(metrics);
+    const nextMetrics: APIMetrics = {
+      requestsToday: Number(liveMetrics.metrics.requests_today) || 0,
+      requestsThisHour: Number(liveMetrics.metrics.requests_hour) || 0,
+      successRate: Number(liveMetrics.metrics.success_rate) || 0,
+      avgLatency: Number(liveMetrics.metrics.avg_latency_ms) || 0,
+      p95Latency: Number(liveMetrics.metrics.p95_latency_ms) || 0,
+      p99Latency: Number(liveMetrics.metrics.p95_latency_ms) || 0,
+      tokensConsumed: undefined,
+      estimatedCost: undefined,
+    };
+
+    setUpdatingMetric('all');
+    setMetrics((current) => {
+      if (current) {
+        setPreviousMetrics(current);
       }
-      
-      // Show update animation
-      setUpdatingMetric('all');
-      setMetrics(data);
-      
-      setTimeout(() => setUpdatingMetric(null), 500);
+      return nextMetrics;
     });
-  }, [isConnected, subscribe, metrics]);
+
+    const timeout = setTimeout(() => setUpdatingMetric(null), 500);
+    return () => clearTimeout(timeout);
+  }, [liveMetrics]);
 
   const calculateTrend = (current: number, previous?: number) => {
     if (!previous) return undefined;
@@ -140,7 +149,10 @@ export function APIOverviewCard({ apiId, loading = false }: APIOverviewCardProps
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>API Overview</CardTitle>
-          <ConnectionStatusIndicator status={status} showLabel={false} />
+          <ConnectionStatusIndicator
+            status={isLive ? 'connected' : 'disconnected'}
+            showLabel={false}
+          />
         </div>
       </CardHeader>
       <CardContent>

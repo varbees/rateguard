@@ -58,10 +58,10 @@ interface APIStatus {
   apiId: string;
   enabled: boolean;
   lastRequest?: string;
-  requestsLast5Min: number;
-  errorsLast5Min: number;
+  requestsPerHour: number;
+  errors: number;
   healthStatus: 'healthy' | 'degraded' | 'down' | 'unknown';
-  circuitBreakerState: 'closed' | 'open' | 'half_open';
+  circuitBreakerState: 'closed' | 'open' | 'half_open' | 'unknown';
 }
 
 interface APIListWithStatusProps {
@@ -142,10 +142,33 @@ export function APIListWithStatus({
   useEffect(() => {
     if (!isConnected) return;
 
-    return subscribe('api_status_update', (statusUpdate: APIStatus) => {
+    return subscribe('api.metrics.update', (event) => {
+      const data = event.data as Record<string, any>;
+      const apiId = String(data.api_id || data.route_id || '');
+      if (!apiId) return;
+
+      const metrics = (data.metrics || {}) as Record<string, any>;
+      const successRate = Number(metrics.success_rate);
+      const healthStatus =
+        Number.isFinite(successRate) && successRate >= 95
+          ? 'healthy'
+          : Number.isFinite(successRate) && successRate >= 80
+            ? 'degraded'
+            : 'down';
+
       setApiStatuses(prev => {
         const next = new Map(prev);
-        next.set(statusUpdate.apiId, statusUpdate);
+        next.set(apiId, {
+          apiId,
+          enabled: true,
+          lastRequest: metrics.last_request_at || undefined,
+          requestsPerHour: Number(metrics.requests_hour) || 0,
+          errors: Number(metrics.error_count) || 0,
+          healthStatus,
+          circuitBreakerState: metrics.circuit_breaker?.state
+            ? String(metrics.circuit_breaker.state).replace('-', '_') as APIStatus['circuitBreakerState']
+            : 'unknown',
+        });
         return next;
       });
     });
@@ -430,11 +453,11 @@ export function APIListWithStatus({
                       {apiStatus && (
                         <div className="flex flex-col gap-1">
                           <span className="text-sm">
-                            {apiStatus.requestsLast5Min} req/5min
+                            {apiStatus.requestsPerHour} req/hour
                           </span>
-                          {apiStatus.errorsLast5Min > 0 && (
+                          {apiStatus.errors > 0 && (
                             <span className="text-xs text-red-600">
-                              {apiStatus.errorsLast5Min} errors
+                              {apiStatus.errors} errors
                             </span>
                           )}
                         </div>

@@ -19,13 +19,24 @@ export function CostEstimateCard() {
   const { subscribe, isConnected } = useWebSocket();
 
   React.useEffect(() => {
-    const unsubscribe = subscribe("metrics.update", (event) => {
-      // Refetch when costs are updated
-      if (event.data?.cost_updated) {
+    const unsubscribeCompleted = subscribe("request.completed", () => {
+      refetch();
+    });
+    const unsubscribeRateLimited = subscribe("request.rate_limited", () => {
+      refetch();
+    });
+    const unsubscribeBudgetExceeded = subscribe(
+      "request.token_budget_exceeded",
+      () => {
         refetch();
       }
-    });
-    return unsubscribe;
+    );
+
+    return () => {
+      unsubscribeCompleted();
+      unsubscribeRateLimited();
+      unsubscribeBudgetExceeded();
+    };
   }, [subscribe, refetch]);
 
   if (isLoading) {

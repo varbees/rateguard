@@ -33,10 +33,20 @@ export function UsageGuardrailsBanner() {
   useEffect(() => {
     if (!isConnected) return;
 
-    return subscribe('alert', (alertData: Omit<AlertData, 'id'>) => {
+    return subscribe('alert.triggered', (event) => {
+      const alertData = event.data as Record<string, any>;
       const newAlert: AlertData = {
-        id: `alert_${Date.now()}`,
-        ...alertData,
+        id: String(alertData.id || `alert_${Date.now()}`),
+        severity:
+          alertData.type === 'critical'
+            ? 'error'
+            : alertData.type === 'warning'
+              ? 'warning'
+              : 'info',
+        title: String(alertData.title || 'Guardrail Alert'),
+        message: String(alertData.message || 'A guardrail event was published.'),
+        action: undefined,
+        dismissible: alertData.dismissible !== false,
       };
 
       setAlerts(prev => {

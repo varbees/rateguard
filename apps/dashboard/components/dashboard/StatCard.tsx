@@ -54,13 +54,34 @@ export function StatCard({
   useEffect(() => {
     if (!isConnected || !websocketField) return;
 
-    return subscribe('stats_update', (data: any) => {
-      if (data[websocketField] === undefined) return;
+    return subscribe('metrics.update', (event) => {
+      const data = event.data as Record<string, any>;
+      const fieldValue = (() => {
+        switch (websocketField) {
+          case 'requestsToday':
+            return data.requests_today ?? data.requests;
+          case 'apiCount':
+            return data.api_count ?? data.active_apis;
+          case 'estimatedCost':
+            return data.estimated_cost ?? data.cost;
+          case 'successRate':
+            if (data.success_rate !== undefined) return data.success_rate;
+            if (data.requests !== undefined && data.error_count !== undefined) {
+              const requests = Number(data.requests) || 0;
+              const errors = Number(data.error_count) || 0;
+              if (requests <= 0) return undefined;
+              return ((requests - errors) / requests) * 100;
+            }
+            return undefined;
+        }
+      })();
+
+      if (fieldValue === undefined) return;
 
       setIsUpdating(true);
       setTimeout(() => setIsUpdating(false), 500);
 
-      setValue(data[websocketField]);
+      setValue(fieldValue);
 
       if (data[`${websocketField}Delta`] !== undefined) {
         const delta = data[`${websocketField}Delta`];
