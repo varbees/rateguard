@@ -26,6 +26,12 @@ Node middleware:
 bun add @rateguard/node
 ```
 
+Python middleware:
+
+```bash
+pip install -e packages/sdk-python
+```
+
 Generated TypeScript client:
 
 ```bash
@@ -120,6 +126,7 @@ This runs the current Go test suite without requiring a manually started local s
 
 `packages/sdk-go` is a separate Go module in the root `go.work`. It is the embeddable middleware SDK, not the control plane runtime.
 `packages/sdk-node` is the Node.js middleware SDK package in the workspace. It is the embeddable middleware SDK for Express, Fastify, Hono, and Next.js routes.
+`packages/sdk-python` is the Python middleware SDK package in the repo. It is the embeddable middleware SDK for FastAPI, Flask, Django, raw WSGI/ASGI, and decorators.
 
 `apps/gateway` is the self-hosted control plane and gateway runtime. It receives events, serves the dashboard APIs, exposes OTEL metrics, and remains the backend service that the SDK reports into.
 
@@ -143,6 +150,7 @@ RateGuard is being steered toward:
 - `apps/dashboard/` for the Next.js operator UI
 - `packages/sdk-go/` for Go middleware
 - `packages/sdk-node/` for Node.js middleware
+- `packages/sdk-python/` for Python middleware
 - `packages/sdk-ts/` for the generated TypeScript client surface
 - `packages/openapi/` for generated contract artifacts
 - `deploy/` for Docker, Helm, and KEDA assets

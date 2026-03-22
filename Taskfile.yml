@@ -158,3 +158,33 @@ tasks:
     dir: "{{.SDK_NODE_DIR}}"
     cmds:
       - bun run typecheck
+
+  sdk-python:deps:
+    desc: Install Python SDK dependencies
+    dir: packages/sdk-python
+    env:
+      PYTHONUSERBASE: /tmp/rateguard-python
+    cmds:
+      - python3 -m pip install -e .
+
+  sdk-python:test:
+    desc: Run the Python middleware SDK tests
+    deps:
+      - sdk-python:deps
+    dir: packages/sdk-python
+    env:
+      PYTHONUSERBASE: /tmp/rateguard-python
+      PYTHONPATH: tests/vendor
+    cmds:
+      - python3 -m pytest -q
+
+  sdk-python:typecheck:
+    desc: Type-check the Python middleware SDK
+    deps:
+      - sdk-python:deps
+    dir: packages/sdk-python
+    env:
+      PYTHONUSERBASE: /tmp/rateguard-python
+      PYTHONPATH: tests/vendor
+    cmds:
+      - python3 -m mypy rateguard

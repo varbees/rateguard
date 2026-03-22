@@ -84,6 +84,7 @@ Active paths:
 - `apps/dashboard/`
 - `packages/sdk-go/`
 - `packages/sdk-node/`
+- `packages/sdk-python/`
 - `packages/sdk-ts/`
 - `packages/openapi/`
 - `deploy/docker/`
@@ -92,9 +93,9 @@ Active paths:
 SDK reality:
 - `packages/sdk-go` is the only in-process middleware SDK in the repo today
 - `packages/sdk-node` is a real Node.js middleware SDK package in the repo, built against the same middleware-first contract model
+- `packages/sdk-python` is now a Python middleware SDK package in the repo, with FastAPI, Flask, Django, WSGI/ASGI, and decorator support
 - `packages/sdk-ts` is a generated TypeScript control-plane client, not a middleware SDK
-- `packages/sdk-python` is still not present in the repo
-- Node middleware exists; Python middleware remains future expansion
+- Node middleware exists; Python middleware is now part of the repo state and should stay aligned with the Go and Node SDK contracts
 
 Local bootstrap split:
 - `task dev` starts the backend runtime and infrastructure only
@@ -110,7 +111,7 @@ Current strategic read:
 - the repo is already credible as middleware-first OSS
 - the remaining launch risk is not architecture invention, it is release validation plus a small amount of contract and UI polish
 - any future work should preserve the SDK wedge and avoid re-centralizing the product around the proxy
-- the biggest post-launch SDK expansion opportunity still pending is Python middleware; Node middleware is now part of the repo state and should stay aligned with the Go SDK contract
+- the biggest post-launch SDK expansion opportunity is no longer adding SDKs from scratch; it is keeping the Go, Node, and Python middleware contracts aligned as the repo evolves
 
 Release gates:
 - `task test`
@@ -127,6 +128,7 @@ Known environment caveats:
 - `TEST_DATABASE_URL`-dependent tests skip when that env is missing
 - `baseline-browser-mapping` emits a Next.js warning during `next build`; it is informational, not a blocker
 - Grafana now defaults to host port `3300` in the local Docker stack to avoid common `3000` collisions
+- the container does not currently have `mypy`, so the Python SDK typecheck task is wired but not executable in this environment without installing that tool
 
 Latest verification snapshot:
 - `task test`: passed after the rateguard naming cleanup, including the new circuit-breaker cleanup, transparent proxy streaming regression tests, and the Redis limiter migration to atomic GCRA Lua
@@ -141,6 +143,7 @@ Latest verification snapshot:
 - `task ui:typecheck`: passed again after the dashboard guardrail rename and realtime events screen wiring
 - `task ui:typecheck`: passed again after the realtime events empty-state polish
 - `packages/sdk-node`: `bun run typecheck`, `bun run test`, and `bun run build` passed after the Node middleware SDK package was added
+- `packages/sdk-python`: `task sdk-python:test` passed after adding the local editable backend and a test-only `iniconfig` shim; `task sdk-python:typecheck` is wired but the container does not have `mypy` installed
 - `task openapi:generate`: passed after switching generated URL templating from `replaceAll` to `split/join` for the current TS target
 - `task dev`: passed in a normal local environment after removing the broken SQL init bind mount and moving Grafana off the conflicting host port
 - `task smoke`: passed in a normal local environment against the booted stack
@@ -154,6 +157,7 @@ Completed:
 - archived historical docs that only repeated retired product names were pruned from the tree
 - Go SDK middleware module
 - Node middleware SDK package
+- Python middleware SDK package
 - OpenAPI generation path
 - TypeScript SDK generation path
 - OTEL / metrics / replay / SSE surfaces
@@ -260,6 +264,7 @@ Confirmed audit findings so far:
 - the repo now contains the standard OSS launch scaffolding files (`LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, GitHub issue templates)
 - the repository now contains a complete end-to-end example app under `examples/http-middleware-demo`
 - the repository now contains a working `packages/sdk-node` middleware package for Express, Fastify, Hono, and Next.js route handlers
+- the repository now contains a scaffolded `packages/sdk-python` middleware package for FastAPI, Flask, Django, raw WSGI/ASGI, and decorators
 - the root README previously overstated the TypeScript package as Node middleware; it is now corrected to a generated client surface
 - mutating API routes now enforce an `Idempotency-Key` contract on the advertised mutating surfaces
 - queue config now enforces `max_queue_length` at admission time and returns a clean 429 when capacity is exhausted
