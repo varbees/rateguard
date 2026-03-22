@@ -60,6 +60,9 @@ Release gates:
 - `task ui:build`
 - `task smoke`
 
+Dashboard typecheck workflow:
+- `task ui:typecheck` regenerates dashboard route type artifacts before running `tsc --noEmit`, so a clean checkout does not depend on stale `.next` output
+
 Known environment caveats:
 - listener-dependent tests may skip when local sockets are not available
 - miniredis-dependent tests may skip when local sockets are not available
@@ -71,6 +74,7 @@ Latest verification snapshot:
 - `task test`: passed after the rateguard naming cleanup, including the new circuit-breaker cleanup and transparent proxy streaming regression tests
 - `go test -tags commercial ./apps/gateway/internal/billing`: passed after centralizing user lookup and preset persistence behind shared billing helpers
 - `task ui:typecheck`: passed after the active docs wording sweep and repository rename cleanup
+- `task ui:typecheck`: passed after adding route type regeneration to the task so a clean checkout does not depend on stale `.next` output
 - `task openapi:generate`: passed after switching generated URL templating from `replaceAll` to `split/join` for the current TS target
 - `task dev`: passed in a normal local environment after removing the broken SQL init bind mount and moving Grafana off the conflicting host port
 - `task smoke`: passed in a normal local environment against the booted stack

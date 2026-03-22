@@ -105,8 +105,16 @@ tasks:
     cmds:
       - bun run build
 
+  ui:typegen:
+    desc: Generate dashboard route type artifacts
+    dir: "{{.DASHBOARD_DIR}}"
+    cmds:
+      - bunx next typegen
+
   ui:typecheck:
     desc: Type-check the dashboard
+    deps:
+      - ui:typegen
     dir: "{{.DASHBOARD_DIR}}"
     cmds:
       - bun run type-check
