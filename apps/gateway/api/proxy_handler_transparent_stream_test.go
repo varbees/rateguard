@@ -14,6 +14,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/varbees/rateguard/internal/models"
+	internalproxy "github.com/varbees/rateguard/internal/proxy"
 	"github.com/varbees/rateguard/pkg/logger"
 	"go.uber.org/zap"
 )
@@ -29,6 +30,20 @@ type streamingRecorderStub struct {
 	bytes      int64
 	duration   time.Duration
 	streamType string
+}
+
+type streamingTokenRecorderStub struct {
+	mu   sync.Mutex
+	done chan struct{}
+
+	ctx        context.Context
+	userID     uuid.UUID
+	apiName    string
+	provider   string
+	model      string
+	tokens     internalproxy.TokenUsage
+	statusCode int
+	duration   time.Duration
 }
 
 func TestMain(m *testing.M) {
@@ -59,22 +74,50 @@ func (s *streamingRecorderStub) TrackStreamingMetrics(
 	return nil
 }
 
+func (s *streamingTokenRecorderStub) TrackStreamingLLMResponse(
+	ctx context.Context,
+	userID uuid.UUID,
+	apiName string,
+	provider string,
+	model string,
+	tokenUsage internalproxy.TokenUsage,
+	statusCode int,
+	duration time.Duration,
+) {
+	s.mu.Lock()
+	s.ctx = ctx
+	s.userID = userID
+	s.apiName = apiName
+	s.provider = provider
+	s.model = model
+	s.tokens = tokenUsage
+	s.statusCode = statusCode
+	s.duration = duration
+	s.mu.Unlock()
+
+	close(s.done)
+}
+
 func TestStreamTransparentProxyResponseStreamsBodyAndTracksMetrics(t *testing.T) {
 	recorder := &streamingRecorderStub{done: make(chan struct{})}
+	tokenRecorder := &streamingTokenRecorderStub{done: make(chan struct{})}
 	app := fiber.New()
 
 	app.Get("/stream", func(c *fiber.Ctx) error {
+		raw := "data: {\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":5,\"total_tokens\":8},\"model\":\"gpt-4o\"}\n\n"
 		response := &models.ProxyResponse{
 			RequestID:     "req-1",
 			StatusCode:    http.StatusOK,
 			Headers:       http.Header{"Content-Type": []string{"text/event-stream"}},
-			RawBody:       io.NopCloser(strings.NewReader("hello world")),
+			RawBody:       io.NopCloser(strings.NewReader(raw)),
 			Duration:      42 * time.Millisecond,
 			StreamingType: "sse",
 			IsStreaming:   true,
+			LLMProvider:   "openai",
+			LLMModel:      "gpt-4o",
 		}
 
-		return streamTransparentProxyResponse(c, response, response.RequestID, uuid.MustParse("11111111-1111-1111-1111-111111111111"), "api-1", recorder)
+		return streamTransparentProxyResponse(c, response, response.RequestID, uuid.MustParse("11111111-1111-1111-1111-111111111111"), "api-1", recorder, tokenRecorder)
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/stream", nil)
@@ -92,7 +135,8 @@ func TestStreamTransparentProxyResponseStreamsBodyAndTracksMetrics(t *testing.T)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected status code: %d", resp.StatusCode)
 	}
-	if got := string(body); got != "hello world" {
+	expectedBody := "data: {\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":5,\"total_tokens\":8},\"model\":\"gpt-4o\"}\n\n"
+	if got := string(body); got != expectedBody {
 		t.Fatalf("unexpected body: %q", got)
 	}
 
@@ -117,10 +161,29 @@ func TestStreamTransparentProxyResponseStreamsBodyAndTracksMetrics(t *testing.T)
 	if recorder.statusCode != http.StatusOK {
 		t.Fatalf("unexpected status code recorded: %d", recorder.statusCode)
 	}
-	if recorder.bytes != int64(len("hello world")) {
+	if recorder.bytes != int64(len(expectedBody)) {
 		t.Fatalf("unexpected bytes recorded: %d", recorder.bytes)
 	}
 	if recorder.streamType != "sse" {
 		t.Fatalf("unexpected stream type: %s", recorder.streamType)
+	}
+
+	select {
+	case <-tokenRecorder.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for streaming token accounting")
+	}
+
+	tokenRecorder.mu.Lock()
+	defer tokenRecorder.mu.Unlock()
+
+	if tokenRecorder.provider != "openai" {
+		t.Fatalf("unexpected provider: %s", tokenRecorder.provider)
+	}
+	if tokenRecorder.model != "gpt-4o" {
+		t.Fatalf("unexpected model: %s", tokenRecorder.model)
+	}
+	if tokenRecorder.tokens.TotalTokens != 8 {
+		t.Fatalf("unexpected token total: %d", tokenRecorder.tokens.TotalTokens)
 	}
 }

@@ -15,6 +15,7 @@ type queueAdmissionResult struct {
 	queueDuration time.Duration
 	blocked       *models.ProxyResponse
 	err           error
+	release       func()
 }
 
 func (p *ProxyService) admitQueuedRequest(
@@ -47,12 +48,10 @@ func (p *ProxyService) admitQueuedRequest(
 	}
 
 	maxWaitTime := 30 * time.Second
-	checkInterval := 50 * time.Millisecond
-	waited := time.Duration(0)
-	wasQueued := false
-	queueStartTime := startTime
 	queueLimit := p.queueLimitForAPI(req.UserID, req.TargetAPI)
 	queueSlotTTL := maxWaitTime + queueWaiterTTLBuffer
+	queueKey := queueCapacityKey(req.UserID, req.TargetAPI)
+	completionRelease := newQueueCompletionRelease(req.UserID, req.TargetAPI)
 	var releaseQueueSlot func()
 
 	if queueLimit > 0 {
@@ -85,12 +84,23 @@ func (p *ProxyService) admitQueuedRequest(
 		}
 	}
 
+	var (
+		waiter       *queueWaiter
+		wasQueued    bool
+		queueStart   time.Time
+		waiterActive bool
+	)
+
 	for {
 		allowed, limitType := p.checkMultiTierRateLimits(req.UserID, req.TargetAPI, apiConfig)
 		if allowed {
+			if waiter != nil {
+				_ = queueStoreSingleton.removeQueueWaiter(queueKey, waiter)
+			}
+			releaseSlot()
+
 			if wasQueued {
-				queueDuration := time.Since(queueStartTime)
-				releaseSlot()
+				queueDuration := time.Since(queueStart)
 				logger.Info("Request dequeued and processing",
 					zap.String("user_id", req.UserID.String()),
 					zap.String("api_name", req.TargetAPI),
@@ -99,15 +109,16 @@ func (p *ProxyService) admitQueuedRequest(
 				return queueAdmissionResult{
 					queued:        true,
 					queueDuration: queueDuration,
+					release:       completionRelease,
 				}
 			}
-			releaseSlot()
-			return queueAdmissionResult{}
+
+			return queueAdmissionResult{release: completionRelease}
 		}
 
 		if !wasQueued {
 			wasQueued = true
-			queueStartTime = time.Now()
+			queueStart = time.Now()
 			logger.Info("Request queued due to rate limit",
 				zap.String("user_id", req.UserID.String()),
 				zap.String("api_name", req.TargetAPI),
@@ -115,29 +126,79 @@ func (p *ProxyService) admitQueuedRequest(
 			)
 		}
 
-		select {
-		case <-ctx.Done():
-			releaseSlot()
-			return queueAdmissionResult{
-				err: fmt.Errorf("request cancelled while queued: %w", ctx.Err()),
+		if waiter == nil {
+			waiter = queueStoreSingleton.enqueueQueueWaiter(queueKey, queueSlotTTL)
+			waiterActive = true
+		} else if !waiterActive {
+			if !queueStoreSingleton.rearmQueueWaiter(queueKey, waiter, queueSlotTTL) {
+				releaseSlot()
+				return queueAdmissionResult{
+					err: fmt.Errorf("queue waiter disappeared while queued"),
+				}
 			}
-		case <-time.After(checkInterval):
+			waiterActive = true
 		}
 
-		waited += checkInterval
-		if waited >= maxWaitTime {
+		remainingWait := maxWaitTime - time.Since(queueStart)
+		if remainingWait <= 0 {
+			if waiter != nil {
+				_ = queueStoreSingleton.removeQueueWaiter(queueKey, waiter)
+			}
 			releaseSlot()
 			logger.Warn("Request exceeded maximum queue time",
 				zap.String("user_id", req.UserID.String()),
 				zap.String("api_name", req.TargetAPI),
-				zap.Duration("waited", waited),
+				zap.Duration("waited", time.Since(queueStart)),
 				zap.String("limit_type", limitType),
 			)
 
 			return queueAdmissionResult{
 				queued:  true,
-				blocked: buildQueueTimeoutResponse(req, startTime, waited, maxWaitTime, limitType),
+				blocked: buildQueueTimeoutResponse(req, startTime, time.Since(queueStart), maxWaitTime, limitType),
 			}
+		}
+
+		timer := time.NewTimer(remainingWait)
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			if waiter != nil {
+				_ = queueStoreSingleton.removeQueueWaiter(queueKey, waiter)
+			}
+			releaseSlot()
+			return queueAdmissionResult{
+				err: fmt.Errorf("request cancelled while queued: %w", ctx.Err()),
+			}
+		case <-timer.C:
+			if waiter != nil {
+				_ = queueStoreSingleton.removeQueueWaiter(queueKey, waiter)
+			}
+			releaseSlot()
+			logger.Warn("Request exceeded maximum queue time",
+				zap.String("user_id", req.UserID.String()),
+				zap.String("api_name", req.TargetAPI),
+				zap.Duration("waited", time.Since(queueStart)),
+				zap.String("limit_type", limitType),
+			)
+
+			return queueAdmissionResult{
+				queued:  true,
+				blocked: buildQueueTimeoutResponse(req, startTime, time.Since(queueStart), maxWaitTime, limitType),
+			}
+		case <-waiter.token:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			waiterActive = false
+			continue
 		}
 	}
 }

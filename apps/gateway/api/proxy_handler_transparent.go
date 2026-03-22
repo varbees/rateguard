@@ -80,7 +80,7 @@ func (h *ProxyHandler) HandleTransparentProxy(c *fiber.Ctx) error {
 			zap.String("api_name", apiName),
 			zap.String("stream_type", response.StreamingType),
 		)
-		return streamTransparentProxyResponse(c, response, requestID, user.ID, apiName, h.proxyService)
+		return streamTransparentProxyResponse(c, response, requestID, user.ID, apiName, h.proxyService, h.proxyService)
 	}
 
 	return writeProxySuccessResponse(c, response, apiName, true, true, true, map[string]string{

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,13 +24,23 @@ import (
 // ProxyService handles proxied API requests with rate limiting and tracking
 type ProxyService struct {
 	httpClient      *http.Client
-	rateLimiter     *ratelimiter.MultiLimiter
+	rateLimiter     requestRateLimiter
 	redisLimiter    *ratelimiter.RedisRateLimiter // Optional: for multi-tier rate limiting
 	usageTracker    *storage.UsageTracker
 	store           *storage.PostgresStore
-	presetChecker   *domainpolicy.PresetChecker
+	presetChecker   presetAccess
 	circuitBreakers *CircuitBreakerManager // Circuit breaker for fault tolerance
 	webSocketHub    *websocket.Hub
+}
+
+type presetAccess interface {
+	GetUserPreset(ctx context.Context, userID uuid.UUID) (string, error)
+	CanMakeRequest(ctx context.Context, userID uuid.UUID) (bool, int64, string, error)
+}
+
+type requestRateLimiter interface {
+	AllowForUser(userID uuid.UUID, apiName string, rps int, burst int) bool
+	GetStats() map[string]interface{}
 }
 
 // NewProxyService creates a new proxy service
@@ -203,6 +214,12 @@ func (p *ProxyService) ProxyRequest(ctx context.Context, req *models.ProxyReques
 
 	p.handleProxyLLMResponse(ctx, req.UserID, req.TargetAPI, apiConfig, body, resp.StatusCode, duration)
 
+	if response.QueueRelease != nil {
+		release := response.QueueRelease
+		response.QueueRelease = nil
+		release()
+	}
+
 	logger.Info("Proxy request completed",
 		zap.String("user_id", req.UserID.String()),
 		zap.String("target_api", req.TargetAPI),
@@ -318,6 +335,75 @@ func (p *ProxyService) calculateTokenCost(ctx context.Context, provider, model s
 	return totalCostCents, nil
 }
 
+// TrackStreamingLLMResponse records streamed LLM token usage after a response completes.
+func (p *ProxyService) TrackStreamingLLMResponse(
+	ctx context.Context,
+	userID uuid.UUID,
+	apiName string,
+	provider string,
+	model string,
+	tokenUsage TokenUsage,
+	statusCode int,
+	duration time.Duration,
+) {
+	if provider == "" {
+		return
+	}
+
+	costCents, err := p.calculateTokenCost(ctx, provider, model, tokenUsage.InputTokens, tokenUsage.OutputTokens)
+	if err != nil {
+		logger.Error("Failed to calculate streaming token cost",
+			zap.String("user_id", userID.String()),
+			zap.String("api_name", apiName),
+			zap.String("provider", provider),
+			zap.String("model", model),
+			zap.Error(err),
+		)
+		costCents = 0
+	}
+
+	if err := p.usageTracker.RecordLLMResponse(
+		ctx,
+		userID,
+		apiName,
+		model,
+		tokenUsage.InputTokens,
+		tokenUsage.OutputTokens,
+		costCents,
+		statusCode,
+		duration,
+	); err != nil {
+		logger.Error("Failed to record streaming LLM metrics",
+			zap.String("user_id", userID.String()),
+			zap.String("api_name", apiName),
+			zap.String("provider", provider),
+			zap.String("model", model),
+			zap.Error(err),
+		)
+		return
+	}
+
+	logger.Info("Recorded streaming LLM token usage",
+		zap.String("user_id", userID.String()),
+		zap.String("api_name", apiName),
+		zap.String("provider", provider),
+		zap.String("model", model),
+		zap.Int64("input_tokens", tokenUsage.InputTokens),
+		zap.Int64("output_tokens", tokenUsage.OutputTokens),
+		zap.Int("cost_cents", costCents),
+	)
+}
+
+func newQueueCompletionRelease(userID uuid.UUID, apiName string) func() {
+	var once sync.Once
+
+	return func() {
+		once.Do(func() {
+			_ = queueStoreSingleton.signalNextQueueWaiter(queueCapacityKey(userID, apiName))
+		})
+	}
+}
+
 // Health checks if the proxy service is healthy
 func (p *ProxyService) Health() bool {
 	return p.store.Health()
@@ -325,6 +411,10 @@ func (p *ProxyService) Health() bool {
 
 // GetStats returns proxy statistics
 func (p *ProxyService) GetStats() map[string]interface{} {
+	if p.rateLimiter == nil {
+		return map[string]interface{}{}
+	}
+
 	return p.rateLimiter.GetStats()
 }
 
@@ -369,7 +459,7 @@ func (p *ProxyService) checkMultiTierRateLimits(userID uuid.UUID, apiName string
 			RateLimitPerMonth:  apiConfig.RateLimitPerMonth,
 		}
 
-		allowed, limitType, err := p.redisLimiter.AllowWithMultiTier(userID, apiName, limits)
+		allowed, limitType, retryAfter, err := p.redisLimiter.AllowWithMultiTier(userID, apiName, limits)
 
 		// If Redis check succeeded, return result
 		if err == nil {
@@ -395,6 +485,7 @@ func (p *ProxyService) checkMultiTierRateLimits(userID uuid.UUID, apiName string
 					zap.String("user_id", userID.String()),
 					zap.String("api_name", apiName),
 					zap.String("limit_type", limitType),
+					zap.Duration("retry_after", retryAfter),
 					zap.Duration("redis_latency", redisLatency),
 				)
 			}
@@ -417,7 +508,7 @@ func (p *ProxyService) checkMultiTierRateLimits(userID uuid.UUID, apiName string
 		zap.String("api_name", apiName),
 	)
 
-	if !p.rateLimiter.AllowForUser(userID, apiName, apiConfig.RateLimitPerSecond, apiConfig.BurstSize) {
+	if p.rateLimiter == nil || !p.rateLimiter.AllowForUser(userID, apiName, apiConfig.RateLimitPerSecond, apiConfig.BurstSize) {
 		logger.Info("In-memory rate limit exceeded",
 			zap.String("user_id", userID.String()),
 			zap.String("api_name", apiName),

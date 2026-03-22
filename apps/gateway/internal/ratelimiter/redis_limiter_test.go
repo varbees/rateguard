@@ -2,7 +2,6 @@ package ratelimiter
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -81,17 +80,13 @@ func TestAllowForUser(t *testing.T) {
 	userID := uuid.New()
 	apiName := "test-api"
 
-	// 1. Allowed
-	allowed := limiter.AllowForUser(userID, apiName, 10, 20)
+	allowed, retryAfter := limiter.AllowForUser(userID, apiName, 10, 1)
 	assert.True(t, allowed)
+	assert.Zero(t, retryAfter)
 
-	// 2. Exceeded (simulate by setting key)
-	// Key format: ratelimit:user:{userID}:api:{apiName}:second:{timestamp}
-	key := fmt.Sprintf("ratelimit:user:%s:api:%s:second:%d", userID.String(), apiName, time.Now().Unix())
-	mr.Set(key, "15") // Limit is 10
-
-	allowed = limiter.AllowForUser(userID, apiName, 10, 20)
+	allowed, retryAfter = limiter.AllowForUser(userID, apiName, 10, 1)
 	assert.False(t, allowed)
+	assert.Greater(t, retryAfter, time.Duration(0))
 }
 
 func TestWaitForUser(t *testing.T) {
@@ -101,9 +96,28 @@ func TestWaitForUser(t *testing.T) {
 	userID := uuid.New()
 	apiName := "test-api"
 
-	// 1. Immediate
-	err := limiter.WaitForUser(context.Background(), userID, apiName, 10, 20)
+	allowed, _ := limiter.AllowForUser(userID, apiName, 20, 1)
+	assert.True(t, allowed)
+
+	start := time.Now()
+	err := limiter.WaitForUser(context.Background(), userID, apiName, 20, 1)
 	assert.NoError(t, err)
+	assert.GreaterOrEqual(t, time.Since(start), 40*time.Millisecond)
+}
+
+func TestAllowGlobal(t *testing.T) {
+	mr, limiter := setupTestRateLimiter(t)
+	defer mr.Close()
+
+	allowed, reason, retryAfter := limiter.AllowGlobal("127.0.0.1", 1, 1)
+	assert.True(t, allowed)
+	assert.Empty(t, reason)
+	assert.Zero(t, retryAfter)
+
+	allowed, reason, retryAfter = limiter.AllowGlobal("127.0.0.1", 1, 1)
+	assert.False(t, allowed)
+	assert.Equal(t, "global_limit_exceeded", reason)
+	assert.Greater(t, retryAfter, time.Duration(0))
 }
 
 func TestAllowWithMultiTier(t *testing.T) {
@@ -113,41 +127,30 @@ func TestAllowWithMultiTier(t *testing.T) {
 	userID := uuid.New()
 	apiName := "test-api"
 	limits := &MultiTierLimits{
-		RateLimitPerSecond: 10,
-		BurstSize:          20,
+		RateLimitPerSecond: 1000,
+		BurstSize:          2,
 		RateLimitPerHour:   1000,
 		RateLimitPerDay:    10000,
 		RateLimitPerMonth:  100000,
 	}
 
-	// 1. Allowed
-	allowed, limitType, err := limiter.AllowWithMultiTier(userID, apiName, limits)
+	allowed, limitType, retryAfter, err := limiter.AllowWithMultiTier(userID, apiName, limits)
 	assert.NoError(t, err)
 	assert.True(t, allowed)
-	assert.Equal(t, "", limitType)
+	assert.Empty(t, limitType)
+	assert.Zero(t, retryAfter)
 
-	// 2. Exceeded Second (simulate)
-	key := fmt.Sprintf("ratelimit:user:%s:api:%s:second:%d", userID.String(), apiName, time.Now().Unix())
-	mr.Set(key, "15")
-
-	allowed, limitType, err = limiter.AllowWithMultiTier(userID, apiName, limits)
+	allowed, limitType, retryAfter, err = limiter.AllowWithMultiTier(userID, apiName, limits)
 	assert.NoError(t, err)
-	assert.False(t, allowed)
-	assert.Equal(t, "per-second", limitType)
+	assert.True(t, allowed)
+	assert.Empty(t, limitType)
+	assert.Zero(t, retryAfter)
 
-	// Reset second key
-	mr.Del(key)
-
-	// 3. Exceeded Burst (simulate)
-	// Burst key: ratelimit:user:{userID}:api:{apiName}:burst:{decaSecond}
-	currentDecaSecond := time.Now().Unix() / 10
-	burstKey := fmt.Sprintf("ratelimit:user:%s:api:%s:burst:%d", userID.String(), apiName, currentDecaSecond)
-	mr.Set(burstKey, "25") // Limit 20
-
-	allowed, limitType, err = limiter.AllowWithMultiTier(userID, apiName, limits)
+	allowed, limitType, retryAfter, err = limiter.AllowWithMultiTier(userID, apiName, limits)
 	assert.NoError(t, err)
 	assert.False(t, allowed)
 	assert.Equal(t, "burst", limitType)
+	assert.Greater(t, retryAfter, time.Duration(0))
 }
 
 func BenchmarkAllowWithMultiTier(b *testing.B) {
@@ -157,7 +160,7 @@ func BenchmarkAllowWithMultiTier(b *testing.B) {
 	userID := uuid.New()
 	apiName := "bench-api"
 	limits := &MultiTierLimits{
-		RateLimitPerSecond: 100000, // High limit to avoid rejection
+		RateLimitPerSecond: 100000,
 		BurstSize:          100000,
 		RateLimitPerHour:   1000000,
 		RateLimitPerDay:    10000000,
@@ -166,7 +169,7 @@ func BenchmarkAllowWithMultiTier(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _, _ = limiter.AllowWithMultiTier(userID, apiName, limits)
+		_, _, _, _ = limiter.AllowWithMultiTier(userID, apiName, limits)
 	}
 }
 
@@ -177,21 +180,20 @@ func TestAllowWithMultiTier_HourLimitExceeded(t *testing.T) {
 	userID := uuid.New()
 	apiName := "test-api"
 	limits := &MultiTierLimits{
-		RateLimitPerSecond: 10,
-		BurstSize:          20,
-		RateLimitPerHour:   1, // Limit of 1 per hour
+		RateLimitPerSecond: 1000,
+		BurstSize:          100,
+		RateLimitPerHour:   1,
 		RateLimitPerDay:    100,
 		RateLimitPerMonth:  1000,
 	}
 
-	// 1. Allowed
-	limiter.AllowWithMultiTier(userID, apiName, limits)
-	// 2. Allowed
-	limiter.AllowWithMultiTier(userID, apiName, limits)
+	allowed, _, _, err := limiter.AllowWithMultiTier(userID, apiName, limits)
+	assert.NoError(t, err)
+	assert.True(t, allowed)
 
-	// 3. Exceeded Hour
-	allowed, limitType, err := limiter.AllowWithMultiTier(userID, apiName, limits)
+	allowed, limitType, retryAfter, err := limiter.AllowWithMultiTier(userID, apiName, limits)
 	assert.NoError(t, err)
 	assert.False(t, allowed)
 	assert.Equal(t, "per-hour", limitType)
+	assert.Greater(t, retryAfter, time.Duration(0))
 }

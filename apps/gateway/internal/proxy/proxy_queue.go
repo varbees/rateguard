@@ -54,6 +54,7 @@ func (p *ProxyService) ProxyRequestWithQueue(ctx context.Context, req *models.Pr
 
 	response.Queued = admission.queued
 	response.QueueDuration = admission.queueDuration
+	response.QueueRelease = admission.release
 
 	// Record request for billing/analytics
 	if err := p.usageTracker.RecordRequest(ctx, req.UserID, req.TargetAPI); err != nil {
@@ -120,6 +121,7 @@ func (p *ProxyService) ProxyRequestWithQueue(ctx context.Context, req *models.Pr
 		return nil
 	})
 	duration := time.Since(startTime)
+	queueRelease := response.QueueRelease
 
 	// Observe rate limit headers (on success or 429 responses)
 	if resp != nil && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable) {
@@ -134,6 +136,12 @@ func (p *ProxyService) ProxyRequestWithQueue(ctx context.Context, req *models.Pr
 				zap.String("target_api", req.TargetAPI),
 			)
 			response = buildProxyCircuitOpenResponse(req.ID, startTime, duration, err)
+			response.QueueRelease = queueRelease
+			if response.QueueRelease != nil {
+				release := response.QueueRelease
+				response.QueueRelease = nil
+				release()
+			}
 			return response, nil // Return response with 503, not error, so handler sends it
 		}
 
@@ -145,9 +153,16 @@ func (p *ProxyService) ProxyRequestWithQueue(ctx context.Context, req *models.Pr
 		)
 
 		response = buildProxyRequestFailureResponse(req.ID, startTime, duration, err)
+		response.QueueRelease = queueRelease
 
 		// Record failed response
 		p.usageTracker.RecordResponse(ctx, req.UserID, req.TargetAPI, response.StatusCode, duration)
+
+		if response.QueueRelease != nil {
+			release := response.QueueRelease
+			response.QueueRelease = nil
+			release()
+		}
 
 		return response, err
 	}
@@ -168,6 +183,12 @@ func (p *ProxyService) ProxyRequestWithQueue(ctx context.Context, req *models.Pr
 		// Build streaming response (body not buffered)
 		response = buildProxyStreamingResponse(response, resp.StatusCode, resp.Header, duration, streamType)
 		response.RawBody = resp.Body // Pass through without buffering
+		if apiConfig.Provider != nil {
+			response.LLMProvider = *apiConfig.Provider
+		}
+		if apiConfig.Model != nil {
+			response.LLMModel = *apiConfig.Model
+		}
 
 		// Note: Don't close resp.Body here - it will be streamed to client
 		// Note: Don't record usage yet - will be recorded after stream completes
@@ -201,6 +222,12 @@ func (p *ProxyService) ProxyRequestWithQueue(ctx context.Context, req *models.Pr
 		zap.Duration("duration", duration),
 		zap.Bool("queued", admission.queued),
 	)
+
+	if response.QueueRelease != nil {
+		release := response.QueueRelease
+		response.QueueRelease = nil
+		release()
+	}
 
 	return response, nil
 }

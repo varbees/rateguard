@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const defaultMemoryLimiterCacheCapacity = 50000
+
 // AdmissionDecision captures a single request admission outcome.
 type AdmissionDecision struct {
 	Allowed    bool
@@ -36,13 +38,17 @@ type memoryBucket struct {
 // MemoryLimiter uses an in-process token bucket per key.
 type MemoryLimiter struct {
 	mu      sync.Mutex
-	buckets map[string]*memoryBucket
+	buckets *boundedCache[string, *memoryBucket]
 }
 
 // NewMemoryLimiter creates a limiter that stores counters locally.
 func NewMemoryLimiter() *MemoryLimiter {
+	return newMemoryLimiterWithCapacity(defaultMemoryLimiterCacheCapacity)
+}
+
+func newMemoryLimiterWithCapacity(capacity int) *MemoryLimiter {
 	return &MemoryLimiter{
-		buckets: make(map[string]*memoryBucket),
+		buckets: newBoundedCache[string, *memoryBucket](capacity),
 	}
 }
 
@@ -56,14 +62,16 @@ func (l *MemoryLimiter) Allow(_ context.Context, key string, policy PolicyPreset
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	bucket := l.buckets[key]
-	if bucket == nil {
-		bucket = &memoryBucket{
+	if l.buckets == nil {
+		l.buckets = newBoundedCache[string, *memoryBucket](defaultMemoryLimiterCacheCapacity)
+	}
+
+	bucket := l.buckets.getOrCreate(key, func() *memoryBucket {
+		return &memoryBucket{
 			tokens: float64(policy.Burst),
 			last:   now,
 		}
-		l.buckets[key] = bucket
-	}
+	})
 
 	if now.Sub(bucket.last) > 10*time.Minute {
 		bucket.tokens = float64(policy.Burst)

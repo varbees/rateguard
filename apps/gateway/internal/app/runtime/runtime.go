@@ -150,11 +150,13 @@ func (r *Runtime) build() error {
 
 	// Initialize proxy service
 	logger.Info("Initializing proxy service...",
-		zap.Int("circuit_breaker_max_failures", r.cfg.RateGuard.CircuitBreaker.MaxFailures),
+		zap.Int("circuit_breaker_window_size", r.cfg.RateGuard.CircuitBreaker.RollingWindowSize),
+		zap.Float64("circuit_breaker_error_rate_threshold", r.cfg.RateGuard.CircuitBreaker.ErrorRateThreshold),
 		zap.Int("circuit_breaker_timeout_seconds", r.cfg.RateGuard.CircuitBreaker.TimeoutSeconds),
 	)
 	proxyCbConfig := proxy.CircuitBreakerConfig{
-		MaxFailures:                     r.cfg.RateGuard.CircuitBreaker.MaxFailures,
+		RollingWindowSize:               r.cfg.RateGuard.CircuitBreaker.RollingWindowSize,
+		ErrorRateThreshold:              r.cfg.RateGuard.CircuitBreaker.ErrorRateThreshold,
 		Timeout:                         time.Duration(r.cfg.RateGuard.CircuitBreaker.TimeoutSeconds) * time.Second,
 		MaxConcurrentRequestsInHalfOpen: r.cfg.RateGuard.CircuitBreaker.MaxConcurrentRequestsInHalfOpen,
 		SuccessThresholdInHalfOpen:      r.cfg.RateGuard.CircuitBreaker.SuccessThresholdInHalfOpen,

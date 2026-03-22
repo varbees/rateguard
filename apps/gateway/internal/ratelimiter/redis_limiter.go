@@ -12,78 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// Lua script for atomic rate limit check and increment
-// Returns 1 if allowed, 0 if limit exceeded
-const luaRateLimitScript = `
-local key = KEYS[1]
-local limit = tonumber(ARGV[1])
-local window = tonumber(ARGV[2])
-
-local current = redis.call('INCR', key)
-
-if current == 1 then
-    redis.call('EXPIRE', key, window)
-end
-
-if current > limit then
-    return 0
-end
-
-return 1
-`
-
-// Lua script for multi-tier rate limiting (second, burst, hour, day, month)
-// KEYS: [secondKey, burstKey, hourKey, dayKey, monthKey]
-// ARGV: [secondLimit, secondTTL, burstLimit, burstTTL, hourLimit, hourTTL, dayLimit, dayTTL, monthLimit, monthTTL]
-// Returns: {allowed: 1|0, limit_type: ""|"per-second"|"burst"|"per-hour"|"per-day"|"per-month"}
-const luaMultiTierRateLimitScript = `
--- Helper function to check and increment a rate limit
-local function checkLimit(key, limit, ttl)
-    -- 0 means unlimited
-    if limit == 0 then
-        return true
-    end
-    
-    local current = redis.call('INCR', key)
-    if current == 1 then
-        redis.call('EXPIRE', key, ttl)
-    end
-    
-    return current <= limit
-end
-
--- Check all 5 tiers in order (short-circuit on first failure)
-
--- 1. Per-second limit
-if not checkLimit(KEYS[1], tonumber(ARGV[1]), tonumber(ARGV[2])) then
-    return {0, "per-second"}
-end
-
--- 2. Burst limit
-if not checkLimit(KEYS[2], tonumber(ARGV[3]), tonumber(ARGV[4])) then
-    return {0, "burst"}
-end
-
--- 3. Per-hour limit
-if not checkLimit(KEYS[3], tonumber(ARGV[5]), tonumber(ARGV[6])) then
-    return {0, "per-hour"}
-end
-
--- 4. Per-day limit
-if not checkLimit(KEYS[4], tonumber(ARGV[7]), tonumber(ARGV[8])) then
-    return {0, "per-day"}
-end
-
--- 5. Per-month limit
-if not checkLimit(KEYS[5], tonumber(ARGV[9]), tonumber(ARGV[10])) then
-    return {0, "per-month"}
-end
-
--- All limits passed
-return {1, ""}
-`
-
-
 // RedisRateLimiter implements distributed rate limiting using Redis
 type RedisRateLimiter struct {
 	redis   *cache.RedisClient
@@ -95,7 +23,7 @@ func NewRedisRateLimiter(redis *cache.RedisClient, enabled bool) *RedisRateLimit
 	logger.Info("Redis rate limiter initialized",
 		zap.Bool("enabled", enabled),
 	)
-	
+
 	return &RedisRateLimiter{
 		redis:   redis,
 		enabled: enabled,
@@ -103,188 +31,93 @@ func NewRedisRateLimiter(redis *cache.RedisClient, enabled bool) *RedisRateLimit
 }
 
 // AllowForUser checks if a request is allowed based on rate limits
-// Uses sliding window algorithm with Redis for distributed rate limiting
-func (r *RedisRateLimiter) AllowForUser(userID uuid.UUID, apiName string, rps int, burst int) bool {
+// Uses GCRA with Redis for distributed rate limiting
+func (r *RedisRateLimiter) AllowForUser(userID uuid.UUID, apiName string, rps int, burst int) (bool, time.Duration) {
 	if !r.enabled {
-		return true
+		return true, 0
 	}
 
-	// Key format: ratelimit:user:{userID}:api:{apiName}:window:{timestamp}
-	now := time.Now()
-	currentSecond := now.Unix()
-	
-	// Check per-second limit (sliding window)
-	secondKey := fmt.Sprintf("ratelimit:user:%s:api:%s:second:%d", userID.String(), apiName, currentSecond)
-	
-	// Atomic increment with expiry
-	count, err := r.redis.IncrWithExpire(secondKey, 2*time.Second)
+	key := fmt.Sprintf("ratelimit:user:%s:api:%s:gcra:per-second", userID.String(), apiName)
+	decision, err := r.checkGCRALimits(context.Background(), buildGCRATier(key, time.Second, rps, burst))
 	if err != nil {
-		logger.Error("Failed to increment rate limit counter",
+		logger.Error("Failed to execute GCRA user rate limit",
 			zap.String("user_id", userID.String()),
 			zap.String("api_name", apiName),
 			zap.Error(err),
 		)
-		// Fail open - allow request if Redis is down
-		return true
+		return true, 0
 	}
 
-	// Check against rate limit
-	if count > int64(rps) {
-		logger.Warn("Rate limit exceeded (per-second)",
+	if !decision.allowed {
+		logger.Warn("Rate limit exceeded (GCRA)",
 			zap.String("user_id", userID.String()),
 			zap.String("api_name", apiName),
-			zap.Int64("count", count),
-			zap.Int("limit", rps),
+			zap.Duration("retry_after", decision.retryAfter),
 		)
-		return false
 	}
 
-	// Check burst limit (over 10 seconds)
-	currentDecaSecond := currentSecond / 10
-	burstKey := fmt.Sprintf("ratelimit:user:%s:api:%s:burst:%d", userID.String(), apiName, currentDecaSecond)
-	
-	burstCount, err := r.redis.IncrWithExpire(burstKey, 20*time.Second)
-	if err != nil {
-		logger.Error("Failed to increment burst counter",
-			zap.String("user_id", userID.String()),
-			zap.String("api_name", apiName),
-			zap.Error(err),
-		)
-		return true
-	}
-
-	if burstCount > int64(burst) {
-		logger.Warn("Burst limit exceeded",
-			zap.String("user_id", userID.String()),
-			zap.String("api_name", apiName),
-			zap.Int64("count", burstCount),
-			zap.Int("limit", burst),
-		)
-		return false
-	}
-
-	return true
+	return decision.allowed, decision.retryAfter
 }
 
-// AllowWithMultiTier checks all rate limit tiers (second, hour, day, month)
-// Returns true if allowed, false if any limit is exceeded
-// OPTIMIZED: Uses single Lua script instead of 5 sequential Redis calls
-func (r *RedisRateLimiter) AllowWithMultiTier(userID uuid.UUID, apiName string, limits *MultiTierLimits) (bool, string, error) {
+// AllowWithMultiTier checks all rate limit tiers (second, burst, hour, day, month).
+// It uses a single Lua script so the full decision stays atomic.
+func (r *RedisRateLimiter) AllowWithMultiTier(userID uuid.UUID, apiName string, limits *MultiTierLimits) (bool, string, time.Duration, error) {
 	if !r.enabled {
-		return true, "", nil
+		return true, "", 0, nil
 	}
 
 	now := time.Now()
-	currentSecond := now.Unix()
-	currentHour := now.Truncate(time.Hour).Unix()
-	currentDay := now.Truncate(24 * time.Hour).Unix()
-	currentMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location()).Unix()
-
-	// Build Redis keys for all 5 tiers
-	secondKey := fmt.Sprintf("ratelimit:user:%s:api:%s:second:%d", userID.String(), apiName, currentSecond)
-	currentDecaSecond := currentSecond / 10
-	burstKey := fmt.Sprintf("ratelimit:user:%s:api:%s:burst:%d", userID.String(), apiName, currentDecaSecond)
-	hourKey := fmt.Sprintf("ratelimit:user:%s:api:%s:hour:%d", userID.String(), apiName, currentHour)
-	dayKey := fmt.Sprintf("ratelimit:user:%s:api:%s:day:%d", userID.String(), apiName, currentDay)
-	monthKey := fmt.Sprintf("ratelimit:user:%s:api:%s:month:%d", userID.String(), apiName, currentMonth)
-
-	// Build arguments for Lua script
-	keys := []string{secondKey, burstKey, hourKey, dayKey, monthKey}
-	args := []interface{}{
-		limits.RateLimitPerSecond, 2,           // per-second: limit, ttl (seconds)
-		limits.BurstSize, 20,                    // burst: limit, ttl (seconds)
-		limits.RateLimitPerHour, 2 * 3600,      // per-hour: limit, ttl (seconds)
-		limits.RateLimitPerDay, 48 * 3600,      // per-day: limit, ttl (seconds)
-		limits.RateLimitPerMonth, 60 * 24 * 3600, // per-month: limit, ttl (seconds)
-	}
-
-	// Execute batched Lua script (single Redis roundtrip)
-	ctx := context.Background()
-	result, err := r.redis.EvalScript(ctx, luaMultiTierRateLimitScript, keys, args...)
-	
+	tiers := buildMultiTierGCRALimits(userID, apiName, now, limits)
+	decision, err := r.checkGCRALimits(context.Background(), tiers...)
 	if err != nil {
-		logger.Error("Failed to execute multi-tier rate limit Lua script",
+		logger.Error("Failed to execute multi-tier GCRA script",
 			zap.String("user_id", userID.String()),
 			zap.String("api_name", apiName),
 			zap.Error(err),
 		)
-		// Return error to trigger fallback
-		return false, "", err
+		return false, "", 0, err
 	}
 
-	// Parse result: {allowed: 0|1, limit_type: string}
-	resultArray, ok := result.([]interface{})
-	if !ok || len(resultArray) != 2 {
-		logger.Error("Invalid Lua script result format",
-			zap.String("user_id", userID.String()),
-			zap.String("api_name", apiName),
-			zap.Any("result", result),
-		)
-		// Return error to trigger fallback
-		return false, "", fmt.Errorf("invalid lua script result")
-	}
-
-	allowed := resultArray[0].(int64) == 1
-	limitType := resultArray[1].(string)
-
-	if !allowed {
-		logger.Warn("Rate limit exceeded (batched check)",
+	if !decision.allowed {
+		limitType := multiTierLimitType(decision.failedTier)
+		logger.Warn("Rate limit exceeded (GCRA multi-tier)",
 			zap.String("user_id", userID.String()),
 			zap.String("api_name", apiName),
 			zap.String("limit_type", limitType),
+			zap.Duration("retry_after", decision.retryAfter),
 		)
+		return false, limitType, decision.retryAfter, nil
 	}
 
-	return allowed, limitType, nil
+	return true, "", 0, nil
 }
 
 // AllowGlobal checks global platform limits and per-IP limits
 // Returns allowed (bool) and reason (string) if blocked
-func (r *RedisRateLimiter) AllowGlobal(ip string, globalLimit int, ipLimit int) (bool, string) {
+func (r *RedisRateLimiter) AllowGlobal(ip string, globalLimit int, ipLimit int) (bool, string, time.Duration) {
 	if !r.enabled {
-		return true, ""
+		return true, "", 0
 	}
 
-	now := time.Now()
-	currentSecond := now.Unix()
-
-	// 1. Check Global Platform Limit
-	globalKey := fmt.Sprintf("ratelimit:global:second:%d", currentSecond)
-	globalCount, err := r.redis.IncrWithExpire(globalKey, 2*time.Second)
+	tiers := buildGlobalGCRATiers(ip, globalLimit, ipLimit)
+	decision, err := r.checkGCRALimits(context.Background(), tiers...)
 	if err != nil {
-		logger.Error("Failed to increment global rate limit", zap.Error(err))
-		// Fail open
-		return true, ""
+		logger.Error("Failed to execute GCRA global rate limit", zap.Error(err))
+		return true, "", 0
 	}
 
-	if globalCount > int64(globalLimit) {
-		logger.Warn("Global rate limit exceeded", 
-			zap.Int64("count", globalCount),
-			zap.Int("limit", globalLimit),
-		)
-		return false, "global_limit_exceeded"
-	}
-
-	// 2. Check Per-IP Limit
-	ipKey := fmt.Sprintf("ratelimit:ip:%s:second:%d", ip, currentSecond)
-	ipCount, err := r.redis.IncrWithExpire(ipKey, 2*time.Second)
-	if err != nil {
-		logger.Error("Failed to increment IP rate limit", zap.Error(err))
-		return true, ""
-	}
-
-	if ipCount > int64(ipLimit) {
-		logger.Warn("IP rate limit exceeded", 
+	if !decision.allowed {
+		limitType := globalOrIPLimitType(decision.failedTier)
+		logger.Warn("Rate limit exceeded (global GCRA)",
 			zap.String("ip", ip),
-			zap.Int64("count", ipCount),
-			zap.Int("limit", ipLimit),
+			zap.String("limit_type", limitType),
+			zap.Duration("retry_after", decision.retryAfter),
 		)
-		return false, "ip_limit_exceeded"
+		return false, limitType, decision.retryAfter
 	}
 
-	return true, ""
+	return true, "", 0
 }
-
 
 // WaitForUser waits for rate limit permission (blocking)
 func (r *RedisRateLimiter) WaitForUser(ctx context.Context, userID uuid.UUID, apiName string, rps int, burst int) error {
@@ -292,18 +125,23 @@ func (r *RedisRateLimiter) WaitForUser(ctx context.Context, userID uuid.UUID, ap
 		return nil
 	}
 
-	// Poll every 100ms until allowed or context cancelled
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-
 	for {
+		allowed, retryAfter := r.AllowForUser(userID, apiName, rps, burst)
+		if allowed {
+			return nil
+		}
+
+		wait := retryAfter
+		if wait <= 0 {
+			wait = 100 * time.Millisecond
+		}
+
+		timer := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
-		case <-ticker.C:
-			if r.AllowForUser(userID, apiName, rps, burst) {
-				return nil
-			}
+		case <-timer.C:
 		}
 	}
 }
@@ -403,39 +241,32 @@ type MultiTierLimits struct {
 // ENHANCED DISTRIBUTED RATE LIMITING METHODS
 // ===========================================================================
 
-// TryAcquire attempts to acquire a rate limit token atomically
-// Uses Lua script for atomic INCR + EXPIRE operation
+// TryAcquire attempts to acquire a rate limit token atomically using GCRA.
 // Returns true if allowed, false if limit exceeded
-func (r *RedisRateLimiter) TryAcquire(key string, limit int, window time.Duration) (bool, error) {
+func (r *RedisRateLimiter) TryAcquire(key string, limit int, window time.Duration) (bool, time.Duration, error) {
 	if !r.enabled {
-		return true, nil
+		return true, 0, nil
 	}
 
-	ctx := context.Background()
-	windowSeconds := int(window.Seconds())
-
-	// Execute Lua script atomically
-	result, err := r.redis.EvalScript(ctx, luaRateLimitScript, []string{key}, limit, windowSeconds)
+	decision, err := r.checkGCRALimits(context.Background(), buildGCRATier(key, window, limit, limit))
 	if err != nil {
-		logger.Error("Failed to execute rate limit Lua script",
+		logger.Error("Failed to execute GCRA acquire script",
 			zap.String("key", key),
 			zap.Error(err),
 		)
-		// Fail open - allow request if Redis script fails
-		return true, err
+		return true, 0, err
 	}
 
-	allowed := result.(int64) == 1
-	
-	if !allowed {
+	if !decision.allowed {
 		logger.Debug("Rate limit exceeded via TryAcquire",
 			zap.String("key", key),
 			zap.Int("limit", limit),
 			zap.Duration("window", window),
+			zap.Duration("retry_after", decision.retryAfter),
 		)
 	}
 
-	return allowed, nil
+	return decision.allowed, decision.retryAfter, nil
 }
 
 // GetUsage returns the current usage count for a rate limit window
@@ -445,7 +276,7 @@ func (r *RedisRateLimiter) GetUsage(key string) (int, error) {
 	}
 
 	val, err := r.redis.Get(key)
-	
+
 	if err != nil {
 		if err == redis.Nil {
 			// Key doesn't exist, usage is 0
@@ -469,7 +300,7 @@ func (r *RedisRateLimiter) Reset(key string) error {
 	}
 
 	err := r.redis.Delete(key)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to reset rate limit: %w", err)
 	}

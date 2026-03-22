@@ -50,25 +50,32 @@ func (m *GlobalRateLimitMiddleware) Limit(c *fiber.Ctx) error {
 	// Get client IP
 	ip := c.IP()
 	// Trust X-Forwarded-For if behind proxy (configured in Fiber app)
-	
+
 	// Check limits
-	allowed, reason := m.limiter.AllowGlobal(ip, globalLimit, ipLimit)
+	allowed, reason, retryAfter := m.limiter.AllowGlobal(ip, globalLimit, ipLimit)
 	if !allowed {
+		retryAfterMs := int(retryAfter.Milliseconds())
+		if retryAfterMs < 1 {
+			retryAfterMs = 1
+		}
+		c.Set("Retry-After", strconv.Itoa(retryAfterMs))
+		c.Set("X-Retry-After-Ms", strconv.Itoa(retryAfterMs))
+
 		if reason == "global_limit_exceeded" {
 			logger.Warn("Global rate limit exceeded", zap.String("ip", ip))
 			return c.Status(fiber.StatusServiceUnavailable).JSON(fiber.Map{
-				"error": "Service busy",
-				"message": "The platform is currently experiencing high load. Please try again later.",
-				"retry_after": 1,
+				"error":          "Service busy",
+				"message":        "The platform is currently experiencing high load. Please try again later.",
+				"retry_after_ms": retryAfterMs,
 			})
 		}
-		
+
 		if reason == "ip_limit_exceeded" {
 			logger.Warn("IP rate limit exceeded", zap.String("ip", ip))
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error": "Too many requests",
-				"message": "You have exceeded the rate limit for your IP address.",
-				"retry_after": 1,
+				"error":          "Too many requests",
+				"message":        "You have exceeded the rate limit for your IP address.",
+				"retry_after_ms": retryAfterMs,
 			})
 		}
 	}

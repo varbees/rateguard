@@ -10,9 +10,17 @@ import (
 
 const queueWaiterTTLBuffer = time.Minute
 
+type queueWaiter struct {
+	token      chan struct{}
+	enqueuedAt time.Time
+	expiresAt  time.Time
+	armed      bool
+}
+
 type queueWaiterState struct {
 	count     int
 	expiresAt time.Time
+	waiters   []*queueWaiter
 }
 
 func queueCapacityKey(userID uuid.UUID, apiName string) string {
@@ -67,6 +75,110 @@ func (p *ProxyService) reserveQueueSlot(
 	return released, true, nil
 }
 
+func (s *queueStore) enqueueQueueWaiter(key string, ttl time.Duration) *queueWaiter {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	s.cleanupQueueWaitersLocked(now)
+
+	state, exists := s.queueWaiters[key]
+	if !exists {
+		state = &queueWaiterState{}
+		s.queueWaiters[key] = state
+	}
+
+	waiter := &queueWaiter{
+		token:      make(chan struct{}),
+		enqueuedAt: now,
+		expiresAt:  now.Add(ttl),
+		armed:      true,
+	}
+	state.waiters = append(state.waiters, waiter)
+	state.expiresAt = waiter.expiresAt
+
+	return waiter
+}
+
+func (s *queueStore) rearmQueueWaiter(key string, waiter *queueWaiter, ttl time.Duration) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	s.cleanupQueueWaitersLocked(now)
+
+	state, exists := s.queueWaiters[key]
+	if !exists {
+		return false
+	}
+
+	for _, current := range state.waiters {
+		if current == waiter {
+			current.token = make(chan struct{})
+			current.armed = true
+			current.expiresAt = now.Add(ttl)
+			state.expiresAt = current.expiresAt
+			return true
+		}
+	}
+
+	return false
+}
+
+func (s *queueStore) removeQueueWaiter(key string, waiter *queueWaiter) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	s.cleanupQueueWaitersLocked(now)
+
+	state, exists := s.queueWaiters[key]
+	if !exists {
+		return false
+	}
+
+	for i, current := range state.waiters {
+		if current != waiter {
+			continue
+		}
+
+		state.waiters = append(state.waiters[:i], state.waiters[i+1:]...)
+		if len(state.waiters) == 0 && state.count <= 0 {
+			delete(s.queueWaiters, key)
+			return true
+		}
+
+		if len(state.waiters) > 0 {
+			state.expiresAt = state.waiters[len(state.waiters)-1].expiresAt
+		}
+		return true
+	}
+
+	return false
+}
+
+func (s *queueStore) signalNextQueueWaiter(key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	s.cleanupQueueWaitersLocked(now)
+
+	state, exists := s.queueWaiters[key]
+	if !exists || len(state.waiters) == 0 {
+		return false
+	}
+
+	waiter := state.waiters[0]
+	if !waiter.armed {
+		return false
+	}
+
+	waiter.armed = false
+	close(waiter.token)
+	return true
+}
+
 func (s *queueStore) reserveQueueSlot(key string, limit int, ttl time.Duration) (func(), bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -111,7 +223,44 @@ func (s *queueStore) releaseQueueSlot(key string, ttl time.Duration) {
 
 func (s *queueStore) cleanupQueueWaitersLocked(now time.Time) {
 	for key, state := range s.queueWaiters {
-		if now.After(state.expiresAt) {
+		if len(state.waiters) == 0 {
+			if now.After(state.expiresAt) || state.count <= 0 {
+				delete(s.queueWaiters, key)
+			}
+			continue
+		}
+
+		kept := state.waiters[:0]
+		removed := 0
+		for _, waiter := range state.waiters {
+			if now.After(waiter.expiresAt) {
+				removed++
+				continue
+			}
+			kept = append(kept, waiter)
+		}
+
+		if removed > 0 {
+			state.count -= removed
+			if state.count < 0 {
+				state.count = 0
+			}
+		}
+
+		if len(kept) == 0 {
+			if state.count <= 0 {
+				delete(s.queueWaiters, key)
+				continue
+			}
+			state.waiters = nil
+			state.expiresAt = now.Add(queueWaiterTTLBuffer)
+			continue
+		}
+
+		state.waiters = append([]*queueWaiter(nil), kept...)
+		state.expiresAt = kept[len(kept)-1].expiresAt
+
+		if state.count <= 0 && len(state.waiters) == 0 {
 			delete(s.queueWaiters, key)
 		}
 	}

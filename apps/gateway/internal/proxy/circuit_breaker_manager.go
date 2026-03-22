@@ -20,12 +20,13 @@ type CircuitBreakerManager struct {
 // NewCircuitBreakerManager creates a new circuit breaker manager
 func NewCircuitBreakerManager(config CircuitBreakerConfig, onStateChange func(userID, apiID, apiName string, state CircuitState)) *CircuitBreakerManager {
 	logger.Info("Circuit breaker manager initialized",
-		zap.Int("max_failures", config.MaxFailures),
+		zap.Int("rolling_window_size", config.RollingWindowSize),
+		zap.Float64("error_rate_threshold", config.ErrorRateThreshold),
 		zap.Duration("timeout", config.Timeout),
 		zap.Int("max_concurrent_half_open", config.MaxConcurrentRequestsInHalfOpen),
 		zap.Int("success_threshold_half_open", config.SuccessThresholdInHalfOpen),
 	)
-	
+
 	return &CircuitBreakerManager{
 		config:        config,
 		onStateChange: onStateChange,
@@ -38,26 +39,26 @@ func (m *CircuitBreakerManager) GetOrCreate(apiID, apiName, userID string) *Circ
 	if breaker, ok := m.breakers.Load(apiID); ok {
 		return breaker.(*CircuitBreaker)
 	}
-	
+
 	// Slow path: create new breaker
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	// Double-check after acquiring lock
 	if breaker, ok := m.breakers.Load(apiID); ok {
 		return breaker.(*CircuitBreaker)
 	}
-	
+
 	// Create new circuit breaker
 	breaker := NewCircuitBreaker(apiID, apiName, userID, m.config, m.onStateChange)
 	m.breakers.Store(apiID, breaker)
-	
+
 	logger.Info("Created new circuit breaker for API",
 		zap.String("api_id", apiID),
 		zap.String("api_name", apiName),
 		zap.String("user_id", userID),
 	)
-	
+
 	return breaker
 }
 
@@ -83,7 +84,7 @@ func (m *CircuitBreakerManager) Reset(apiID string) error {
 	if breaker == nil {
 		return fmt.Errorf("circuit breaker not found for API: %s", apiID)
 	}
-	
+
 	breaker.Reset()
 	return nil
 }
@@ -97,7 +98,7 @@ func (m *CircuitBreakerManager) ResetAll() {
 		count++
 		return true
 	})
-	
+
 	logger.Info("Reset all circuit breakers",
 		zap.Int("count", count),
 	)
@@ -106,21 +107,21 @@ func (m *CircuitBreakerManager) ResetAll() {
 // GetAllMetrics returns metrics for all circuit breakers
 func (m *CircuitBreakerManager) GetAllMetrics() map[string]CircuitBreakerMetrics {
 	metrics := make(map[string]CircuitBreakerMetrics)
-	
+
 	m.breakers.Range(func(key, value interface{}) bool {
 		apiID := key.(string)
 		breaker := value.(*CircuitBreaker)
 		metrics[apiID] = breaker.GetMetrics()
 		return true
 	})
-	
+
 	return metrics
 }
 
 // GetOpenCircuitBreakers returns a list of APIs with open circuit breakers
 func (m *CircuitBreakerManager) GetOpenCircuitBreakers() []string {
 	var openAPIs []string
-	
+
 	m.breakers.Range(func(key, value interface{}) bool {
 		apiID := key.(string)
 		breaker := value.(*CircuitBreaker)
@@ -129,7 +130,7 @@ func (m *CircuitBreakerManager) GetOpenCircuitBreakers() []string {
 		}
 		return true
 	})
-	
+
 	return openAPIs
 }
 
@@ -138,17 +139,17 @@ func (m *CircuitBreakerManager) GetStats() CircuitBreakerStats {
 	stats := CircuitBreakerStats{
 		Timestamp: time.Now(),
 	}
-	
+
 	m.breakers.Range(func(key, value interface{}) bool {
 		breaker := value.(*CircuitBreaker)
 		metrics := breaker.GetMetrics()
-		
+
 		stats.TotalCircuitBreakers++
 		stats.TotalRequests += metrics.TotalRequests
 		stats.TotalSuccesses += metrics.TotalSuccesses
 		stats.TotalFailures += metrics.TotalFailures
 		stats.TotalRejections += metrics.TotalRejections
-		
+
 		switch breaker.GetState() {
 		case StateClosed:
 			stats.ClosedCount++
@@ -158,10 +159,10 @@ func (m *CircuitBreakerManager) GetStats() CircuitBreakerStats {
 		case StateHalfOpen:
 			stats.HalfOpenCount++
 		}
-		
+
 		return true
 	})
-	
+
 	return stats
 }
 
@@ -182,10 +183,10 @@ type CircuitBreakerStats struct {
 // HealthCheck performs a health check on all circuit breakers
 func (m *CircuitBreakerManager) HealthCheck() (healthy bool, issues []string) {
 	healthy = true
-	
+
 	m.breakers.Range(func(key, value interface{}) bool {
 		breaker := value.(*CircuitBreaker)
-		
+
 		if breaker.IsOpen() {
 			healthy = false
 			metrics := breaker.GetMetrics()
@@ -196,10 +197,10 @@ func (m *CircuitBreakerManager) HealthCheck() (healthy bool, issues []string) {
 				metrics.TimeInState,
 			))
 		}
-		
+
 		return true
 	})
-	
+
 	return healthy, issues
 }
 
@@ -207,31 +208,31 @@ func (m *CircuitBreakerManager) HealthCheck() (healthy bool, issues []string) {
 func (m *CircuitBreakerManager) Cleanup(inactiveThreshold time.Duration) int {
 	removed := 0
 	now := time.Now()
-	
+
 	m.breakers.Range(func(key, value interface{}) bool {
 		breaker := value.(*CircuitBreaker)
 		metrics := breaker.GetMetrics()
-		
+
 		// Check if circuit breaker has been inactive
-		if breaker.IsClosed() && 
-		   now.Sub(metrics.LastStateChange) > inactiveThreshold &&
-		   metrics.TotalRequests == 0 {
+		if breaker.IsClosed() &&
+			now.Sub(metrics.LastStateChange) > inactiveThreshold &&
+			metrics.TotalRequests == 0 {
 			m.breakers.Delete(key)
 			removed++
 			logger.Debug("Removed inactive circuit breaker",
 				zap.String("api_name", metrics.APIName),
 			)
 		}
-		
+
 		return true
 	})
-	
+
 	if removed > 0 {
 		logger.Info("Circuit breaker cleanup completed",
 			zap.Int("removed", removed),
 		)
 	}
-	
+
 	return removed
 }
 
@@ -239,12 +240,12 @@ func (m *CircuitBreakerManager) Cleanup(inactiveThreshold time.Duration) int {
 func (m *CircuitBreakerManager) StartCleanupRoutine(interval, inactiveThreshold time.Duration, done chan struct{}) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	
+
 	logger.Info("Circuit breaker cleanup routine started",
 		zap.Duration("interval", interval),
 		zap.Duration("inactive_threshold", inactiveThreshold),
 	)
-	
+
 	for {
 		select {
 		case <-ticker.C:

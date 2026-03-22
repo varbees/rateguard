@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const defaultTokenBudgetCacheCapacity = 50000
+
 // BudgetWaiter waits for a token budget to become available.
 type BudgetWaiter interface {
 	Wait(ctx context.Context, delay time.Duration) error
@@ -44,20 +46,28 @@ type tokenBudgetRecord struct {
 	tokens     int64
 }
 
+type tokenBudgetState struct {
+	records []tokenBudgetRecord
+}
+
 type tokenBudgetManager struct {
-	mu      sync.Mutex
-	clock   Clock
-	records map[string][]tokenBudgetRecord
+	mu     sync.Mutex
+	clock  Clock
+	states *boundedCache[string, *tokenBudgetState]
 }
 
 func newTokenBudgetManager(clock Clock) *tokenBudgetManager {
+	return newTokenBudgetManagerWithCapacity(clock, defaultTokenBudgetCacheCapacity)
+}
+
+func newTokenBudgetManagerWithCapacity(clock Clock, capacity int) *tokenBudgetManager {
 	if clock == nil {
 		clock = systemClock{}
 	}
 
 	return &tokenBudgetManager{
-		clock:   clock,
-		records: make(map[string][]tokenBudgetRecord),
+		clock:  clock,
+		states: newBoundedCache[string, *tokenBudgetState](capacity),
 	}
 }
 
@@ -102,8 +112,15 @@ func (m *tokenBudgetManager) record(key string, tokens int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	if m.states == nil {
+		m.states = newBoundedCache[string, *tokenBudgetState](defaultTokenBudgetCacheCapacity)
+	}
+
 	now := m.clock.Now()
-	m.records[key] = append(m.records[key], tokenBudgetRecord{
+	state := m.states.getOrCreate(key, func() *tokenBudgetState {
+		return &tokenBudgetState{}
+	})
+	state.records = append(state.records, tokenBudgetRecord{
 		occurredAt: now,
 		tokens:     tokens,
 	})
@@ -120,9 +137,15 @@ func (m *tokenBudgetManager) check(key string, policy PolicyPreset) tokenBudgetD
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	records := m.records[key]
-	records = pruneTokenBudgetRecords(records, now, limits.maxWindow())
-	m.records[key] = records
+	if m.states == nil {
+		m.states = newBoundedCache[string, *tokenBudgetState](defaultTokenBudgetCacheCapacity)
+	}
+
+	state := m.states.getOrCreate(key, func() *tokenBudgetState {
+		return &tokenBudgetState{}
+	})
+	state.records = pruneTokenBudgetRecords(state.records, now, limits.maxWindow())
+	records := state.records
 
 	usedHour := sumTokenBudget(records, now, time.Hour, limits.Hour)
 	usedDay := sumTokenBudget(records, now, 24*time.Hour, limits.Day)

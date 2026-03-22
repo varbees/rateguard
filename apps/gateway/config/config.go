@@ -71,10 +71,11 @@ type RateGuardConfig struct {
 }
 
 type CircuitBreakerConfig struct {
-	MaxFailures                     int `mapstructure:"max_failures"`
-	TimeoutSeconds                  int `mapstructure:"timeout_seconds"`
-	MaxConcurrentRequestsInHalfOpen int `mapstructure:"max_concurrent_requests_half_open"`
-	SuccessThresholdInHalfOpen      int `mapstructure:"success_threshold_half_open"`
+	RollingWindowSize               int     `mapstructure:"rolling_window_size"`
+	ErrorRateThreshold              float64 `mapstructure:"error_rate_threshold"`
+	TimeoutSeconds                  int     `mapstructure:"timeout_seconds"`
+	MaxConcurrentRequestsInHalfOpen int     `mapstructure:"max_concurrent_requests_half_open"`
+	SuccessThresholdInHalfOpen      int     `mapstructure:"success_threshold_half_open"`
 }
 
 type JWTConfig struct {
@@ -220,7 +221,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rateguard.ratelimit_backend", "redis") // "redis" or "memory"
 
 	// Circuit Breaker defaults
-	v.SetDefault("rateguard.circuit_breaker.max_failures", 5)
+	v.SetDefault("rateguard.circuit_breaker.rolling_window_size", 100)
+	v.SetDefault("rateguard.circuit_breaker.error_rate_threshold", 0.5)
 	v.SetDefault("rateguard.circuit_breaker.timeout_seconds", 60)
 	v.SetDefault("rateguard.circuit_breaker.max_concurrent_requests_half_open", 1)
 	v.SetDefault("rateguard.circuit_breaker.success_threshold_half_open", 2)
