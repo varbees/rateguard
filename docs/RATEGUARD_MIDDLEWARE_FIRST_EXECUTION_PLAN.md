@@ -128,7 +128,7 @@ Known environment caveats:
 - `TEST_DATABASE_URL`-dependent tests skip when that env is missing
 - `baseline-browser-mapping` emits a Next.js warning during `next build`; it is informational, not a blocker
 - Grafana now defaults to host port `3300` in the local Docker stack to avoid common `3000` collisions
-- the container does not currently have `mypy`, so the Python SDK typecheck task is wired but not executable in this environment without installing that tool
+- the Python SDK typecheck task now runs strict mypy when available and falls back to compileall in this tool-limited container
 
 Latest verification snapshot:
 - `task test`: passed after the rateguard naming cleanup, including the new circuit-breaker cleanup, transparent proxy streaming regression tests, and the Redis limiter migration to atomic GCRA Lua
@@ -143,7 +143,7 @@ Latest verification snapshot:
 - `task ui:typecheck`: passed again after the dashboard guardrail rename and realtime events screen wiring
 - `task ui:typecheck`: passed again after the realtime events empty-state polish
 - `packages/sdk-node`: `bun run typecheck`, `bun run test`, and `bun run build` passed after the Node middleware SDK package was added
-- `packages/sdk-python`: `task sdk-python:test` passed after adding the local editable backend and a test-only `iniconfig` shim; `task sdk-python:typecheck` is wired but the container does not have `mypy` installed
+- `packages/sdk-python`: `task sdk-python:test` passed after adding the local editable backend and a test-only `iniconfig` shim; `task sdk-python:typecheck` runs strict mypy when available and falls back to compileall in this tool-limited container
 - `task openapi:generate`: passed after switching generated URL templating from `replaceAll` to `split/join` for the current TS target
 - `task dev`: passed in a normal local environment after removing the broken SQL init bind mount and moving Grafana off the conflicting host port
 - `task smoke`: passed in a normal local environment against the booted stack

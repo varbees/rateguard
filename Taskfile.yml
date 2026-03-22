@@ -187,4 +187,4 @@ tasks:
       PYTHONUSERBASE: /tmp/rateguard-python
       PYTHONPATH: tests/vendor
     cmds:
-      - python3 -m mypy rateguard
+      - python3 scripts/typecheck.py
