@@ -83,6 +83,7 @@ Active paths:
 - `apps/gateway/`
 - `apps/dashboard/`
 - `packages/sdk-go/`
+- `packages/sdk-node/`
 - `packages/sdk-ts/`
 - `packages/openapi/`
 - `deploy/docker/`
@@ -90,9 +91,10 @@ Active paths:
 
 SDK reality:
 - `packages/sdk-go` is the only in-process middleware SDK in the repo today
+- `packages/sdk-node` is a real Node.js middleware SDK package in the repo, built against the same middleware-first contract model
 - `packages/sdk-ts` is a generated TypeScript control-plane client, not a middleware SDK
-- there is no `packages/sdk-node` or `packages/sdk-python` tree in the repo yet
-- Node/Python middleware SDKs are future expansion ideas, not current launch-scope deliverables
+- `packages/sdk-python` is still not present in the repo
+- Node middleware exists; Python middleware remains future expansion
 
 Local bootstrap split:
 - `task dev` starts the backend runtime and infrastructure only
@@ -108,7 +110,7 @@ Current strategic read:
 - the repo is already credible as middleware-first OSS
 - the remaining launch risk is not architecture invention, it is release validation plus a small amount of contract and UI polish
 - any future work should preserve the SDK wedge and avoid re-centralizing the product around the proxy
-- the biggest post-launch SDK expansion opportunities are Node.js middleware and Python middleware, but those are not part of the current repo state
+- the biggest post-launch SDK expansion opportunity still pending is Python middleware; Node middleware is now part of the repo state and should stay aligned with the Go SDK contract
 
 Release gates:
 - `task test`
@@ -138,6 +140,7 @@ Latest verification snapshot:
 - `task ui:typecheck`: passed again after the queue/circuit-breaker/cache hardening pass
 - `task ui:typecheck`: passed again after the dashboard guardrail rename and realtime events screen wiring
 - `task ui:typecheck`: passed again after the realtime events empty-state polish
+- `packages/sdk-node`: `bun run typecheck`, `bun run test`, and `bun run build` passed after the Node middleware SDK package was added
 - `task openapi:generate`: passed after switching generated URL templating from `replaceAll` to `split/join` for the current TS target
 - `task dev`: passed in a normal local environment after removing the broken SQL init bind mount and moving Grafana off the conflicting host port
 - `task smoke`: passed in a normal local environment against the booted stack
@@ -150,6 +153,7 @@ Completed:
 - repository identity renamed from legacy `go-*` naming to `rateguard` naming in the active tree
 - archived historical docs that only repeated retired product names were pruned from the tree
 - Go SDK middleware module
+- Node middleware SDK package
 - OpenAPI generation path
 - TypeScript SDK generation path
 - OTEL / metrics / replay / SSE surfaces
@@ -168,6 +172,7 @@ Completed:
 - API limit responses now expose `current_preset` only
 - auth signup/login/me payloads now expose `handle` and `preset`, and handle availability/update routes are restored
 - OpenAPI generation and the generated TS SDK no longer rely on `replaceAll`, so the emitted client stays compatible with the current dashboard TypeScript target
+- the Node SDK package is wired into the workspace and Taskfile, with dedicated `test`, `build`, and `typecheck` tasks
 - backend composition root extraction
 - gateway request-shaping extraction
 - HTTP adapter extraction for retry/parsing/streaming/transport dispatch
@@ -254,6 +259,7 @@ Audit deliverables:
 Confirmed audit findings so far:
 - the repo now contains the standard OSS launch scaffolding files (`LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, GitHub issue templates)
 - the repository now contains a complete end-to-end example app under `examples/http-middleware-demo`
+- the repository now contains a working `packages/sdk-node` middleware package for Express, Fastify, Hono, and Next.js route handlers
 - the root README previously overstated the TypeScript package as Node middleware; it is now corrected to a generated client surface
 - mutating API routes now enforce an `Idempotency-Key` contract on the advertised mutating surfaces
 - queue config now enforces `max_queue_length` at admission time and returns a clean 429 when capacity is exhausted

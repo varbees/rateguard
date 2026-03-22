@@ -20,6 +20,12 @@ Go middleware:
 go get github.com/varbees/rateguard/sdk-go
 ```
 
+Node middleware:
+
+```bash
+bun add @rateguard/node
+```
+
 Generated TypeScript client:
 
 ```bash
@@ -113,6 +119,7 @@ This runs the current Go test suite without requiring a manually started local s
 ## How The Pieces Connect
 
 `packages/sdk-go` is a separate Go module in the root `go.work`. It is the embeddable middleware SDK, not the control plane runtime.
+`packages/sdk-node` is the Node.js middleware SDK package in the workspace. It is the embeddable middleware SDK for Express, Fastify, Hono, and Next.js routes.
 
 `apps/gateway` is the self-hosted control plane and gateway runtime. It receives events, serves the dashboard APIs, exposes OTEL metrics, and remains the backend service that the SDK reports into.
 
@@ -135,6 +142,7 @@ RateGuard is being steered toward:
 - `apps/gateway/` for the Go control-plane and gateway runtime
 - `apps/dashboard/` for the Next.js operator UI
 - `packages/sdk-go/` for Go middleware
+- `packages/sdk-node/` for Node.js middleware
 - `packages/sdk-ts/` for the generated TypeScript client surface
 - `packages/openapi/` for generated contract artifacts
 - `deploy/` for Docker, Helm, and KEDA assets
