@@ -205,10 +205,7 @@ export interface CircuitBreakerDecision {
 export type RateGuardEventType =
   | 'request.completed'
   | 'request.rate_limited'
-  | 'request.token_budget_exceeded'
-  | 'request.circuit_open'
-  | 'request.budget_warning'
-  | 'request.rate_limiter_degraded';
+  | 'request.token_budget_exceeded';
 
 /**
  * Canonical event payload used by the SDK.

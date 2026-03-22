@@ -37,7 +37,7 @@ describe('adapters', () => {
     expect(secondResponse.getHeader('Retry-After')).toBeDefined();
   });
 
-  it('express middleware hard-stops token budgets before next() and emits warnings in soft-stop mode', async () => {
+  it('express middleware hard-stops token budgets before next() without emitting warning events in soft-stop mode', async () => {
     const events: string[] = [];
     const guard = new RateGuard({
       preset: 'dev',
@@ -65,7 +65,7 @@ describe('adapters', () => {
     });
 
     expect(nextCalled).toBe(true);
-    expect(events).toContain('request.budget_warning');
+    expect(events).toEqual(['request.completed']);
   });
 
   it('fastify plugin wires the same admission path', async () => {

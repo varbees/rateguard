@@ -35,15 +35,10 @@ export function TokenMetricsCard() {
       }
     );
 
-    const unsubscribeBudgetWarning = subscribe("request.budget_warning", () => {
-      refetch();
-    });
-
     return () => {
       unsubscribeCompleted();
       unsubscribeRateLimited();
       unsubscribeBudgetExceeded();
-      unsubscribeBudgetWarning();
     };
   }, [subscribe, refetch]);
 

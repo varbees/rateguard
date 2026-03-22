@@ -3,15 +3,14 @@ from __future__ import annotations
 from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from inspect import isawaitable
 from threading import RLock
 import asyncio
-from typing import AsyncIterable, AsyncIterator, Awaitable, cast
+from typing import AsyncIterable, AsyncIterator
 
 from .bounded_cache import BoundedCache
 from .utils import extract_token_usage_from_text
 from ..exceptions import RateGuardException
-from ..types import Clock, RateGuardEvent, RateGuardEventPayload, TokenBudgetDecision, TokenBudgetOptions, TokenUsage
+from ..types import Clock, TokenBudgetDecision, TokenBudgetOptions, TokenUsage
 
 
 @dataclass(slots=True)
@@ -87,8 +86,6 @@ class TokenBudgetManager:
         decision = await self.check_async(key)
         if not decision.allowed:
             raise RateGuardException("token budget exceeded", status=429, retry_after=decision.retry_after_ms)
-        if decision.warning:
-            await self._emit_budget_warning(key, decision.limit)
         try:
             yield
         finally:
@@ -136,33 +133,6 @@ class TokenBudgetManager:
             "retry_after_ms": retry_after,
             "window": active["window"],
         }
-
-    async def _emit_budget_warning(self, key: str, limit: int) -> None:
-        emitter = self._event_emitter
-        if emitter is None:
-            return
-        maybe_emit = getattr(emitter, "emit", None)
-        if callable(maybe_emit):
-            event = RateGuardEvent(
-                event_id="local",
-                event_type="request.budget_warning",
-                tenant_id=None,
-                route_id=None,
-                upstream_id=None,
-                trace_id=None,
-                occurred_at="",
-                payload=RateGuardEventPayload(
-                    request_id=key,
-                    preset="",
-                    token_budget_limit=limit,
-                    token_budget_applied=True,
-                    token_budget_queued=False,
-                    token_budget_remaining=0,
-                ),
-            )
-            result = maybe_emit(event)
-            if isawaitable(result):
-                await cast(Awaitable[object], result)
 
     def _extract_usage_from_chunk(self, chunk: object) -> TokenUsage | None:
         if hasattr(chunk, "usage"):

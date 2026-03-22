@@ -42,7 +42,6 @@ export class RateGuardRuntime {
     const breakerDecision = this.circuitBreaker.allow();
 
     if (!breakerDecision.allowed) {
-      await this.emit('request.circuit_open', request, breakerDecision.state, 503, start, undefined, undefined, breakerDecision.retryAfterMs);
       return {
         allowed: false,
         statusCode: 503,
@@ -59,10 +58,6 @@ export class RateGuardRuntime {
       apiKey: this.config.apiKey,
     });
 
-    if (rateDecision.degraded) {
-      await this.emit('request.rate_limiter_degraded', request, breakerDecision.state, 0, start, rateDecision, undefined, 0);
-    }
-
     if (!rateDecision.allowed) {
       await this.emit('request.rate_limited', request, breakerDecision.state, 429, start, rateDecision, undefined, rateDecision.retryAfterMs);
       return {
@@ -75,10 +70,6 @@ export class RateGuardRuntime {
     }
 
     const tokenDecision = this.tokenBudget.check(key, this.config.tokenBudget);
-    if (tokenDecision.warning) {
-      await this.emit('request.budget_warning', request, breakerDecision.state, 200, start, rateDecision, tokenDecision, 0);
-    }
-
     if (!tokenDecision.allowed) {
       await this.emit('request.token_budget_exceeded', request, breakerDecision.state, 429, start, rateDecision, tokenDecision, tokenDecision.retryAfterMs);
       return {
@@ -101,7 +92,7 @@ export class RateGuardRuntime {
 
   async observe(request: RequestContext, observation: CompletionObservation, startedAtMs: number): Promise<void> {
     const key = this.resolveKey(request);
-    const beforeState = this.circuitBreaker.getState();
+    void this.circuitBreaker.getState();
 
     let usage;
     if (observation.snapshot) {
@@ -110,10 +101,6 @@ export class RateGuardRuntime {
 
     const success = observation.error ? false : observation.statusCode < 500;
     const breakerDecision = this.circuitBreaker.recordOutcome(success);
-
-    if (beforeState !== 'open' && breakerDecision.state === 'open') {
-      await this.emit('request.circuit_open', request, breakerDecision.state, observation.statusCode, startedAtMs, undefined, undefined, breakerDecision.retryAfterMs);
-    }
 
     const tokenDecision = this.tokenBudget.check(key, this.config.tokenBudget);
     const payload = this.buildPayload(request, breakerDecision.state, observation.statusCode, startedAtMs, undefined, tokenDecision, usage, breakerDecision.retryAfterMs);

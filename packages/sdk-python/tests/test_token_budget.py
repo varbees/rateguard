@@ -26,9 +26,11 @@ async def test_token_budget_hard_stop_blocks_before_call() -> None:
         async with budget.enforce("user:one"):
             raise AssertionError("should not execute")
 
+    assert emitter.events == []
+
 
 @pytest.mark.asyncio
-async def test_token_budget_soft_stop_emits_warning_and_allows() -> None:
+async def test_token_budget_soft_stop_allows_without_emitting_control_plane_events() -> None:
     emitter = RecorderEmitter()
     budget = TokenBudget(
         clock=FixedClock(),
@@ -41,11 +43,14 @@ async def test_token_budget_soft_stop_emits_warning_and_allows() -> None:
     )
     budget.record("user:one", 8)
 
+    decision = budget.check("user:one")
+    assert decision.allowed is True
+    assert decision.warning is True
+
     async with budget.enforce("user:one"):
         pass
 
-    assert emitter.events
-    assert emitter.events[0].event_type == "request.budget_warning"
+    assert emitter.events == []
 
 
 @pytest.mark.asyncio
@@ -78,4 +83,3 @@ async def test_token_budget_streaming_extracts_openai_and_anthropic_usage() -> N
 
     usage = budget.usage("anthropic-user")
     assert usage["month"] == 7
-

@@ -10,9 +10,6 @@ RateGuardEventType = Literal[
     "request.completed",
     "request.rate_limited",
     "request.token_budget_exceeded",
-    "request.circuit_open",
-    "request.budget_warning",
-    "request.rate_limiter_degraded",
 ]
 
 HeadersLike = Mapping[str, object]

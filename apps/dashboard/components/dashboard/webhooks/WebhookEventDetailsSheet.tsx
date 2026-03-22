@@ -169,21 +169,23 @@ export function WebhookEventDetailsSheet({ eventId, isOpen, onClose }: WebhookEv
                       </div>
                     </div>
 
-                    {/* Attempts (Mocked for now as backend type doesn't have full history yet) */}
-                    {Array.from({ length: event.retries }).map((_, i) => (
-                      <div key={i} className="relative pl-6 border-l-2 border-muted pb-6 last:border-0 last:pb-0">
-                        <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 border-background bg-red-500" />
+                    {/* Latest delivery state */}
+                    {event.last_attempt_at && (
+                      <div className="relative pl-6 border-l-2 border-muted pb-6 last:border-0 last:pb-0">
+                        <div className="absolute -left-[9px] top-0 h-4 w-4 rounded-full border-2 border-background bg-amber-500" />
                         <div className="flex flex-col gap-1">
-                          <span className="text-sm font-medium text-red-600">Delivery Failed (Attempt {i + 1})</span>
+                          <span className="text-sm font-medium">Latest Attempt</span>
                           <span className="text-xs text-muted-foreground">
-                            HTTP 500 - Internal Server Error
+                            {format(new Date(event.last_attempt_at), "MMM d, h:mm:ss a")}
                           </span>
-                          <span className="text-xs text-muted-foreground">
-                            Latency: 124ms
-                          </span>
+                          {event.retries > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              Retry count recorded: {event.retries}
+                            </span>
+                          )}
                         </div>
                       </div>
-                    ))}
+                    )}
 
                     {/* Final Status */}
                     <div className="relative pl-6 border-l-2 border-transparent">
@@ -207,7 +209,7 @@ export function WebhookEventDetailsSheet({ eventId, isOpen, onClose }: WebhookEv
                   <div className="mt-4 rounded-md border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
                     {event.retries > 0
                       ? event.last_attempt_at
-                        ? "Attempt-level timestamps are limited to the last attempt, delivery time, and next retry. The backend does not expose a full attempt log yet."
+                        ? "Retry count and the latest attempt timestamp are available, but the backend does not expose a full attempt log yet."
                         : "Retry count is recorded, but the backend does not expose a full attempt log yet."
                       : "No retry history recorded for this event."}
                   </div>

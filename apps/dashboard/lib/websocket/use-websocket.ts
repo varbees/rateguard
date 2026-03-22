@@ -71,9 +71,22 @@ export function useWebSocket(
       return;
     }
 
-    // Create WebSocket manager
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8008';
-    const fullUrl = `${wsUrl}/ws`;
+    // Create WebSocket manager using the same origin logic as the shared realtime provider.
+    const wsBaseUrl = (() => {
+      const configuredUrl = process.env.NEXT_PUBLIC_WS_URL?.replace(/\/$/, "");
+      if (configuredUrl) {
+        return configuredUrl;
+      }
+
+      const protocol =
+        window.location.protocol === "https:" ? "wss:" : "ws:";
+      const host =
+        process.env.NEXT_PUBLIC_API_URL?.replace(/^https?:\/\//, "") ||
+        window.location.host;
+
+      return `${protocol}//${host}`;
+    })();
+    const fullUrl = `${wsBaseUrl}/ws`;
 
     if (endpoint && endpoint !== '/dashboard' && process.env.NODE_ENV === 'development') {
       console.debug(`[useWebSocket] Ignoring endpoint hint "${endpoint}" and connecting to shared /ws socket`);

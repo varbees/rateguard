@@ -111,7 +111,7 @@ export default function WebhooksPage() {
               <h3 className="font-semibold">Dead Letter Queue</h3>
             </div>
             <p className="text-sm text-muted-foreground">
-              Failed events preserved for manual retry and debugging.
+              Failed events preserved for manual replay and debugging.
             </p>
           </div>
 
@@ -211,11 +211,11 @@ curl ${API_BASE_URL}/webhook/events/:id \\
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Manual Retry</h3>
+            <h3 className="text-lg font-semibold">Manual Replay</h3>
             <CodeBlock
               language="bash"
-              value={`# Retry a failed webhook
-curl -X POST ${API_BASE_URL}/webhook/events/:id/retry \\
+              value={`# Replay a failed webhook
+curl -X POST ${API_BASE_URL}/webhook/events/:id/replay \\
   -H "Authorization: Bearer YOUR_TOKEN"`}
             />
           </div>
@@ -234,7 +234,7 @@ curl -X POST ${API_BASE_URL}/webhook/events/:id/retry \\
               filtering
             </li>
             <li>
-              <strong>Manual Retry</strong> - One-click retry for failed events
+              <strong>Manual Replay</strong> - One-click replay for failed events
             </li>
             <li>
               <strong>Payload Inspector</strong> - View full JSON payloads and

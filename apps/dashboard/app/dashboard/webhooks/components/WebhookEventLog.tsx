@@ -68,12 +68,11 @@ export function WebhookEventLog({ statusFilter, sourceFilter }: WebhookEventLogP
       setRetryingEvents((prev) => new Set(prev).add(eventId));
 
       try {
-        // Feature detection: Check if retry endpoint is available
         const response = await webhookAPI.retry(eventId);
         
         toast({
-          title: "Retry Initiated",
-          description: response.message || "Webhook will be retried shortly",
+          title: "Replay Scheduled",
+          description: response.message || "Webhook replay will be processed shortly",
         });
 
         // Optimistically update the event status in cache
@@ -93,20 +92,11 @@ export function WebhookEventLog({ statusFilter, sourceFilter }: WebhookEventLogP
         // Refetch to get actual status
         setTimeout(() => refetch(), 1000);
       } catch (error: any) {
-        // Check if endpoint is not implemented
-        if (error?.statusCode === 404) {
-          toast({
-            title: "Feature Not Available",
-            description: "Manual retry endpoint is not yet implemented on the backend",
-            variant: "default",
-          });
-        } else {
-          toast({
-            title: "Retry Failed",
-            description: error?.message || "Failed to retry webhook delivery",
-            variant: "destructive",
-          });
-        }
+        toast({
+          title: "Replay Failed",
+          description: error?.message || "Failed to replay webhook delivery",
+          variant: "destructive",
+        });
       } finally {
         setRetryingEvents((prev) => {
           const next = new Set(prev);

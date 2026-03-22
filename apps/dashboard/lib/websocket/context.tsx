@@ -18,9 +18,6 @@ export type WebSocketEventType =
   | "api.metrics.update"
   | "request.completed"
   | "request.rate_limited"
-  | "request.circuit_open"
-  | "request.rate_limiter_degraded"
-  | "request.budget_warning"
   | "request.token_budget_exceeded"
   | "test.message";
 
@@ -90,9 +87,6 @@ const realtimeEventTypes: WebSocketEventType[] = [
   "api.metrics.update",
   "request.completed",
   "request.rate_limited",
-  "request.circuit_open",
-  "request.rate_limiter_degraded",
-  "request.budget_warning",
   "request.token_budget_exceeded",
   "test.message",
 ];

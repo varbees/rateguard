@@ -57,29 +57,14 @@ class RateGuardRuntime:
         key = self.resolve_key(request)
         breaker_decision = await self.circuit_breaker.allow_async()
         if not breaker_decision.allowed:
-            await self.emit(
-                "request.circuit_open",
-                request,
-                breaker_decision.state,
-                503,
-                self.config.clock.now(),
-                None,
-                None,
-                breaker_decision.retry_after_ms,
-            )
             return PreflightDecision(False, 503, None, breaker_decision.retry_after_ms, None, None, breaker_decision)
 
         rate_decision = await self.rate_limiter.allow_async(key, self.config.rate_limit, api_key=self.config.api_key)
-        if rate_decision.degraded:
-            await self.emit("request.rate_limiter_degraded", request, breaker_decision.state, 0, self.config.clock.now(), rate_decision, None, 0)
-
         if not rate_decision.allowed:
             await self.emit("request.rate_limited", request, breaker_decision.state, 429, self.config.clock.now(), rate_decision, None, rate_decision.retry_after_ms)
             return PreflightDecision(False, 429, None, rate_decision.retry_after_ms, rate_decision, None, breaker_decision)
 
         token_decision = await self.token_budget.check_async(key, self.config.token_budget)
-        if token_decision.warning:
-            await self.emit("request.budget_warning", request, breaker_decision.state, 200, self.config.clock.now(), rate_decision, token_decision, 0)
         if not token_decision.allowed:
             await self.emit("request.token_budget_exceeded", request, breaker_decision.state, 429, self.config.clock.now(), rate_decision, token_decision, token_decision.retry_after_ms)
             return PreflightDecision(False, 429, None, token_decision.retry_after_ms, rate_decision, token_decision, breaker_decision)
@@ -90,7 +75,6 @@ class RateGuardRuntime:
 
     async def observe_async(self, request: RequestContext, observation: CompletionObservation, started_at_ms: float) -> None:
         key = self.resolve_key(request)
-        before_state = await self.circuit_breaker.get_state_async()
         usage = None
         if observation.snapshot is not None:
             usage = self.token_budget.record_from_snapshot(key, observation.snapshot)
@@ -98,8 +82,6 @@ class RateGuardRuntime:
         breaker_decision = self.circuit_breaker.record_outcome(success)
         payload = self.build_payload(request, breaker_decision.state, observation.status_code, started_at_ms, None, None, usage, breaker_decision.retry_after_ms)
         await self.emit_event("request.completed", request, breaker_decision.state, payload)
-        if before_state != "open" and breaker_decision.state == "open":
-            await self.emit_event("request.circuit_open", request, breaker_decision.state, payload)
 
     def build_payload(
         self,
@@ -203,7 +185,6 @@ class RateGuardRuntime:
 
     def _observe_sync(self, request: RequestContext, observation: CompletionObservation, started_at_ms: float) -> None:
         key = self.resolve_key(request)
-        before_state = self.circuit_breaker.get_state()
         usage = None
         if observation.snapshot is not None:
             usage = self.token_budget.record_from_snapshot(key, observation.snapshot)
@@ -211,8 +192,6 @@ class RateGuardRuntime:
         breaker_decision = self.circuit_breaker.record_outcome(success)
         payload = self.build_payload(request, breaker_decision.state, observation.status_code, started_at_ms, None, None, usage, breaker_decision.retry_after_ms)
         self._emit_event_sync("request.completed", request, payload)
-        if before_state != "open" and breaker_decision.state == "open":
-            self._emit_event_sync("request.circuit_open", request, payload)
 
 
 class RateGuard:

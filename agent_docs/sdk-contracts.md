@@ -19,6 +19,12 @@ Every middleware SDK should expose:
 4. event emission to the control plane
 5. bounded hot-path caches
 
+Canonical request event types on the wire:
+
+1. `request.completed`
+2. `request.rate_limited`
+3. `request.token_budget_exceeded`
+
 ## Parity Rule
 
 If rate limiting, token budgets, or circuit breaking change in one SDK,

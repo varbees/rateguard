@@ -415,7 +415,7 @@ func (d *AlertDetector) detectHigh429Rate(ctx context.Context) error {
                   label: "Fetching Alerts",
                   code: `// Fetch current alerts for the authenticated user
 async function fetchAlerts(): Promise<Alert[]> {
-  const response = await fetch('/api/v1/alerts', {
+  const response = await fetch(\`${API_BASE_URL}/dashboard/alerts\`, {
     headers: {
       'Authorization': \`Bearer \${token}\`,
     },
@@ -630,7 +630,7 @@ func (c *CostEstimator) EstimateMonthlyCost(
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg font-mono">
-                  GET /api/v1/alerts
+                  GET /api/v1/dashboard/alerts
                 </CardTitle>
                 <CardDescription>
                   Get current active alerts for user

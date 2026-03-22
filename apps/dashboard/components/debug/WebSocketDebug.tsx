@@ -97,7 +97,12 @@ export function WebSocketDebug() {
 
         <div className="text-xs text-muted-foreground pt-2 border-t">
           <p>📡 WebSocket URL: /ws?token=***</p>
-          <p>🔔 Listening for events: test.message, metrics.update, alert.triggered</p>
+          <p>
+            🔔 Listening for shared events: request.completed,
+            request.rate_limited, request.token_budget_exceeded,
+            metrics.update, alert.triggered, system.health,
+            circuit_breaker.state_change, api.metrics.update, test.message
+          </p>
         </div>
       </div>
     </Card>
