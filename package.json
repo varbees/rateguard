@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "workspaces": [
+    "apps/dashboard",
+    "packages/sdk-ts",
+    "packages/sdk-node"
+  ]
+}

@@ -26,6 +26,7 @@ apps/gateway/rateguard
 apps/gateway/aggregator
 
 # Node / Next.js artifacts
+node_modules/
 apps/dashboard/node_modules/
 apps/dashboard/.next/
 apps/dashboard/.turbo/

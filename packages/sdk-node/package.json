@@ -1,0 +1,76 @@
+{
+  "name": "@rateguard/node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node.js middleware SDK for RateGuard",
+  "type": "module",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    },
+    "./fastify": {
+      "types": "./dist/types/adapters/fastify.d.ts",
+      "import": "./dist/esm/adapters/fastify.js",
+      "require": "./dist/cjs/adapters/fastify.js"
+    },
+    "./hono": {
+      "types": "./dist/types/adapters/hono.d.ts",
+      "import": "./dist/esm/adapters/hono.js",
+      "require": "./dist/cjs/adapters/hono.js"
+    },
+    "./next": {
+      "types": "./dist/types/adapters/next.d.ts",
+      "import": "./dist/esm/adapters/next.js",
+      "require": "./dist/cjs/adapters/next.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "build:esm": "tsc -p tsconfig.esm.json",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:types": "tsc -p tsconfig.types.json",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "rate-limiting",
+    "middleware",
+    "llm",
+    "token-budget",
+    "api-gateway"
+  ],
+  "peerDependencies": {
+    "express": ">=4.0.0",
+    "fastify": ">=4.0.0",
+    "hono": ">=3.0.0",
+    "next": ">=13.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    },
+    "hono": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "lru-cache": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.26",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

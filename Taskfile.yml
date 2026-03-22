@@ -3,6 +3,7 @@ version: "3"
 vars:
   BACKEND_DIR: apps/gateway
   DASHBOARD_DIR: apps/dashboard
+  SDK_NODE_DIR: packages/sdk-node
   DOCKER_DIR: deploy/docker
   GOCACHE: /tmp/go-build-cache
   CCACHE_DIR: /tmp/ccache
@@ -127,3 +128,33 @@ tasks:
       NEXT_PUBLIC_WS_URL: ws://localhost:8008
     cmds:
       - bun run start -- --hostname 0.0.0.0 --port 3003
+
+  sdk-node:deps:
+    desc: Install Node SDK dependencies
+    dir: "{{.SDK_NODE_DIR}}"
+    cmds:
+      - bun install
+
+  sdk-node:test:
+    desc: Run the Node middleware SDK tests
+    deps:
+      - sdk-node:deps
+    dir: "{{.SDK_NODE_DIR}}"
+    cmds:
+      - bun run test
+
+  sdk-node:build:
+    desc: Build the Node middleware SDK
+    deps:
+      - sdk-node:deps
+    dir: "{{.SDK_NODE_DIR}}"
+    cmds:
+      - bun run build
+
+  sdk-node:typecheck:
+    desc: Type-check the Node middleware SDK
+    deps:
+      - sdk-node:deps
+    dir: "{{.SDK_NODE_DIR}}"
+    cmds:
+      - bun run typecheck
