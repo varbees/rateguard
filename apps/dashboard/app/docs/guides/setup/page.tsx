@@ -34,13 +34,18 @@ export default function SetupPage() {
       </div>
 
       <div className="space-y-12 px-4">
+        <Callout type="default" title="Choose Your Path">
+          RateGuard has two supported entry points: in-process middleware in
+          your app, or the proxy path through the control plane. The SDK path
+          does not require a dashboard account or control-plane URL.
+        </Callout>
+
         {/* Prerequisites */}
         <section className="space-y-6">
           <h2 className="text-2xl font-bold">Prerequisites</h2>
           <ul className="list-disc pl-6 space-y-2 text-muted-foreground">
-            <li>A RateGuard account (duh).</li>
-            <li>An API Key from the RateGuard dashboard.</li>
-            <li>An upstream API key (e.g., OpenAI, Anthropic, or your own backend).</li>
+            <li>An upstream API key if you are using a provider proxy (e.g., OpenAI, Anthropic, or your own backend).</li>
+            <li>A RateGuard account and API key only if you want proxy mode or dashboard-backed realtime events.</li>
           </ul>
         </section>
 
@@ -76,7 +81,7 @@ export default function SetupPage() {
                 1. Authenticate with RateGuard
               </h3>
               <p className="text-muted-foreground mb-4">
-                You need to tell us who you are. Add the `X-RG-Key` header with your RateGuard API key.
+                Only the proxy path uses the `X-RG-Key` header. If you are using the Python or Node SDK directly, you do not need it.
               </p>
             </div>
 

@@ -205,9 +205,11 @@ Status:
 - Completed. The create-API test-connection flow is now provider-aware end to end: the dashboard sends `provider`, `custom_headers`, and `Idempotency-Key`, the gateway probes canonical model paths for OpenAI/Anthropic/Google/Cohere, and custom REST APIs now probe with `GET` so public endpoints like Fakestore are tested with a request that matches their actual contract.
 - Completed. The final create payload now persists the selected provider metadata into the API config record, so the dashboard review step, stored API state, and proxy defaults stay in sync instead of dropping the provider field on the floor.
 - Completed. The local compose stack now ships a valid base64-encoded dev `ENCRYPTION_KEY`, so template-driven proxy creation can persist upstream credentials without tripping the storage guardrail.
+- Completed. The Python SDK now exposes a standalone `budget` facade with a human-readable `BudgetExceeded` contract, so the noob quickstart can enforce monthly token budgets in-process before the OpenAI call leaves the app, while the README and dashboard docs now clearly state that the dashboard/control plane is optional for SDK use.
 - Verified. `task test`, `task ui:typecheck`, `task ui:build`, and the live smoke burst against `/api/v1/apis` passed; the stack boots cleanly with `task dev`, and the realtime replay shows the self-protection events.
 - Verified. After the screen audit, `task ui:typecheck`, `task ui:build`, and `task smoke` still passed.
 - Verified. After the websocket and docs cleanup, the dashboard typecheck and build still pass.
+- Verified. The Python SDK test suite passed after adding the `budget` facade and `BudgetExceeded` contract, and `task ui:typecheck` passed after the docs copy was updated to reflect the standalone SDK path.
 - Verified. Live preflight against `/api/v1/apis/test-connection` now returns `Access-Control-Allow-Headers: Origin,Content-Type,Accept,Authorization,X-API-Key,Idempotency-Key`, confirming the browser can send the mutating POST.
 - Verified. The Node SDK test suite and the Python SDK test suite passed after removing the legacy wire events.
 - Verified. `task ui:typecheck` and `task ui:build` passed after the login/email-handle and API-create contract sync patch.

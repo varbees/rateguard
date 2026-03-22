@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from rateguard import RateGuard, TokenBudget
-from rateguard.exceptions import RateGuardException
+from rateguard import BudgetExceeded, RateGuard, TokenBudget
 
 from .helpers import Chunk, FixedClock, RecorderEmitter, Usage
 
@@ -22,7 +21,7 @@ async def test_token_budget_hard_stop_blocks_before_call() -> None:
     )
     budget.record("user:one", 10)
 
-    with pytest.raises(RateGuardException):
+    with pytest.raises(BudgetExceeded):
         async with budget.enforce("user:one"):
             raise AssertionError("should not execute")
 

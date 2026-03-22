@@ -19,10 +19,10 @@ export default function DocsPage() {
             Welcome to RateGuard
           </h1>
           <p className="text-xl text-muted-foreground leading-relaxed max-w-3xl">
-            RateGuard is a middleware-first API control plane for rate limiting,
+            RateGuard is a middleware-first API protection platform for rate limiting,
             token budgets, circuit breaking, and live observability.
             <br />
-            <span className="font-semibold text-foreground">Get started without rerouting traffic.</span>
+            <span className="font-semibold text-foreground">Start in-process or use the proxy path when you need the dashboard.</span>
           </p>
           
           <div className="flex items-center gap-4">
@@ -48,7 +48,7 @@ export default function DocsPage() {
             <span className="text-primary">TL;DR</span>
           </h2>
           <p className="text-lg font-medium text-foreground/90">
-            Embed RateGuard into an existing API to add protection and live controls.
+            Embed RateGuard into an existing API to add protection and live controls, without forcing a control-plane dependency.
           </p>
         </div>
 

@@ -26,7 +26,7 @@ export default function WhatIsRateGuardPage() {
               What is RateGuard?
             </h1>
             <p className="text-xl text-muted-foreground leading-relaxed">
-              RateGuard is a middleware-first control plane for APIs. It adds protection, visibility, and policy control without forcing you to rebuild the whole stack.
+              RateGuard is a middleware-first API protection platform. It runs in-process by default and can connect to a control plane when you need shared policy and realtime visibility.
             </p>
           </div>
         </div>
@@ -47,7 +47,7 @@ export default function WhatIsRateGuardPage() {
         <section className="space-y-6">
           <h2 className="text-2xl font-bold">The Solution</h2>
           <p className="text-lg text-muted-foreground">
-            RateGuard sits in the request path as middleware or, when needed, in proxy mode. It inspects each request, applies the active policy preset, and either allows it or returns a controlled response.
+            RateGuard sits in the request path as middleware or, when needed, in proxy mode. The SDK path works without Redis, Docker, or a dashboard connection; the proxy path adds a control plane when you want one. In both cases, it inspects each request, applies the active policy preset, and either allows it or returns a controlled response.
           </p>
           
           <div className="grid gap-6 md:grid-cols-2">
@@ -113,7 +113,7 @@ export default function WhatIsRateGuardPage() {
         <section className="space-y-6">
           <h2 className="text-2xl font-bold">Why RateGuard?</h2>
           <p className="text-lg text-muted-foreground">
-            Because building this yourself is a pain. You have to deal with Redis race conditions, distributed counters, and clock synchronization.
+            Because building this yourself is a pain. You have to deal with Redis race conditions, distributed counters, clock synchronization, and SDK parity across languages.
             We did all that boring stuff so you can focus on building your actual product.
           </p>
           <p className="text-lg text-muted-foreground">

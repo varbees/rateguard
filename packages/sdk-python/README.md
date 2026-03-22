@@ -2,42 +2,54 @@
 
 RateGuard is a middleware-first API protection and observability SDK for Python apps.
 
-It gives you in-process:
+It runs entirely in-process by default:
 
 - rate limiting
 - token budgets
 - circuit breaking
 - request events
 
-without requiring a control-plane runtime to be available.
+No Redis, Docker, dashboard, or control plane URL is required for standalone use. Add the control plane later only if you want realtime events and shared policy management.
 
 ## Install
 
 ```bash
-pip install -e packages/sdk-python
+pip install rateguard
 ```
 
 ## Quick Start
 
 ```python
 from openai import AsyncOpenAI
-from rateguard import RateGuard
+from rateguard import BudgetExceeded, RateGuard
 
 client = AsyncOpenAI()
-rg = RateGuard(api_key="...", preset="standard")
-budget = rg.token_budget(
-    hard_stop=True,
-    monthly_limit=1_000_000,
-    soft_stop_at=0.8,
-)
+rg = RateGuard(preset="standard")
+budget = rg.budget
+
 
 async def chat(user_id: str, messages: list):
-    async with budget.enforce(user_id):
-        stream = await client.chat.completions.create(
-            model="gpt-4o", messages=messages, stream=True
-        )
-        async for chunk in budget.track_stream(stream, user_id):
-            yield chunk
+    try:
+        async with budget.enforce(user_id=user_id, hard_stop=True):
+            stream = await client.chat.completions.create(
+                model="gpt-4o",
+                messages=messages,
+                stream=True,
+            )
+
+            async for chunk in budget.track_stream(stream, user_id=user_id):
+                yield chunk
+    except BudgetExceeded as exc:
+        print(exc)
+        raise
+```
+
+For non-streaming calls, enforce before the request and record the returned token usage afterward:
+
+```python
+async with rg.budget.enforce(user_id="me", hard_stop=True):
+    response = await client.chat.completions.create(model="gpt-4o", messages=messages)
+    rg.budget.record(user_id="me", tokens=response.usage.total_tokens)
 ```
 
 ## FastAPI
@@ -47,8 +59,9 @@ from fastapi import Depends, FastAPI, Request
 from rateguard import RateGuard
 
 app = FastAPI()
-rg = RateGuard(api_key="...", preset="standard")
+rg = RateGuard(preset="standard")
 app.add_middleware(rg.asgi_middleware)
+
 
 @app.post("/chat")
 async def chat(req: Request, _=Depends(rg.require)):
@@ -59,10 +72,11 @@ async def chat(req: Request, _=Depends(rg.require)):
 
 ```python
 from flask import Flask
-from rateguard.flask import RateGuardMiddleware
+from rateguard import RateGuard, RateGuardMiddleware
 
 app = Flask(__name__)
-app.wsgi_app = RateGuardMiddleware(app.wsgi_app, api_key="...", preset="standard")
+rg = RateGuard(preset="standard")
+app.wsgi_app = RateGuardMiddleware(app.wsgi_app, guard=rg.runtime)
 ```
 
 ## Configuration
@@ -79,4 +93,3 @@ app.wsgi_app = RateGuardMiddleware(app.wsgi_app, api_key="...", preset="standard
 - Go SDK: `packages/sdk-go`
 - Node SDK: `packages/sdk-node`
 - Control plane: `apps/gateway`
-

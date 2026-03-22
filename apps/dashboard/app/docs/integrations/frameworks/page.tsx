@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { Code, Box, Terminal } from "lucide-react";
 import { CodeTabs } from "@/components/docs/CodeTabs";
+import { Callout } from "@/components/docs/Callout";
 import { DOCS_PROXY_BASE_URL } from "@/lib/docs/urls";
 
 export const metadata: Metadata = {
@@ -29,6 +30,12 @@ export default function FrameworksPage() {
       </div>
 
       <div className="space-y-12 px-4">
+        <Callout type="default" title="Standalone SDKs">
+          If you are embedding RateGuard directly in your app, you do not need
+          a dashboard API key or control-plane URL. Use the Python or Node SDK
+          quickstarts for in-process enforcement.
+        </Callout>
+
         {/* Next.js / React */}
         <section className="space-y-6">
           <h2 className="text-2xl font-bold flex items-center gap-2">

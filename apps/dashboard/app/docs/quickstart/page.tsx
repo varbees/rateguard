@@ -37,11 +37,18 @@ export default function QuickstartPage() {
       </div>
 
       <div className="space-y-12 px-4">
+        <Callout type="default" title="Standalone SDKs">
+          If you are embedding RateGuard directly in your Python or Node app,
+          you do not need a dashboard account, API key, or control-plane URL.
+          This page shows the proxy path. For in-process middleware, use the
+          SDK quickstart in the package README.
+        </Callout>
+
         {/* Step 1: Get API Key */}
         <section className="space-y-6">
           <div className="flex items-center gap-2">
             <Badge className="h-6 w-6 rounded-full flex items-center justify-center p-0 text-sm">1</Badge>
-            <h2 className="text-2xl font-bold">Get Your API Key</h2>
+            <h2 className="text-2xl font-bold">Optional: Get Your API Key</h2>
           </div>
           <Card>
             <CardHeader>
@@ -52,9 +59,10 @@ export default function QuickstartPage() {
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground mb-4">
-                You&apos;ll need a RateGuard account. If you don&apos;t have one, <a href="/signup" className="text-primary hover:underline">sign up here</a>. It&apos;s free.
-                Go to <strong>Dashboard &gt; API Keys</strong> and create a new key.
-                We&apos;ll create a new API key for you. Copy it and keep it safe. You won&apos;t see it again.
+                You only need a RateGuard account if you are using the proxy path
+                or want dashboard-backed realtime events. If you do, <a href="/signup" className="text-primary hover:underline">sign up here</a>.
+                Then go to <strong>Dashboard &gt; API Keys</strong> and create a new key.
+                Copy it and keep it safe. You won&apos;t see it again.
               </p>
             </CardContent>
           </Card>

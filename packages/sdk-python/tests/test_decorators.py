@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from rateguard import RateGuardException, token_budget
+from rateguard import BudgetExceeded, token_budget
 
 
 class _Response:
@@ -23,6 +23,5 @@ async def test_token_budget_decorator_blocks_when_exhausted() -> None:
     assert isinstance(result, _Response)
     assert calls == ["called"]
 
-    with pytest.raises(RateGuardException):
+    with pytest.raises(BudgetExceeded):
         await call_llm()
-

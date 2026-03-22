@@ -45,7 +45,7 @@ export default function ProductFaqPage() {
           <AccordionItem value="uptime">
             <AccordionTrigger>What is your uptime guarantee?</AccordionTrigger>
             <AccordionContent>
-              Availability depends on your deployment and infrastructure. The control plane exposes health checks so you can monitor it directly.
+              Availability depends on your deployment and infrastructure. If you are using the proxy or dashboard-backed control plane, it exposes health checks so you can monitor it directly. Standalone SDK mode depends on your app and does not require the control plane to be reachable.
             </AccordionContent>
           </AccordionItem>
 

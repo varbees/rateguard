@@ -9,7 +9,7 @@ from typing import AsyncIterable, AsyncIterator
 
 from .bounded_cache import BoundedCache
 from .utils import extract_token_usage_from_text
-from ..exceptions import RateGuardException
+from ..exceptions import BudgetExceeded
 from ..types import Clock, TokenBudgetDecision, TokenBudgetOptions, TokenUsage
 
 
@@ -85,11 +85,16 @@ class TokenBudgetManager:
     async def enforce(self, key: str) -> AsyncIterator[None]:
         decision = await self.check_async(key)
         if not decision.allowed:
-            raise RateGuardException("token budget exceeded", status=429, retry_after=decision.retry_after_ms)
-        try:
-            yield
-        finally:
-            return
+            usage = self.usage(key)
+            used = int(usage.get(decision.window or "month", usage.get("month", 0)) or 0)
+            raise BudgetExceeded.from_decision(
+                used=used,
+                limit=decision.limit,
+                window=decision.window or "month",
+                retry_after_ms=decision.retry_after_ms,
+                retry_after_at_ms=self._clock.now() + max(0, decision.retry_after_ms),
+            )
+        yield
 
     async def track_stream(self, stream: AsyncIterable[object], key: str) -> AsyncIterator[object]:
         last_usage: TokenUsage | None = None

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from inspect import isawaitable
-from typing import Awaitable, Callable, cast
+from typing import AsyncIterable, AsyncIterator, Awaitable, Callable, cast
 import asyncio
 
 from .config import resolve_rateguard_options
@@ -9,6 +10,7 @@ from .core.circuit_breaker import CircuitBreaker
 from .core.event_emitter import build_event_envelope, create_event_emitter
 from .core.rate_limiter import RateLimiter
 from .core.token_budget import TokenBudgetManager
+from .exceptions import BudgetExceeded, RateGuardException
 from .types import CircuitBreakerDecision, CircuitBreakerOptions, CircuitBreakerState, Clock, CompletionObservation, EventEmitterLike, PreflightDecision, RateGuardEventPayload, RateGuardEventType, RateGuardOptions, RateLimitDecision, RateLimitOptions, RequestContext, ResponseSnapshot, TokenBudgetDecision, TokenBudgetOptions, TokenUsage
 
 
@@ -276,6 +278,10 @@ class RateGuard:
                 retry_after=decision.retry_after_ms or 0,
             )
 
+    @property
+    def budget(self) -> "BudgetFacade":
+        return BudgetFacade(self.runtime)
+
     def token_budget(
         self,
         *,
@@ -297,3 +303,57 @@ class RateGuard:
             event_emitter=self.runtime.event_emitter,
             capacity=50_000,
         )
+
+
+class BudgetFacade:
+    """Friendly token-budget wrapper for the noob quickstart path."""
+
+    def __init__(self, runtime: RateGuardRuntime) -> None:
+        self._runtime = runtime
+
+    def _resolve_key(self, user_id: str | None = None, *, key: str | None = None) -> str:
+        resolved = (user_id or key or "").strip()
+        if not resolved:
+            raise ValueError("user_id is required")
+        return resolved
+
+    def check(self, *, user_id: str | None = None, key: str | None = None) -> TokenBudgetDecision:
+        resolved = self._resolve_key(user_id, key=key)
+        return self._runtime.token_budget.check(resolved, self._runtime.config.token_budget)
+
+    async def check_async(self, *, user_id: str | None = None, key: str | None = None) -> TokenBudgetDecision:
+        resolved = self._resolve_key(user_id, key=key)
+        return await self._runtime.token_budget.check_async(resolved, self._runtime.config.token_budget)
+
+    def record(self, *, user_id: str | None = None, tokens: int, key: str | None = None) -> None:
+        resolved = self._resolve_key(user_id, key=key)
+        self._runtime.token_budget.record(resolved, tokens)
+
+    async def record_async(self, *, user_id: str | None = None, tokens: int, key: str | None = None) -> None:
+        resolved = self._resolve_key(user_id, key=key)
+        await self._runtime.token_budget.record_async(resolved, tokens)
+
+    def usage(self, *, user_id: str | None = None, key: str | None = None) -> dict[str, int | str]:
+        resolved = self._resolve_key(user_id, key=key)
+        return self._runtime.token_budget.usage(resolved, self._runtime.config.token_budget)
+
+    async def track_stream(self, stream: AsyncIterable[object], *, user_id: str | None = None, key: str | None = None) -> AsyncIterator[object]:
+        resolved = self._resolve_key(user_id, key=key)
+        async for chunk in self._runtime.token_budget.track_stream(stream, resolved):
+            yield chunk
+
+    @asynccontextmanager
+    async def enforce(self, *, user_id: str | None = None, hard_stop: bool = True, key: str | None = None):
+        resolved = self._resolve_key(user_id, key=key)
+        decision = await self._runtime.token_budget.check_async(resolved, self._runtime.config.token_budget)
+        if not decision.allowed and hard_stop:
+            usage = self._runtime.token_budget.usage(resolved, self._runtime.config.token_budget)
+            used = int(usage.get(decision.window or "month", usage.get("month", 0)) or 0)
+            raise BudgetExceeded.from_decision(
+                used=used,
+                limit=decision.limit,
+                window=decision.window or "month",
+                retry_after_ms=decision.retry_after_ms,
+                retry_after_at_ms=self._runtime.config.clock.now() + max(0, decision.retry_after_ms),
+            )
+        yield
