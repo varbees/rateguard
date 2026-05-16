@@ -108,6 +108,11 @@ python3 -m pip install -e '.[dev]'
 python3 -m pytest -q
 ```
 
+## Release Docs
+
+- Release notes: `docs/RELEASE_NOTES.md`
+- Release checklist: `docs/RELEASE_CHECKLIST.md`
+
 ## License
 
 MIT
