@@ -2,7 +2,7 @@ import { RateGuardRuntime } from '../runtime.js';
 import { formatRetryAfterMs, readFirstHeader } from '../core/utils.js';
 import type { HeadersLike, RequestContext, ResponseSnapshot } from '../types.js';
 
-export type DenialErrorCode = 'circuit_open' | 'rate_limit_exceeded';
+type DenialErrorCode = 'circuit_open' | 'rate_limit_exceeded';
 
 export interface DenialPayload {
   error: DenialErrorCode;

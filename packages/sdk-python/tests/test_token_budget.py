@@ -5,7 +5,7 @@ import pytest
 from rateguard import BudgetExceeded, RateGuard, TokenBudget
 from rateguard.types import ResponseSnapshot
 
-from .helpers import Chunk, FixedClock, RecorderEmitter, Usage
+from .helpers import FixedClock, RecorderEmitter, Usage
 
 
 @pytest.mark.asyncio

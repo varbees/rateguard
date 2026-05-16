@@ -42,10 +42,6 @@ type redisGCRALimiter struct {
 	clock  Clock
 }
 
-func newRedisGCRALimiter(client RedisLimiterClient) Limiter {
-	return newRedisGCRALimiterWithClock(client, systemClock{})
-}
-
 func newRedisGCRALimiterWithClock(client RedisLimiterClient, clock Clock) Limiter {
 	if clock == nil {
 		clock = systemClock{}

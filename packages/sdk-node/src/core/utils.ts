@@ -15,7 +15,7 @@ export function lowerBound(values: number[], target: number): number {
   return low;
 }
 
-export function readHeader(headers: HeadersLike | undefined, name: string): string {
+function readHeader(headers: HeadersLike | undefined, name: string): string {
   if (!headers) {
     return '';
   }
@@ -49,7 +49,7 @@ export function readFirstHeader(headers: HeadersLike | undefined, names: readonl
   return '';
 }
 
-export function readFirstIntHeader(headers: HeadersLike | undefined, names: readonly string[]): number {
+function readFirstIntHeader(headers: HeadersLike | undefined, names: readonly string[]): number {
   for (const name of names) {
     const value = readHeader(headers, name);
     if (!value) {
@@ -95,7 +95,7 @@ export function extractTokenUsageFromHeaders(headers: HeadersLike | undefined): 
   };
 }
 
-export function safeJsonParse(text: string): unknown | undefined {
+function safeJsonParse(text: string): unknown | undefined {
   try {
     return JSON.parse(text) as unknown;
   } catch {
@@ -203,7 +203,7 @@ export function extractTokenUsageFromText(text: string): TokenUsage | undefined 
 /**
  * Extract token usage from a parsed JSON value.
  */
-export function extractTokenUsageFromValue(value: unknown): TokenUsage | undefined {
+function extractTokenUsageFromValue(value: unknown): TokenUsage | undefined {
   if (!value) {
     return undefined;
   }
@@ -239,11 +239,6 @@ export function extractTokenUsageFromValue(value: unknown): TokenUsage | undefin
     aggregate = aggregate ? mergeUsage(aggregate, usage) : usage;
   }
   return aggregate;
-}
-
-export function joinPath(base: string | undefined, suffix: string): string {
-  const normalized = (base ?? '').replace(/\/$/, '');
-  return normalized ? `${normalized}${suffix}` : suffix;
 }
 
 export function toJson(data: unknown): string {

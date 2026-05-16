@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Literal, Mapping, Protocol, Sequence
+from dataclasses import dataclass
+from typing import Awaitable, Callable, Literal, Mapping, Protocol
 
 PresetName = Literal["dev", "standard", "high-throughput", "llm-heavy", "strict-upstream-protection"]
 TokenBudgetMode = Literal["hard-stop", "soft-stop"]

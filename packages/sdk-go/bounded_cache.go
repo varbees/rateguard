@@ -73,20 +73,6 @@ func (c *boundedCache[K, V]) set(key K, value V) {
 	c.items[key] = c.order.PushFront(boundedCacheEntry[K, V]{key: key, value: value})
 }
 
-func (c *boundedCache[K, V]) delete(key K) {
-	if c == nil {
-		return
-	}
-
-	elem, ok := c.items[key]
-	if !ok {
-		return
-	}
-
-	delete(c.items, key)
-	c.order.Remove(elem)
-}
-
 func (c *boundedCache[K, V]) len() int {
 	if c == nil {
 		return 0
