@@ -2,6 +2,15 @@ import { RateGuardRuntime } from '../runtime.js';
 import { formatRetryAfterMs, readFirstHeader } from '../core/utils.js';
 import type { HeadersLike, RequestContext, ResponseSnapshot } from '../types.js';
 
+export type DenialErrorCode = 'circuit_open' | 'rate_limit_exceeded';
+
+export interface DenialPayload {
+  error: DenialErrorCode;
+  retry_after_ms?: number;
+}
+
+export type DenialHeaders = Record<string, string>;
+
 export interface AdapterRequestContextInput {
   method: string | undefined;
   path: string;
@@ -31,18 +40,18 @@ export function buildAdapterRequestContext(
   };
 }
 
-export function denialPayload(statusCode: number, retryAfterMs: number): {
-  error: 'circuit_open' | 'rate_limit_exceeded';
-  retry_after_ms: number | undefined;
-} {
-  return {
+export function denialPayload(statusCode: number, retryAfterMs: number): DenialPayload {
+  const payload: DenialPayload = {
     error: statusCode === 503 ? 'circuit_open' : 'rate_limit_exceeded',
-    retry_after_ms: retryAfterMs > 0 ? retryAfterMs : undefined,
   };
+  if (retryAfterMs > 0) {
+    payload.retry_after_ms = retryAfterMs;
+  }
+  return payload;
 }
 
-export function denialHeaders(retryAfterMs: number): Record<string, string> {
-  const headers: Record<string, string> = {
+export function denialHeaders(retryAfterMs: number): DenialHeaders {
+  const headers: DenialHeaders = {
     'content-type': 'application/json',
   };
   if (retryAfterMs > 0) {

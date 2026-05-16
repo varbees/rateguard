@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import json
+from typing import TypeAlias
 
 from ..core.utils import format_retry_after_ms, read_first_header
-from ..types import RequestContext, ResolvedRateGuardOptions
+from ..types import HeadersLike, RequestContext, ResolvedRateGuardOptions
+
+DenialPayload: TypeAlias = dict[str, str | int]
 
 
-def denial_payload(status_code: int, retry_after_ms: int) -> dict[str, object]:
-    return {
+def denial_payload(status_code: int, retry_after_ms: int) -> DenialPayload:
+    payload: DenialPayload = {
         "error": "rate_limit_exceeded" if status_code == 429 else "circuit_open",
-        "retry_after_ms": retry_after_ms or None,
     }
+    if retry_after_ms > 0:
+        payload["retry_after_ms"] = retry_after_ms
+    return payload
 
 
 def denial_body(status_code: int, retry_after_ms: int) -> bytes:
@@ -34,7 +39,7 @@ def build_request_context(
     *,
     method: str,
     path: str,
-    headers: dict[str, object],
+    headers: HeadersLike,
 ) -> RequestContext:
     request_id = read_first_header(headers, ["x-request-id"]) or path
     trace_id = read_first_header(headers, ["traceparent", "x-trace-id", "x-request-id"]) or request_id

@@ -1,11 +1,11 @@
 import { RateGuardRuntime } from '../runtime.js';
 import { buildAdapterRequestContext, denialHeaders, denialPayload } from './common.js';
-import type { RateGuardOptions, RequestContext, ResponseSnapshot } from '../types.js';
+import type { HeadersLike, RateGuardOptions, RequestContext, ResponseSnapshot } from '../types.js';
 
 export interface FastifyLikeRequest {
   method?: string;
   url?: string;
-  headers: Record<string, string | string[] | undefined>;
+  headers: HeadersLike;
   body?: unknown;
 }
 

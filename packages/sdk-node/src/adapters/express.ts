@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { RateGuardRuntime } from '../runtime.js';
 import { formatRetryAfterMs } from '../core/utils.js';
-import { buildAdapterRequestContext } from './common.js';
+import { buildAdapterRequestContext, denialHeaders, denialPayload } from './common.js';
 import type { HeadersLike, RateGuardOptions, ResponseSnapshot } from '../types.js';
 
 export interface ExpressLikeRequest {
@@ -118,20 +118,15 @@ function writeDeniedResponse(res: ExpressLikeResponse, statusCode: number, retry
   } else {
     res.statusCode = statusCode;
   }
-  res.setHeader('content-type', 'application/json');
-  if (retryAfterMs > 0) {
-    res.setHeader('Retry-After', formatRetryAfterMs(retryAfterMs));
-    res.setHeader('X-Retry-After-Ms', String(retryAfterMs));
+  for (const [name, value] of Object.entries(denialHeaders(retryAfterMs))) {
+    res.setHeader(name, value);
   }
-  const body = JSON.stringify({
-    error: statusCode === 503 ? 'circuit_open' : 'rate_limited',
-    retry_after: retryAfterMs > 0 ? Math.max(1, Math.ceil(retryAfterMs / 1000)) : undefined,
-    message: statusCode === 503 ? 'RateGuard opened the circuit breaker.' : 'RateGuard rate limited this request.',
-  });
+  const payload = denialPayload(statusCode, retryAfterMs);
   if (typeof res.json === 'function') {
-    res.json(JSON.parse(body));
+    res.json(payload);
     return;
   }
+  const body = JSON.stringify(payload);
   if (typeof res.send === 'function') {
     res.send(body);
     return;
