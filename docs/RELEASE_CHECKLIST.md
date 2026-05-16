@@ -62,7 +62,17 @@ git push origin packages/sdk-go/vX.Y.Z
 GOPROXY=proxy.golang.org go list -m github.com/varbees/rateguard/packages/sdk-go@vX.Y.Z
 ```
 
-## 6. Publish Node
+## 6. Create Repo Release Tag
+
+Use a normal repo-wide tag for GitHub Releases. Keep the Go submodule tag from
+the previous step because that is what Go module resolution needs.
+
+```bash
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+## 7. Publish Node
 
 ```bash
 cd packages/sdk-node
@@ -74,7 +84,7 @@ npm view @varbees/rateguard-node version
 If npm requires two-factor auth, complete the browser challenge or pass a fresh
 OTP with `--otp`.
 
-## 7. Publish Python
+## 8. Publish Python
 
 The local project-scoped PyPI token is stored in the ignored root file
 `.env.pypi`.
@@ -95,7 +105,7 @@ python3 -m pip index versions varbees-rateguard
 
 Never commit `.env.pypi`.
 
-## 8. Public Install Smokes
+## 9. Public Install Smokes
 
 ```bash
 rm -rf /tmp/rateguard-public-go
@@ -121,7 +131,25 @@ python3 -m venv /tmp/rateguard-public-python
 /tmp/rateguard-public-python/bin/python -c "import rateguard; print(rateguard.__version__)"
 ```
 
-## 9. Post-release
+## 10. GitHub Release
+
+Create the GitHub Release from the repo-wide tag `vX.Y.Z`.
+
+If GitHub CLI is available and authenticated:
+
+```bash
+gh release create vX.Y.Z \
+  --title "RateGuard vX.Y.Z" \
+  --notes-file docs/RELEASE_NOTES.md
+```
+
+Otherwise create the release in the GitHub UI:
+
+- Tag: `vX.Y.Z`
+- Title: `RateGuard vX.Y.Z`
+- Body: copy the matching section from `docs/RELEASE_NOTES.md`
+
+## 11. Post-release
 
 - Update `docs/RELEASE_NOTES.md`.
 - Create a GitHub release for the pushed release tag.
