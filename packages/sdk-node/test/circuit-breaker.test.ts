@@ -32,5 +32,24 @@ describe('CircuitBreaker', () => {
     expect(probe.allowed).toBe(true);
     breaker.recordOutcome(true);
     expect(breaker.getState()).toBe('closed');
+
+    breaker.recordOutcome(true);
+    expect(breaker.getState()).toBe('closed');
+  });
+
+  it('normalizes invalid options', () => {
+    current = 1_000;
+    const breaker = new CircuitBreaker(clock, {
+      errorRateThreshold: 2,
+      openTimeoutMs: 0,
+      halfOpenSuccessesRequired: 0,
+      sampleSize: 0,
+    });
+
+    for (let index = 0; index < 10; index += 1) {
+      breaker.recordOutcome(false);
+    }
+
+    expect(breaker.getState()).toBe('open');
   });
 });

@@ -199,6 +199,10 @@ func (b *circuitBreaker) closeLocked() {
 	b.state = CircuitBreakerClosed
 	b.probeInFlight = false
 	b.consecutiveHalfOpenSuccess = 0
+	b.values = make([]bool, b.windowSize)
+	b.head = 0
+	b.total = 0
+	b.failures = 0
 }
 
 func (b *circuitBreaker) remainingOpenTimeoutLocked() time.Duration {

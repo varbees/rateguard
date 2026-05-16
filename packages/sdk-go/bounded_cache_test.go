@@ -41,6 +41,38 @@ func TestMemoryLimiterEvictsLeastRecentlyUsedKeys(t *testing.T) {
 	}
 }
 
+func TestMemoryLimiterUsesInjectedClock(t *testing.T) {
+	t.Parallel()
+
+	clock := &fakeBudgetClock{now: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC)}
+	limiter := newMemoryLimiterWithClock(clock, 2)
+	policy := PolicyPreset{
+		RequestsPerSecond: 1,
+		Burst:             1,
+	}
+
+	first, err := limiter.Allow(context.Background(), "tenant-a", policy)
+	if err != nil {
+		t.Fatalf("first allow returned error: %v", err)
+	}
+	second, err := limiter.Allow(context.Background(), "tenant-a", policy)
+	if err != nil {
+		t.Fatalf("second allow returned error: %v", err)
+	}
+	if !first.Allowed || second.Allowed {
+		t.Fatalf("initial decisions = %+v / %+v, want allow then deny", first, second)
+	}
+
+	clock.Advance(time.Second)
+	third, err := limiter.Allow(context.Background(), "tenant-a", policy)
+	if err != nil {
+		t.Fatalf("third allow returned error: %v", err)
+	}
+	if !third.Allowed {
+		t.Fatalf("third decision after clock advance = %+v, want allowed", third)
+	}
+}
+
 func TestTokenBudgetManagerEvictsLeastRecentlyUsedKeys(t *testing.T) {
 	t.Parallel()
 

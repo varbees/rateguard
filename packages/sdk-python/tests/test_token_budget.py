@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from rateguard import BudgetExceeded, RateGuard, TokenBudget
+from rateguard.types import ResponseSnapshot
 
 from .helpers import Chunk, FixedClock, RecorderEmitter, Usage
 
@@ -82,3 +83,36 @@ async def test_token_budget_streaming_extracts_openai_and_anthropic_usage() -> N
 
     usage = budget.usage("anthropic-user")
     assert usage["month"] == 7
+
+
+def test_token_budget_extracts_response_header_usage() -> None:
+    budget = TokenBudget(
+        clock=FixedClock(),
+        hour_limit=0,
+        day_limit=0,
+        month_limit=100,
+        mode="hard-stop",
+        soft_stop_at=0.8,
+        event_emitter=RecorderEmitter(),
+    )
+
+    usage = budget.record_from_snapshot(
+        "header-user",
+        ResponseSnapshot(
+            headers={
+                "x-rateguard-provider": "openai",
+                "x-rateguard-model": "gpt-4.1",
+                "x-rateguard-input-tokens": "2",
+                "x-rateguard-output-tokens": "3",
+                "x-rateguard-total-tokens": "5",
+            },
+            body="",
+            status_code=200,
+        ),
+    )
+
+    assert usage is not None
+    assert usage.provider == "openai"
+    assert usage.model == "gpt-4.1"
+    assert usage.total_tokens == 5
+    assert budget.usage("header-user")["month"] == 5

@@ -9,6 +9,7 @@ version = "0.1.0"
 description = "Python middleware SDK for RateGuard"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
 dependencies = ["cachetools>=5.0"]
 
 [project.optional-dependencies]

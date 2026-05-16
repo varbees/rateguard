@@ -32,11 +32,17 @@ class RateGuardMiddleware:
 
         status_code = 200
         body_parts: list[bytes] = []
+        response_headers: dict[str, object] = {}
 
         async def wrapped_send(message: dict[str, object]) -> None:
             nonlocal status_code
             if message.get("type") == "http.response.start":
                 status_code = int(message.get("status", 200))
+                raw_headers = message.get("headers")
+                if isinstance(raw_headers, list):
+                    for key, value in raw_headers:
+                        if isinstance(key, (bytes, bytearray)):
+                            response_headers[key.decode("latin-1")] = value.decode("latin-1") if isinstance(value, (bytes, bytearray)) else value
             elif message.get("type") == "http.response.body":
                 body = message.get("body")
                 if isinstance(body, (bytes, bytearray)):
@@ -44,7 +50,7 @@ class RateGuardMiddleware:
             await send(message)
 
         await self.app(scope, receive, wrapped_send)
-        snapshot = ResponseSnapshot(headers={}, body=b"".join(body_parts).decode("utf-8", "ignore"), status_code=status_code)
+        snapshot = ResponseSnapshot(headers=response_headers, body=b"".join(body_parts).decode("utf-8", "ignore"), status_code=status_code)
         await self.guard.observe_async(request, CompletionObservation(status_code=status_code, snapshot=snapshot), started_at)
 
     async def _send_denied(self, send: ASGISend, status_code: int, retry_after_ms: int) -> None:

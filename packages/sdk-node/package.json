@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": false,
   "description": "Node.js middleware SDK for RateGuard",
+  "license": "MIT",
   "type": "module",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -12,6 +13,11 @@
       "types": "./dist/types/index.d.ts",
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
+    },
+    "./express": {
+      "types": "./dist/types/adapters/express.d.ts",
+      "import": "./dist/esm/adapters/express.js",
+      "require": "./dist/cjs/adapters/express.js"
     },
     "./fastify": {
       "types": "./dist/types/adapters/fastify.d.ts",

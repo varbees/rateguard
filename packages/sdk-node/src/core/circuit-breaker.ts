@@ -25,10 +25,10 @@ export class CircuitBreaker {
 
   constructor(clock: Clock, options: Required<CircuitBreakerOptions>) {
     this.clock = clock;
-    this.windowSize = options.sampleSize;
-    this.errorRateThreshold = options.errorRateThreshold;
-    this.openTimeoutMs = options.openTimeoutMs;
-    this.halfOpenSuccessesRequired = options.halfOpenSuccessesRequired;
+    this.windowSize = positiveInteger(options.sampleSize, 100);
+    this.errorRateThreshold = options.errorRateThreshold > 0 && options.errorRateThreshold <= 1 ? options.errorRateThreshold : 0.5;
+    this.openTimeoutMs = positiveInteger(options.openTimeoutMs, 60_000);
+    this.halfOpenSuccessesRequired = positiveInteger(options.halfOpenSuccessesRequired, 2);
     this.minSamplesToTrip = Math.min(10, this.windowSize);
     this.ring = {
       values: new Array<boolean>(this.windowSize).fill(false),
@@ -93,9 +93,7 @@ export class CircuitBreaker {
         this.consecutiveHalfOpenSuccesses += 1;
         this.probeInFlight = false;
         if (this.consecutiveHalfOpenSuccesses >= this.halfOpenSuccessesRequired) {
-          this.state = 'closed';
-          this.consecutiveHalfOpenSuccesses = 0;
-          this.probeInFlight = false;
+          this.close();
         }
       } else {
         this.open();
@@ -123,6 +121,16 @@ export class CircuitBreaker {
     this.consecutiveHalfOpenSuccesses = 0;
   }
 
+  private close(): void {
+    this.state = 'closed';
+    this.probeInFlight = false;
+    this.consecutiveHalfOpenSuccesses = 0;
+    this.ring.values.fill(false);
+    this.ring.head = 0;
+    this.ring.total = 0;
+    this.ring.failures = 0;
+  }
+
   private pushOutcome(failed: boolean): void {
     const outgoing = this.ring.values[this.ring.head];
     if (this.ring.total >= this.windowSize && outgoing) {
@@ -137,4 +145,8 @@ export class CircuitBreaker {
     this.ring.head = (this.ring.head + 1) % this.windowSize;
     this.ring.total = Math.min(this.ring.total + 1, this.windowSize);
   }
+}
+
+function positiveInteger(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }

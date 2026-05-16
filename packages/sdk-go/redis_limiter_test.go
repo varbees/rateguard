@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -52,12 +53,37 @@ func TestHTTPMiddlewareUsesRedisLimiterForRepeatRequests(t *testing.T) {
 
 type fakeRedisLimiterClient struct {
 	calls atomic.Int32
+	nowUs atomic.Int64
 }
 
-func (f *fakeRedisLimiterClient) Eval(_ context.Context, _ string, _ []string, _ ...interface{}) *redis.Cmd {
+func (f *fakeRedisLimiterClient) Eval(_ context.Context, _ string, _ []string, args ...interface{}) *redis.Cmd {
+	if len(args) >= 3 {
+		if now, ok := args[2].(int64); ok {
+			f.nowUs.Store(now)
+		}
+	}
 	if f.calls.Add(1) == 1 {
 		return redis.NewCmdResult([]interface{}{int64(1), int64(0), int64(0), int64(0)}, nil)
 	}
 
 	return redis.NewCmdResult([]interface{}{int64(0), int64(0), int64(1), int64(1)}, nil)
+}
+
+func TestRedisLimiterUsesInjectedClock(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeRedisLimiterClient{}
+	clock := &fakeBudgetClock{now: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC)}
+	limiter := newRedisGCRALimiterWithClock(client, clock)
+	policy := PolicyPreset{RequestsPerSecond: 1, Burst: 1}
+
+	_, err := limiter.Allow(context.Background(), "tenant-a", policy)
+	if err != nil {
+		t.Fatalf("allow returned error: %v", err)
+	}
+
+	want := clock.Now().UnixNano() / 1000
+	if got := client.nowUs.Load(); got != want {
+		t.Fatalf("redis nowUs = %d, want %d", got, want)
+	}
 }

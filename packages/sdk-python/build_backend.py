@@ -26,30 +26,32 @@ class _WheelFile:
 
 
 def _metadata_text() -> str:
-	return "\n".join(
-		[
-			"Metadata-Version: 2.1",
-			"Name: rateguard",
-			"Version: 0.1.0",
-			"Summary: Python middleware SDK for RateGuard",
-			"Requires-Dist: cachetools>=5.0",
-			"Provides-Extra: fastapi",
-			"Requires-Dist: fastapi>=0.100.0; extra == 'fastapi'",
-			"Requires-Dist: starlette>=0.27.0; extra == 'fastapi'",
-			"Provides-Extra: flask",
-			"Requires-Dist: flask>=2.0.0; extra == 'flask'",
-			"Provides-Extra: django",
-			"Requires-Dist: django>=4.0; extra == 'django'",
-			"Provides-Extra: dev",
-			"Requires-Dist: pytest; extra == 'dev'",
-			"Requires-Dist: pytest-asyncio; extra == 'dev'",
-			"Requires-Dist: httpx; extra == 'dev'",
-			"Requires-Dist: anyio; extra == 'dev'",
-			"Requires-Dist: openai; extra == 'dev'",
-			"Requires-Dist: anthropic; extra == 'dev'",
-			"",
-		]
-	)
+    return "\n".join(
+        [
+            "Metadata-Version: 2.1",
+            "Name: rateguard",
+            "Version: 0.1.0",
+            "Summary: Python middleware SDK for RateGuard",
+            "Requires-Python: >=3.10",
+            "License: MIT",
+            "Requires-Dist: cachetools>=5.0",
+            "Provides-Extra: fastapi",
+            "Requires-Dist: fastapi>=0.100.0; extra == 'fastapi'",
+            "Requires-Dist: starlette>=0.27.0; extra == 'fastapi'",
+            "Provides-Extra: flask",
+            "Requires-Dist: flask>=2.0.0; extra == 'flask'",
+            "Provides-Extra: django",
+            "Requires-Dist: django>=4.0; extra == 'django'",
+            "Provides-Extra: dev",
+            "Requires-Dist: pytest; extra == 'dev'",
+            "Requires-Dist: pytest-asyncio; extra == 'dev'",
+            "Requires-Dist: httpx; extra == 'dev'",
+            "Requires-Dist: anyio; extra == 'dev'",
+            "Requires-Dist: openai; extra == 'dev'",
+            "Requires-Dist: anthropic; extra == 'dev'",
+            "",
+        ]
+    )
 
 
 def _wheel_text() -> str:
@@ -82,31 +84,55 @@ def _record_text(files: Iterable[_WheelFile]) -> str:
     return buffer.getvalue()
 
 
-def _wheel_files() -> list[_WheelFile]:
-    files = [
-        _WheelFile(f"{NAME}.pth", _editable_pth_text().encode("utf-8")),
+def _package_files() -> list[_WheelFile]:
+    files: list[_WheelFile] = []
+    for path in sorted(ROOT.joinpath(NAME).rglob("*")):
+        if _skip_package_path(path):
+            continue
+        arcname = path.relative_to(ROOT).as_posix()
+        files.append(_WheelFile(arcname, path.read_bytes()))
+    return files
+
+
+def _skip_package_path(path: Path) -> bool:
+    if path.is_dir():
+        return True
+    if "__pycache__" in path.parts:
+        return True
+    return path.suffix in {".pyc", ".pyo"}
+
+
+def _dist_info_files() -> list[_WheelFile]:
+    return [
         _WheelFile(f"{DIST_INFO}/METADATA", _metadata_text().encode("utf-8")),
         _WheelFile(f"{DIST_INFO}/WHEEL", _wheel_text().encode("utf-8")),
         _WheelFile(f"{DIST_INFO}/top_level.txt", _top_level_text().encode("utf-8")),
+    ]
+
+
+def _wheel_files(*, editable: bool) -> list[_WheelFile]:
+    files = [
+        *([_WheelFile(f"{NAME}.pth", _editable_pth_text().encode("utf-8"))] if editable else _package_files()),
+        *_dist_info_files(),
     ]
     files.append(_WheelFile(f"{DIST_INFO}/RECORD", _record_text(files).encode("utf-8")))
     return files
 
 
-def _write_wheel(wheel_directory: str) -> str:
+def _write_wheel(wheel_directory: str, *, editable: bool) -> str:
     wheel_path = Path(wheel_directory) / WHEEL_NAME
     with ZipFile(wheel_path, "w", compression=ZIP_DEFLATED) as archive:
-        for file in _wheel_files():
+        for file in _wheel_files(editable=editable):
             archive.writestr(file.path, file.content)
     return wheel_path.name
 
 
 def build_wheel(wheel_directory: str, config_settings: dict[str, object] | None = None, metadata_directory: str | None = None) -> str:
-    return _write_wheel(wheel_directory)
+    return _write_wheel(wheel_directory, editable=False)
 
 
 def build_editable(wheel_directory: str, config_settings: dict[str, object] | None = None, metadata_directory: str | None = None) -> str:
-    return _write_wheel(wheel_directory)
+    return _write_wheel(wheel_directory, editable=True)
 
 
 def get_requires_for_build_wheel(config_settings: dict[str, object] | None = None) -> list[str]:
@@ -139,8 +165,9 @@ def build_sdist(sdist_directory: str, config_settings: dict[str, object] | None 
     with tar_open(sdist_path, "w:gz") as archive:
         _add_sdist_file(archive, "pyproject.toml")
         _add_sdist_file(archive, "README.md")
+        _add_sdist_file(archive, "build_backend.py")
         for path in ROOT.joinpath("rateguard").rglob("*"):
-            if path.is_dir():
+            if _skip_package_path(path):
                 continue
             arcname = f"{NAME}-{VERSION}/{path.relative_to(ROOT).as_posix()}"
             archive.add(path, arcname=arcname)

@@ -39,10 +39,18 @@ return {1, remaining, 0, 0}
 
 type redisGCRALimiter struct {
 	client RedisLimiterClient
+	clock  Clock
 }
 
 func newRedisGCRALimiter(client RedisLimiterClient) Limiter {
-	return &redisGCRALimiter{client: client}
+	return newRedisGCRALimiterWithClock(client, systemClock{})
+}
+
+func newRedisGCRALimiterWithClock(client RedisLimiterClient, clock Clock) Limiter {
+	if clock == nil {
+		clock = systemClock{}
+	}
+	return &redisGCRALimiter{client: client, clock: clock}
 }
 
 func (l *redisGCRALimiter) Allow(ctx context.Context, key string, policy PolicyPreset) (AdmissionDecision, error) {
@@ -59,7 +67,7 @@ func (l *redisGCRALimiter) Allow(ctx context.Context, key string, policy PolicyP
 		return AdmissionDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}, nil
 	}
 
-	nowUs := time.Now().UTC().UnixNano() / 1000
+	nowUs := l.clock.Now().UTC().UnixNano() / 1000
 	result, err := l.client.Eval(ctx, luaRedisGCRARateLimitScript, []string{key}, intervalUs, burst, nowUs, ttlMs).Result()
 	if err != nil {
 		return AdmissionDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}, fmt.Errorf("execute redis gcra limiter: %w", err)

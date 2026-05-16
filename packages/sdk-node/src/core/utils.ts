@@ -63,6 +63,38 @@ export function readFirstIntHeader(headers: HeadersLike | undefined, names: read
   return 0;
 }
 
+export function extractTokenUsageFromHeaders(headers: HeadersLike | undefined): TokenUsage | undefined {
+  const inputTokens = readFirstIntHeader(headers, [
+    'x-rateguard-input-tokens',
+    'x-input-tokens',
+    'input-tokens',
+    'prompt-tokens',
+  ]);
+  const outputTokens = readFirstIntHeader(headers, [
+    'x-rateguard-output-tokens',
+    'x-output-tokens',
+    'output-tokens',
+    'completion-tokens',
+  ]);
+  const totalTokens = readFirstIntHeader(headers, [
+    'x-rateguard-total-tokens',
+    'x-total-tokens',
+    'total-tokens',
+  ]);
+
+  if (inputTokens === 0 && outputTokens === 0 && totalTokens === 0) {
+    return undefined;
+  }
+
+  return {
+    provider: readFirstHeader(headers, ['x-rateguard-provider', 'x-provider', 'provider']) || undefined,
+    model: readFirstHeader(headers, ['x-rateguard-model', 'x-model', 'model']) || undefined,
+    inputTokens,
+    outputTokens,
+    totalTokens: totalTokens || inputTokens + outputTokens,
+  };
+}
+
 export function safeJsonParse(text: string): unknown | undefined {
   try {
     return JSON.parse(text) as unknown;

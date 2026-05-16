@@ -39,16 +39,26 @@ type memoryBucket struct {
 type MemoryLimiter struct {
 	mu      sync.Mutex
 	buckets *boundedCache[string, *memoryBucket]
+	clock   Clock
 }
 
 // NewMemoryLimiter creates a limiter that stores counters locally.
 func NewMemoryLimiter() *MemoryLimiter {
-	return newMemoryLimiterWithCapacity(defaultMemoryLimiterCacheCapacity)
+	return newMemoryLimiterWithClock(systemClock{}, defaultMemoryLimiterCacheCapacity)
 }
 
 func newMemoryLimiterWithCapacity(capacity int) *MemoryLimiter {
+	return newMemoryLimiterWithClock(systemClock{}, capacity)
+}
+
+func newMemoryLimiterWithClock(clock Clock, capacity int) *MemoryLimiter {
+	if clock == nil {
+		clock = systemClock{}
+	}
+
 	return &MemoryLimiter{
 		buckets: newBoundedCache[string, *memoryBucket](capacity),
+		clock:   clock,
 	}
 }
 
@@ -57,7 +67,11 @@ func (l *MemoryLimiter) Allow(_ context.Context, key string, policy PolicyPreset
 		return AdmissionDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}, nil
 	}
 
-	now := time.Now().UTC()
+	clock := l.clock
+	if clock == nil {
+		clock = systemClock{}
+	}
+	now := clock.Now().UTC()
 
 	l.mu.Lock()
 	defer l.mu.Unlock()

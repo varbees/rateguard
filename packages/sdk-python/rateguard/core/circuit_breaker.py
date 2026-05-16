@@ -20,10 +20,10 @@ class CircuitBreaker:
 
     def __init__(self, clock: Clock, options: CircuitBreakerOptions) -> None:
         self._clock = clock
-        self._window_size = max(1, options.sample_size or 100)
-        self._threshold = options.error_rate_threshold if options.error_rate_threshold is not None else 0.5
-        self._open_timeout_ms = options.open_timeout_ms if options.open_timeout_ms is not None else 60_000
-        self._half_open_successes_required = options.half_open_successes_required if options.half_open_successes_required is not None else 2
+        self._window_size = _positive_int(options.sample_size, 100)
+        self._threshold = options.error_rate_threshold if options.error_rate_threshold is not None and 0 < options.error_rate_threshold <= 1 else 0.5
+        self._open_timeout_ms = _positive_int(options.open_timeout_ms, 60_000)
+        self._half_open_successes_required = _positive_int(options.half_open_successes_required, 2)
         self._min_samples_to_trip = min(10, self._window_size)
         self._state: CircuitBreakerState = "closed"
         self._opened_at_ms = 0.0
@@ -62,6 +62,7 @@ class CircuitBreaker:
                     if self._half_open_successes >= self._half_open_successes_required:
                         self._state = "closed"
                         self._half_open_successes = 0
+                        self._ring = _OutcomeRing([False] * self._window_size)
                 else:
                     self._open_locked()
             elif self._state == "closed":
@@ -103,3 +104,7 @@ class CircuitBreaker:
             self._ring.failures += 1
         self._ring.head = (self._ring.head + 1) % self._window_size
         self._ring.total = min(self._ring.total + 1, self._window_size)
+
+
+def _positive_int(value: int | None, fallback: int) -> int:
+    return int(value) if value is not None and value > 0 else fallback

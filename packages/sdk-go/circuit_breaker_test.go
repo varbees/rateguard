@@ -71,6 +71,9 @@ func TestCircuitBreakerOpensAndRecovers(t *testing.T) {
 	if recovered := breaker.RecordOutcome(true); recovered.State != CircuitBreakerClosed {
 		t.Fatalf("state after second recovery success = %q, want closed", recovered.State)
 	}
+	if decision := breaker.RecordOutcome(true); decision.State != CircuitBreakerClosed {
+		t.Fatalf("state after fresh closed success = %q, want closed", decision.State)
+	}
 }
 
 func TestHTTPMiddlewareRejectsWhenCircuitOpen(t *testing.T) {

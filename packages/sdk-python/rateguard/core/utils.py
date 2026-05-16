@@ -47,6 +47,42 @@ def read_first_header(headers: HeadersLike | None, names: list[str]) -> str:
     return ""
 
 
+def read_first_int_header(headers: HeadersLike | None, names: list[str]) -> int:
+    for name in names:
+        value = read_header(headers, name)
+        if not value:
+            continue
+        try:
+            return int(value)
+        except ValueError:
+            continue
+    return 0
+
+
+def extract_token_usage_from_headers(headers: HeadersLike | None) -> TokenUsage | None:
+    input_tokens = read_first_int_header(
+        headers,
+        ["x-rateguard-input-tokens", "x-input-tokens", "input-tokens", "prompt-tokens"],
+    )
+    output_tokens = read_first_int_header(
+        headers,
+        ["x-rateguard-output-tokens", "x-output-tokens", "output-tokens", "completion-tokens"],
+    )
+    total_tokens = read_first_int_header(
+        headers,
+        ["x-rateguard-total-tokens", "x-total-tokens", "total-tokens"],
+    )
+    if input_tokens == 0 and output_tokens == 0 and total_tokens == 0:
+        return None
+    return TokenUsage(
+        provider=read_first_header(headers, ["x-rateguard-provider", "x-provider", "provider"]) or None,
+        model=read_first_header(headers, ["x-rateguard-model", "x-model", "model"]) or None,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=total_tokens or input_tokens + output_tokens,
+    )
+
+
 def safe_json_parse(text: str) -> object | None:
     try:
         return json.loads(text)

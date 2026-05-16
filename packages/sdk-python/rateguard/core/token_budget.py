@@ -8,7 +8,7 @@ import asyncio
 from typing import AsyncIterable, AsyncIterator
 
 from .bounded_cache import BoundedCache
-from .utils import extract_token_usage_from_text
+from .utils import extract_token_usage_from_headers, extract_token_usage_from_text
 from ..exceptions import BudgetExceeded
 from ..types import Clock, TokenBudgetDecision, TokenBudgetOptions, TokenUsage
 
@@ -75,7 +75,7 @@ class TokenBudgetManager:
             return self._usage_locked(key, options or self._limits)
 
     def record_from_snapshot(self, key: str, snapshot: object) -> TokenUsage | None:
-        usage = extract_token_usage_from_text(getattr(snapshot, "body", "") or "")
+        usage = extract_token_usage_from_headers(getattr(snapshot, "headers", None)) or extract_token_usage_from_text(getattr(snapshot, "body", "") or "")
         if usage is None:
             return None
         self.record(key, usage.total_tokens)

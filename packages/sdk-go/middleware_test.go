@@ -144,6 +144,9 @@ func TestHTTPMiddlewareRejectsWhenLimitExceeded(t *testing.T) {
 	if got := secondRes.Header().Get("Retry-After"); got == "" {
 		t.Fatal("Retry-After header should be set on rate limit rejection")
 	}
+	if got := secondRes.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("Content-Type = %q, want application/json", got)
+	}
 	if got := secondRes.Header().Get("X-RateGuard-Limit"); got != "1" {
 		t.Fatalf("X-RateGuard-Limit = %q, want %q", got, "1")
 	}

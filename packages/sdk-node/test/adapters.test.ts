@@ -166,4 +166,36 @@ describe('adapters', () => {
 
     expect(usage.month).toBe(7);
   });
+
+  it('emits a 503 event when the circuit breaker blocks preflight', async () => {
+    const events: Array<{ event_type: string; payload: { status_code: number; circuit_breaker_state: string } }> = [];
+    const guard = new RateGuard({
+      preset: 'dev',
+      circuitBreaker: {
+        errorRateThreshold: 0.5,
+        openTimeoutMs: 60_000,
+        halfOpenSuccessesRequired: 1,
+        sampleSize: 2,
+      },
+      eventEmitter: {
+        async emit(event) {
+          events.push(event);
+        },
+      },
+    });
+
+    guard.runtime.circuitBreaker.recordOutcome(false);
+    guard.runtime.circuitBreaker.recordOutcome(false);
+
+    const middleware = guard.middleware();
+    const res = new FakeExpressResponse();
+    await middleware({ method: 'GET', url: '/blocked', headers: {} } as never, res, async () => {
+      throw new Error('next should not run');
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(events.at(-1)?.event_type).toBe('request.completed');
+    expect(events.at(-1)?.payload.status_code).toBe(503);
+    expect(events.at(-1)?.payload.circuit_breaker_state).toBe('open');
+  });
 });

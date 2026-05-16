@@ -1,5 +1,5 @@
 import { BoundedCache } from './bounded-cache.js';
-import { extractTokenUsageFromText } from './utils.js';
+import { extractTokenUsageFromHeaders, extractTokenUsageFromText } from './utils.js';
 import type {
   Clock,
   RateGuardEventPayload,
@@ -86,7 +86,7 @@ export class TokenBudgetManager {
   }
 
   recordFromSnapshot(key: string, snapshot: ResponseSnapshot): TokenUsage | undefined {
-    const usage = extractTokenUsageFromText(snapshot.body);
+    const usage = extractTokenUsageFromHeaders(snapshot.headers) ?? extractTokenUsageFromText(snapshot.body);
     if (!usage) {
       return undefined;
     }

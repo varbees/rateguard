@@ -64,9 +64,9 @@ func New(cfg Config) *SDK {
 	case cfg.DisableRateLimit:
 		limiter = NoopLimiter{}
 	case cfg.RedisClient != nil:
-		limiter = newRedisGCRALimiter(cfg.RedisClient)
+		limiter = newRedisGCRALimiterWithClock(cfg.RedisClient, clock)
 	default:
-		limiter = NewMemoryLimiter()
+		limiter = newMemoryLimiterWithClock(clock, defaultMemoryLimiterCacheCapacity)
 	}
 
 	var emitter EventEmitter
@@ -261,11 +261,13 @@ func (s *SDK) applyHeaders(h http.Header, decision AdmissionDecision) {
 }
 
 func (s *SDK) writeRateLimitResponse(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusTooManyRequests)
 	_, _ = w.Write([]byte(`{"error":"rate_limit_exceeded","message":"request rejected by RateGuard"}`))
 }
 
 func (s *SDK) writeTokenBudgetResponse(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusTooManyRequests)
 	_, _ = w.Write([]byte(`{"error":"token_budget_exceeded","message":"token budget exhausted by RateGuard"}`))
 }
@@ -274,6 +276,7 @@ func (s *SDK) writeCircuitBreakerResponse(w http.ResponseWriter, decision Circui
 	if decision.RetryAfter > 0 {
 		w.Header().Set("Retry-After", strconv.FormatInt(ceilDurationSeconds(decision.RetryAfter), 10))
 	}
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusServiceUnavailable)
 	_, _ = w.Write([]byte(`{"error":"circuit_open","message":"request rejected by RateGuard circuit breaker"}`))
 }
@@ -397,6 +400,10 @@ type responseRecorder struct {
 	http.ResponseWriter
 	status int
 	body   bytes.Buffer
+}
+
+func (r *responseRecorder) Unwrap() http.ResponseWriter {
+	return r.ResponseWriter
 }
 
 func (r *responseRecorder) WriteHeader(statusCode int) {

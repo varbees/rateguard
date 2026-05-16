@@ -71,7 +71,7 @@ def resolve_rateguard_options(options: RateGuardOptions) -> ResolvedRateGuardOpt
     preset = preset_policy(options.preset)
     rate_limit = options.rate_limit or RateLimitOptions()
     token_budget = options.token_budget or TokenBudgetOptions()
-    circuit_breaker = options.circuit_breaker or CircuitBreakerOptions()
+    circuit_breaker = normalize_circuit_breaker_options(options.circuit_breaker)
     clock = options.clock or system_clock()
     return ResolvedRateGuardOptions(
         api_key=options.api_key,
@@ -98,13 +98,28 @@ def resolve_rateguard_options(options: RateGuardOptions) -> ResolvedRateGuardOpt
             soft_stop_at=token_budget.soft_stop_at if token_budget.soft_stop_at is not None else 0.8,
         ),
         circuit_breaker=CircuitBreakerOptions(
-            error_rate_threshold=circuit_breaker.error_rate_threshold if circuit_breaker.error_rate_threshold is not None else 0.5,
-            open_timeout_ms=circuit_breaker.open_timeout_ms if circuit_breaker.open_timeout_ms is not None else 60_000,
-            half_open_successes_required=circuit_breaker.half_open_successes_required if circuit_breaker.half_open_successes_required is not None else 2,
-            sample_size=circuit_breaker.sample_size if circuit_breaker.sample_size is not None else 100,
+            error_rate_threshold=circuit_breaker.error_rate_threshold,
+            open_timeout_ms=circuit_breaker.open_timeout_ms,
+            half_open_successes_required=circuit_breaker.half_open_successes_required,
+            sample_size=circuit_breaker.sample_size,
         ),
         event_emitter=options.event_emitter,
         clock=clock,
+    )
+
+
+def normalize_circuit_breaker_options(options: CircuitBreakerOptions | None) -> CircuitBreakerOptions:
+    raw = options or CircuitBreakerOptions()
+    threshold = raw.error_rate_threshold
+    open_timeout_ms = raw.open_timeout_ms
+    half_open_successes_required = raw.half_open_successes_required
+    sample_size = raw.sample_size
+
+    return CircuitBreakerOptions(
+        error_rate_threshold=threshold if threshold is not None and 0 < threshold <= 1 else 0.5,
+        open_timeout_ms=int(open_timeout_ms) if open_timeout_ms is not None and open_timeout_ms > 0 else 60_000,
+        half_open_successes_required=int(half_open_successes_required) if half_open_successes_required is not None and half_open_successes_required > 0 else 2,
+        sample_size=int(sample_size) if sample_size is not None and sample_size > 0 else 100,
     )
 
 
@@ -118,4 +133,3 @@ def derive_ws_url(control_plane_url: str | None) -> str | None:
             return url.replace("http://", "ws://", 1).rstrip("/") + "/ws"
         case _:
             return None
-

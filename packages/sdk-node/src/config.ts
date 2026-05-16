@@ -209,14 +209,30 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
       mode: tokenBudgetMode,
       softStopAt: options.tokenBudget?.softStopAt ?? 0.8,
     },
-    circuitBreaker: {
-      errorRateThreshold: options.circuitBreaker?.errorRateThreshold ?? 0.5,
-      openTimeoutMs: options.circuitBreaker?.openTimeoutMs ?? 60_000,
-      halfOpenSuccessesRequired: options.circuitBreaker?.halfOpenSuccessesRequired ?? 2,
-      sampleSize: options.circuitBreaker?.sampleSize ?? 100,
-    },
+    circuitBreaker: normalizeCircuitBreakerOptions(options.circuitBreaker),
     eventEmitter: options.eventEmitter ?? defaultEventEmitter,
     clock,
+  };
+}
+
+/**
+ * Normalize circuit-breaker options so invalid user input cannot poison the
+ * rolling window state machine.
+ */
+export function normalizeCircuitBreakerOptions(options: CircuitBreakerOptions | undefined): Required<CircuitBreakerOptions> {
+  const threshold = options?.errorRateThreshold;
+  const openTimeoutMs = options?.openTimeoutMs;
+  const halfOpenSuccessesRequired = options?.halfOpenSuccessesRequired;
+  const sampleSize = options?.sampleSize;
+
+  return {
+    errorRateThreshold: typeof threshold === 'number' && threshold > 0 && threshold <= 1 ? threshold : 0.5,
+    openTimeoutMs: typeof openTimeoutMs === 'number' && openTimeoutMs > 0 ? Math.floor(openTimeoutMs) : 60_000,
+    halfOpenSuccessesRequired:
+      typeof halfOpenSuccessesRequired === 'number' && halfOpenSuccessesRequired > 0
+        ? Math.floor(halfOpenSuccessesRequired)
+        : 2,
+    sampleSize: typeof sampleSize === 'number' && sampleSize > 0 ? Math.floor(sampleSize) : 100,
   };
 }
 

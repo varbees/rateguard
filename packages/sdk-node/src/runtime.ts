@@ -42,6 +42,7 @@ export class RateGuardRuntime {
     const breakerDecision = this.circuitBreaker.allow();
 
     if (!breakerDecision.allowed) {
+      await this.emit('request.completed', request, breakerDecision.state, 503, start, undefined, undefined, breakerDecision.retryAfterMs);
       return {
         allowed: false,
         statusCode: 503,
