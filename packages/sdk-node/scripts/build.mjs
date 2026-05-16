@@ -4,9 +4,11 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 
 const rootDir = fileURLToPath(new URL('..', import.meta.url));
+const tscBin = process.platform === 'win32' ? 'tsc.cmd' : 'tsc';
+const tscPath = join(rootDir, 'node_modules', '.bin', tscBin);
 
 function runTsc(project) {
-  execFileSync('tsc', ['-p', project], { cwd: rootDir, stdio: 'inherit' });
+  execFileSync(tscPath, ['-p', project], { cwd: rootDir, stdio: 'inherit' });
 }
 
 runTsc('tsconfig.esm.json');

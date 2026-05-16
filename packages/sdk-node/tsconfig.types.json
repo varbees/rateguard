@@ -5,7 +5,8 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "module": "ESNext",
-    "moduleResolution": "Bundler"
+    "moduleResolution": "Bundler",
+    "rootDir": "./src"
   },
   "include": ["src/**/*.ts"]
 }

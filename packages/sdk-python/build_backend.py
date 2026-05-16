@@ -47,7 +47,6 @@ def _metadata_text() -> str:
 			"Requires-Dist: anyio; extra == 'dev'",
 			"Requires-Dist: openai; extra == 'dev'",
 			"Requires-Dist: anthropic; extra == 'dev'",
-			"Requires-Dist: mypy; extra == 'dev'",
 			"",
 		]
 	)

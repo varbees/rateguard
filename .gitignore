@@ -1,4 +1,4 @@
-# Root workspace ignores
+# OS/editor noise
 .DS_Store
 Thumbs.db
 *.swp
@@ -6,43 +6,31 @@ Thumbs.db
 *~
 
 # Environment files
-**/.env
-**/.env.local
-**/.env.development.local
-**/.env.production.local
-**/.env.test.local
-**/.env.staging.local
+.env
+.env.*
+!.env.example
 
-# Go build and test artifacts
-apps/gateway/bin/
-apps/gateway/tmp/
-apps/gateway/test-results/
-apps/gateway/*.log
-apps/gateway/*.out
-apps/gateway/*.txt
-apps/gateway/*.test
-apps/gateway/coverage.html
-apps/gateway/rateguard
-apps/gateway/aggregator
-
-# Node / Next.js artifacts
-node_modules/
-apps/dashboard/node_modules/
-apps/dashboard/.next/
-apps/dashboard/.turbo/
-apps/dashboard/coverage/
-apps/dashboard/*.tsbuildinfo
-
-# Generic build outputs
+# Go
 bin/
-build/
+*.test
+*.out
+coverage.html
+
+# Node
+node_modules/
 dist/
 coverage/
-*.log
-*.out
-*.tmp
+*.tsbuildinfo
 
-# Python SDK artifacts
-packages/sdk-python/__pycache__/
-packages/sdk-python/**/*.pyc
-packages/sdk-python/.pytest_cache/
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+*.egg-info/
+
+# Local agent/cache output
+.cache/
+codex_resume.txt
