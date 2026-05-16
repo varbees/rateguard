@@ -23,6 +23,28 @@ describe('TokenBudgetManager', () => {
     expect(decision.retryAfterMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('reserves hard-budget capacity to prevent concurrent double spend', () => {
+    const budget = new TokenBudgetManager({ clock, capacity: 50_000 });
+    const key = 'tenant:route:upstream:GET';
+    const options = {
+      hourLimit: 0,
+      dayLimit: 0,
+      monthLimit: 100,
+      mode: 'hard-stop' as const,
+      softStopAt: 0.8,
+    };
+
+    const first = budget.reserve(key, options);
+    expect(first.decision.allowed).toBe(true);
+    expect(first.reservationId).toBeDefined();
+
+    const second = budget.reserve(key, options);
+    expect(second.decision.allowed).toBe(false);
+
+    budget.commitReservation(key, first.reservationId, 17);
+    expect(budget.check(key, options).remaining).toBe(83);
+  });
+
   it('soft-stops with a warning once the threshold is crossed', () => {
     const budget = new TokenBudgetManager({ clock, capacity: 50_000 });
     const key = 'tenant:route:upstream:GET';

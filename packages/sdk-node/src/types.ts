@@ -276,6 +276,7 @@ export interface PreflightDecision {
   rateLimit?: RateLimitDecision;
   tokenBudget?: TokenBudgetDecision;
   circuitBreaker?: CircuitBreakerDecision;
+  tokenBudgetReservationId?: string;
 }
 
 /**
@@ -285,4 +286,5 @@ export interface CompletionObservation {
   statusCode: number;
   snapshot?: ResponseSnapshot;
   error?: Error | undefined;
+  tokenBudgetReservationId?: string;
 }

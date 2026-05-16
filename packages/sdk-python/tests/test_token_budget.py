@@ -29,6 +29,28 @@ async def test_token_budget_hard_stop_blocks_before_call() -> None:
     assert emitter.events == []
 
 
+def test_token_budget_reservation_prevents_concurrent_double_spend() -> None:
+    budget = TokenBudget(
+        clock=FixedClock(),
+        hour_limit=0,
+        day_limit=0,
+        month_limit=100,
+        mode="hard-stop",
+        soft_stop_at=0.8,
+        event_emitter=RecorderEmitter(),
+    )
+
+    first = budget.reserve("user:one")
+    assert first.decision.allowed is True
+    assert first.reservation_id is not None
+
+    second = budget.reserve("user:one")
+    assert second.decision.allowed is False
+
+    budget.commit_reservation("user:one", first.reservation_id, 17)
+    assert budget.check("user:one").remaining == 83
+
+
 @pytest.mark.asyncio
 async def test_token_budget_soft_stop_allows_without_emitting_control_plane_events() -> None:
     emitter = RecorderEmitter()

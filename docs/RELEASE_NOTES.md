@@ -1,5 +1,16 @@
 # Release Notes
 
+## Unreleased
+
+- Reduced Go in-process limiter contention by moving hot bucket mutation behind
+  per-key locks instead of the manager-wide cache lock.
+- Added hard token-budget reservations in Go, Node.js, and Python so concurrent
+  requests cannot spend the same remaining budget before usage is recorded.
+- Released or committed reservations after response observation, including the
+  no-token-usage path.
+- Reworked Node.js and Python hot-path pruning to mutate existing timestamp and
+  budget record buffers instead of rebuilding arrays/lists on every request.
+
 ## v0.1.0
 
 Release date: 2026-05-16

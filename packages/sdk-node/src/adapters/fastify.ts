@@ -33,6 +33,7 @@ interface FastifyState {
   request: RequestContext;
   body: string;
   startedAt: number;
+  tokenBudgetReservationId?: string;
 }
 
 /**
@@ -52,11 +53,15 @@ export async function rateguardPlugin(
       return;
     }
 
-    (request as FastifyLikeRequest & { [stateKey]?: FastifyState })[stateKey] = {
+    const state: FastifyState = {
       request: requestContext,
       body: '',
       startedAt: runtime.config.clock.now(),
     };
+    if (preflight.tokenBudgetReservationId) {
+      state.tokenBudgetReservationId = preflight.tokenBudgetReservationId;
+    }
+    (request as FastifyLikeRequest & { [stateKey]?: FastifyState })[stateKey] = state;
   });
 
   instance.addHook('onSend', async (request, _reply, payload) => {
@@ -80,7 +85,11 @@ export async function rateguardPlugin(
       body: state.body,
       statusCode,
     };
-    await runtime.observe(state.request, { statusCode, snapshot }, state.startedAt);
+    await runtime.observe(state.request, {
+      statusCode,
+      snapshot,
+      ...(state.tokenBudgetReservationId ? { tokenBudgetReservationId: state.tokenBudgetReservationId } : {}),
+    }, state.startedAt);
   });
 }
 

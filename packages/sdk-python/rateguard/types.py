@@ -226,6 +226,7 @@ class PreflightDecision:
     rate_limit: RateLimitDecision | None = None
     token_budget: TokenBudgetDecision | None = None
     circuit_breaker: CircuitBreakerDecision | None = None
+    token_budget_reservation_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -233,3 +234,4 @@ class CompletionObservation:
     status_code: int
     snapshot: ResponseSnapshot | None = None
     error: Exception | None = None
+    token_budget_reservation_id: str | None = None

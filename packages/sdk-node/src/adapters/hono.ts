@@ -41,6 +41,7 @@ export function rateguard(options: RateGuardOptions | RateGuardRuntime = {}) {
     await runtime.observe(request, {
       statusCode: response.status,
       snapshot,
+      ...(preflight.tokenBudgetReservationId ? { tokenBudgetReservationId: preflight.tokenBudgetReservationId } : {}),
     }, startedAt);
     return response;
   };

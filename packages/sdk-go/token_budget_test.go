@@ -204,6 +204,39 @@ func TestHTTPMiddlewareHardStopRejectsWhenTokenBudgetExhausted(t *testing.T) {
 	}
 }
 
+func TestTokenBudgetHardStopReservationPreventsConcurrentDoubleSpend(t *testing.T) {
+	t.Parallel()
+
+	clock := &fakeBudgetClock{now: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC)}
+	manager := newTokenBudgetManager(clock)
+	policy := PolicyPreset{
+		TokenBudgetPerMonth: 100,
+		TokenBudgetMode:     TokenBudgetModeHardStop,
+	}
+
+	first := manager.reserve("tenant-a", policy, TokenBudgetModeHardStop)
+	if !first.Allowed {
+		t.Fatalf("first reservation = %+v, want allowed", first)
+	}
+	if first.reservationID == "" || first.reserved != 100 {
+		t.Fatalf("first reservation = %+v, want full remaining budget reserved", first)
+	}
+
+	second := manager.reserve("tenant-a", policy, TokenBudgetModeHardStop)
+	if second.Allowed {
+		t.Fatalf("second reservation = %+v, want denied while first request is in flight", second)
+	}
+
+	manager.commitReservation("tenant-a", first.reservationID, 17)
+	third := manager.reserve("tenant-a", policy, TokenBudgetModeHardStop)
+	if !third.Allowed {
+		t.Fatalf("third reservation after commit = %+v, want allowed", third)
+	}
+	if third.reserved != 83 {
+		t.Fatalf("third reserved = %d, want refunded remaining budget 83", third.reserved)
+	}
+}
+
 func TestHTTPMiddlewareSoftStopQueuesUntilTokenBudgetResets(t *testing.T) {
 	t.Parallel()
 

@@ -68,7 +68,8 @@ class RateGuardRuntime:
                 circuit_breaker=breaker_decision,
             )
 
-        token_decision = await self.token_budget.check_async(key, self.config.token_budget)
+        reservation = await self.token_budget.reserve_async(key, self.config.token_budget)
+        token_decision = reservation.decision
         if not token_decision.allowed:
             await self.emit("request.token_budget_exceeded", request, breaker_decision.state, 429, start_ms, rate_decision, token_decision, token_decision.retry_after_ms)
             return PreflightDecision(
@@ -80,7 +81,7 @@ class RateGuardRuntime:
                 token_budget=token_decision,
                 circuit_breaker=breaker_decision,
             )
-        return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision)
+        return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision, token_budget_reservation_id=reservation.reservation_id)
 
     def observe(self, request: RequestContext, observation: CompletionObservation, started_at_ms: float) -> None:
         self._observe_sync(request, observation, started_at_ms)
@@ -89,7 +90,9 @@ class RateGuardRuntime:
         key = self.resolve_key(request)
         usage = None
         if observation.snapshot is not None:
-            usage = self.token_budget.record_from_snapshot(key, observation.snapshot)
+            usage = self.token_budget.record_from_snapshot(key, observation.snapshot, observation.token_budget_reservation_id)
+        else:
+            self.token_budget.release_reservation(key, observation.token_budget_reservation_id)
         success = observation.error is None and observation.status_code < 500
         breaker_decision = self.circuit_breaker.record_outcome(success)
         payload = self.build_payload(request, breaker_decision.state, observation.status_code, started_at_ms, None, None, usage, breaker_decision.retry_after_ms)
@@ -209,7 +212,8 @@ class RateGuardRuntime:
                 circuit_breaker=breaker_decision,
             )
 
-        token_decision = self.token_budget.check(key, self.config.token_budget)
+        reservation = self.token_budget.reserve(key, self.config.token_budget)
+        token_decision = reservation.decision
         if not token_decision.allowed:
             payload = self.build_payload(request, breaker_decision.state, 429, start_ms, rate_decision, token_decision, None, token_decision.retry_after_ms)
             self._emit_event_sync("request.token_budget_exceeded", request, payload)
@@ -222,13 +226,15 @@ class RateGuardRuntime:
                 token_budget=token_decision,
                 circuit_breaker=breaker_decision,
             )
-        return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision)
+        return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision, token_budget_reservation_id=reservation.reservation_id)
 
     def _observe_sync(self, request: RequestContext, observation: CompletionObservation, started_at_ms: float) -> None:
         key = self.resolve_key(request)
         usage = None
         if observation.snapshot is not None:
-            usage = self.token_budget.record_from_snapshot(key, observation.snapshot)
+            usage = self.token_budget.record_from_snapshot(key, observation.snapshot, observation.token_budget_reservation_id)
+        else:
+            self.token_budget.release_reservation(key, observation.token_budget_reservation_id)
         success = observation.error is None and observation.status_code < 500
         breaker_decision = self.circuit_breaker.record_outcome(success)
         payload = self.build_payload(request, breaker_decision.state, observation.status_code, started_at_ms, None, None, usage, breaker_decision.retry_after_ms)

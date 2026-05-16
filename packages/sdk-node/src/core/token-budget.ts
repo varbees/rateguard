@@ -17,7 +17,16 @@ interface TokenBudgetRecord {
 
 interface TokenBudgetState {
   records: TokenBudgetRecord[];
+  reservations: Map<string, TokenBudgetRecord>;
+  nextReservationId: number;
 }
+
+export interface TokenBudgetReservation {
+  decision: TokenBudgetDecision;
+  reservationId?: string;
+}
+
+const reservationTtlMs = 15 * 60 * 1000;
 
 /**
  * Rolling-window token budget manager.
@@ -33,45 +42,29 @@ export class TokenBudgetManager {
 
   check(key: string, options: Required<TokenBudgetOptions>): TokenBudgetDecision {
     const usage = this.usage(key, options);
-    const active = activeWindowUsage(usage.hour, usage.day, usage.month, options);
-    const limit = active.limit;
-    const warning = options.mode === 'soft-stop' && limit > 0 && active.used >= limit * options.softStopAt;
+    return decisionFromUsage(usage, options);
+  }
 
-    if (options.mode === 'soft-stop') {
-      return {
-        allowed: true,
-        applied: limit > 0,
-        queued: false,
-        remaining: limit > 0 ? Math.max(0, limit - active.used) : -1,
-        retryAfterMs: 0,
-        limit,
-        window: active.window,
-        warning,
-      };
+  reserve(key: string, options: Required<TokenBudgetOptions>): TokenBudgetReservation {
+    const decision = this.check(key, options);
+    if (!decision.allowed || !decision.applied || options.mode !== 'hard-stop' || decision.remaining <= 0) {
+      return { decision };
     }
 
-    if (active.exceededWindow) {
-      return {
-        allowed: false,
-        applied: true,
-        queued: false,
-        remaining: 0,
-        retryAfterMs: usage.retryAfterMs,
-        limit,
-        window: active.window,
-        warning: false,
-      };
-    }
+    const state = this.state(key);
+    state.nextReservationId += 1;
+    const reservationId = String(state.nextReservationId);
+    state.reservations.set(reservationId, {
+      at: this.clock.now(),
+      tokens: decision.remaining,
+    });
 
     return {
-      allowed: true,
-      applied: limit > 0,
-      queued: false,
-      remaining: limit > 0 ? Math.max(0, limit - active.used) : -1,
-      retryAfterMs: 0,
-      limit,
-      window: active.window,
-      warning,
+      decision: {
+        ...decision,
+        remaining: 0,
+      },
+      reservationId,
     };
   }
 
@@ -81,18 +74,33 @@ export class TokenBudgetManager {
     }
 
     const now = this.clock.now();
-    const state = this.states.getOrCreate(key, () => ({ records: [] }));
+    const state = this.state(key);
     state.records.push({ at: now, tokens });
   }
 
-  recordFromSnapshot(key: string, snapshot: ResponseSnapshot): TokenUsage | undefined {
+  recordFromSnapshot(key: string, snapshot: ResponseSnapshot, reservationId?: string): TokenUsage | undefined {
     const usage = extractTokenUsageFromHeaders(snapshot.headers) ?? extractTokenUsageFromText(snapshot.body);
     if (!usage) {
+      this.releaseReservation(key, reservationId);
       return undefined;
     }
 
-    this.record(key, usage.totalTokens);
+    this.commitReservation(key, reservationId, usage.totalTokens);
     return usage;
+  }
+
+  commitReservation(key: string, reservationId: string | undefined, tokens: number): void {
+    if (reservationId) {
+      this.releaseReservation(key, reservationId);
+    }
+    this.record(key, tokens);
+  }
+
+  releaseReservation(key: string, reservationId: string | undefined): void {
+    if (!reservationId) {
+      return;
+    }
+    this.state(key).reservations.delete(reservationId);
   }
 
   usage(key: string, options: Required<TokenBudgetOptions>): {
@@ -104,20 +112,22 @@ export class TokenBudgetManager {
     window: 'hour' | 'day' | 'month' | '';
   } {
     const now = this.clock.now();
-    const state = this.states.getOrCreate(key, () => ({ records: [] }));
+    const state = this.state(key);
     const maxWindow = maxWindowDuration(options);
     state.records = pruneRecords(state.records, now, maxWindow);
+    pruneReservations(state, now);
+    const records = activeRecords(state.records, state.reservations, now, maxWindow);
 
-    const hour = sumWithin(state.records, now, 60 * 60 * 1000);
-    const day = sumWithin(state.records, now, 24 * 60 * 60 * 1000);
-    const month = sumWithin(state.records, now, 30 * 24 * 60 * 60 * 1000);
+    const hour = sumWithin(records, now, 60 * 60 * 1000);
+    const day = sumWithin(records, now, 24 * 60 * 60 * 1000);
+    const month = sumWithin(records, now, 30 * 24 * 60 * 60 * 1000);
 
     const hourlyLimit = options.hourLimit;
     const dailyLimit = options.dayLimit;
     const monthlyLimit = options.monthLimit;
 
     const active = activeWindowUsage(hour, day, month, options);
-    const retryAfterMs = determineRetryAfter(state.records, now, hourlyLimit, dailyLimit, monthlyLimit);
+    const retryAfterMs = determineRetryAfter(records, now, hourlyLimit, dailyLimit, monthlyLimit);
 
     return {
       hour,
@@ -127,6 +137,14 @@ export class TokenBudgetManager {
       retryAfterMs,
       window: active.window,
     };
+  }
+
+  private state(key: string): TokenBudgetState {
+    return this.states.getOrCreate(key, () => ({
+      records: [],
+      reservations: new Map<string, TokenBudgetRecord>(),
+      nextReservationId: 0,
+    }));
   }
 }
 
@@ -152,7 +170,36 @@ function pruneRecords(records: TokenBudgetRecord[], now: number, maxWindowMs: nu
     return [];
   }
 
-  return records.slice(index);
+  records.splice(0, index);
+  return records;
+}
+
+function pruneReservations(state: TokenBudgetState, now: number): void {
+  for (const [id, reservation] of state.reservations) {
+    if (now - reservation.at >= reservationTtlMs) {
+      state.reservations.delete(id);
+    }
+  }
+}
+
+function activeRecords(
+  records: TokenBudgetRecord[],
+  reservations: Map<string, TokenBudgetRecord>,
+  now: number,
+  maxWindowMs: number,
+): TokenBudgetRecord[] {
+  if (reservations.size === 0) {
+    return records;
+  }
+  const cutoff = now - maxWindowMs;
+  const active = records.slice();
+  for (const reservation of reservations.values()) {
+    if (maxWindowMs > 0 && reservation.at <= cutoff) {
+      continue;
+    }
+    active.push(reservation);
+  }
+  return active;
 }
 
 function sumWithin(records: TokenBudgetRecord[], now: number, windowMs: number): number {
@@ -210,6 +257,59 @@ function maxWindowDuration(options: Required<TokenBudgetOptions>): number {
     return 60 * 60 * 1000;
   }
   return 0;
+}
+
+function decisionFromUsage(
+  usage: {
+    hour: number;
+    day: number;
+    month: number;
+    maxUsage: number;
+    retryAfterMs: number;
+    window: 'hour' | 'day' | 'month' | '';
+  },
+  options: Required<TokenBudgetOptions>,
+): TokenBudgetDecision {
+  const active = activeWindowUsage(usage.hour, usage.day, usage.month, options);
+  const limit = active.limit;
+  const warning = options.mode === 'soft-stop' && limit > 0 && active.used >= limit * options.softStopAt;
+
+  if (options.mode === 'soft-stop') {
+    return {
+      allowed: true,
+      applied: limit > 0,
+      queued: false,
+      remaining: limit > 0 ? Math.max(0, limit - active.used) : -1,
+      retryAfterMs: 0,
+      limit,
+      window: active.window,
+      warning,
+    };
+  }
+
+  if (active.exceededWindow) {
+    return {
+      allowed: false,
+      applied: true,
+      queued: false,
+      remaining: 0,
+      retryAfterMs: usage.retryAfterMs,
+      limit,
+      window: active.window,
+      warning: false,
+    };
+  }
+
+  return {
+    allowed: true,
+    applied: limit > 0,
+    queued: false,
+    remaining: limit > 0 ? Math.max(0, limit - active.used) : -1,
+    retryAfterMs: 0,
+    limit,
+    window: active.window,
+    warning,
+  };
 }
 
 function activeWindowUsage(

@@ -80,6 +80,7 @@ export function middleware(options: RateGuardOptions | RateGuardRuntime = {}): (
           statusCode,
           snapshot,
           error,
+          ...(preflight.tokenBudgetReservationId ? { tokenBudgetReservationId: preflight.tokenBudgetReservationId } : {}),
         }, startedAt);
       } finally {
         complete();

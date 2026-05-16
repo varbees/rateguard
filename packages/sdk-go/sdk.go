@@ -211,7 +211,9 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 
 	tokenUsage, ok := s.extract.Extract(snapshot)
 	if ok {
-		s.tokens.record(tokenKey, tokenUsage.TotalTokens)
+		s.tokens.commitReservation(tokenKey, tokenDecision.reservationID, tokenUsage.TotalTokens)
+	} else {
+		s.tokens.releaseReservation(tokenKey, tokenDecision.reservationID)
 	}
 
 	finalTokenDecision := s.tokens.check(tokenKey, s.policy)

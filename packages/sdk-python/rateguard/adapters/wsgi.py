@@ -48,7 +48,15 @@ class RateGuardMiddleware:
 
         body = b"".join(self.app(environ, wrapped_start_response))
         snapshot = ResponseSnapshot(headers={k: v for k, v in captured_headers}, body=body.decode("utf-8", "replace"), status_code=captured_status)
-        self.guard.observe(request, CompletionObservation(status_code=captured_status, snapshot=snapshot), started_at)
+        self.guard.observe(
+            request,
+            CompletionObservation(
+                status_code=captured_status,
+                snapshot=snapshot,
+                token_budget_reservation_id=preflight.token_budget_reservation_id,
+            ),
+            started_at,
+        )
         return [body]
 
     def _deny(self, start_response: StartResponse, status_code: int, retry_after_ms: int, error_code: AdmissionErrorCode | None = None) -> list[bytes]:

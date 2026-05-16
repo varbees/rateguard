@@ -89,7 +89,7 @@ export class RateLimiter {
     const cutoff = now - windowMs;
     const index = lowerBound(state.timestamps, cutoff);
     if (index > 0) {
-      state.timestamps = state.timestamps.slice(index);
+      state.timestamps.splice(0, index);
     }
 
     if (state.timestamps.length >= capacity) {

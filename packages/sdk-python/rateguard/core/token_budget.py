@@ -15,6 +15,7 @@ from ..types import Clock, EventEmitterLike, ResponseSnapshot, TokenBudgetDecisi
 
 
 TokenBudgetWindow = Literal["hour", "day", "month", ""]
+_RESERVATION_TTL_MS = 15 * 60 * 1000
 
 
 class _UsageSnapshot(TypedDict):
@@ -42,6 +43,14 @@ class _TokenBudgetRecord:
 @dataclass(slots=True)
 class _TokenBudgetState:
     records: deque[_TokenBudgetRecord]
+    reservations: dict[str, _TokenBudgetRecord]
+    next_reservation_id: int = 0
+
+
+@dataclass(slots=True)
+class _TokenBudgetReservationResult:
+    decision: TokenBudgetDecision
+    reservation_id: str | None = None
 
 
 class TokenBudgetManager:
@@ -74,9 +83,17 @@ class TokenBudgetManager:
         with self._lock:
             return self._check_locked(key, options or self._limits)
 
+    def reserve(self, key: str, options: TokenBudgetOptions | None = None) -> _TokenBudgetReservationResult:
+        with self._lock:
+            return self._reserve_locked(key, options or self._limits)
+
     async def check_async(self, key: str, options: TokenBudgetOptions | None = None) -> TokenBudgetDecision:
         async with self._async_lock:
             return self._check_locked(key, options or self._limits)
+
+    async def reserve_async(self, key: str, options: TokenBudgetOptions | None = None) -> _TokenBudgetReservationResult:
+        async with self._async_lock:
+            return self._reserve_locked(key, options or self._limits)
 
     def record(self, key: str, tokens: int) -> None:
         if tokens <= 0:
@@ -105,12 +122,30 @@ class TokenBudgetManager:
             retry_after_at_ms=self._clock.now() + max(0, decision.retry_after_ms),
         )
 
-    def record_from_snapshot(self, key: str, snapshot: ResponseSnapshot) -> TokenUsage | None:
+    def record_from_snapshot(self, key: str, snapshot: ResponseSnapshot, reservation_id: str | None = None) -> TokenUsage | None:
         usage = extract_token_usage_from_headers(snapshot.headers) or extract_token_usage_from_text(snapshot.body)
         if usage is None:
+            self.release_reservation(key, reservation_id)
             return None
-        self.record(key, usage.total_tokens)
+        self.commit_reservation(key, reservation_id, usage.total_tokens)
         return usage
+
+    def commit_reservation(self, key: str, reservation_id: str | None, tokens: int) -> None:
+        if reservation_id is None:
+            self.record(key, tokens)
+            return
+        with self._lock:
+            state = self._states.get_or_create(key, self._new_state)
+            state.reservations.pop(reservation_id, None)
+            if tokens > 0:
+                self._record_state_locked(state, tokens)
+
+    def release_reservation(self, key: str, reservation_id: str | None) -> None:
+        if reservation_id is None:
+            return
+        with self._lock:
+            state = self._states.get_or_create(key, self._new_state)
+            state.reservations.pop(reservation_id, None)
 
     @asynccontextmanager
     async def enforce(self, key: str) -> AsyncIterator[None]:
@@ -130,7 +165,10 @@ class TokenBudgetManager:
             await self.record_async(key, last_usage.total_tokens)
 
     def _record_locked(self, key: str, tokens: int) -> None:
-        state = self._states.get_or_create(key, lambda: _TokenBudgetState(deque()))
+        state = self._states.get_or_create(key, self._new_state)
+        self._record_state_locked(state, tokens)
+
+    def _record_state_locked(self, state: _TokenBudgetState, tokens: int) -> None:
         state.records.append(_TokenBudgetRecord(self._clock.now(), tokens))
 
     def _check_locked(self, key: str, options: TokenBudgetOptions) -> TokenBudgetDecision:
@@ -143,16 +181,41 @@ class TokenBudgetManager:
             return TokenBudgetDecision(False, True, False, 0, int(usage["retry_after_ms"]), active["limit"], active["window"], False)
         return TokenBudgetDecision(True, active["limit"] > 0, False, max(0, active["limit"] - active["used"]) if active["limit"] > 0 else -1, 0, active["limit"], active["window"], warning)
 
+    def _reserve_locked(self, key: str, options: TokenBudgetOptions) -> _TokenBudgetReservationResult:
+        decision = self._check_locked(key, options)
+        if not decision.allowed or not decision.applied or options.mode != "hard-stop" or decision.remaining <= 0:
+            return _TokenBudgetReservationResult(decision)
+
+        state = self._states.get_or_create(key, self._new_state)
+        state.next_reservation_id += 1
+        reservation_id = str(state.next_reservation_id)
+        state.reservations[reservation_id] = _TokenBudgetRecord(self._clock.now(), decision.remaining)
+        return _TokenBudgetReservationResult(
+            TokenBudgetDecision(
+                decision.allowed,
+                decision.applied,
+                decision.queued,
+                0,
+                decision.retry_after_ms,
+                decision.limit,
+                decision.window,
+                decision.warning,
+            ),
+            reservation_id,
+        )
+
     def _usage_locked(self, key: str, options: TokenBudgetOptions) -> _UsageSnapshot:
         now = self._clock.now()
-        state = self._states.get_or_create(key, lambda: _TokenBudgetState(deque()))
-        records = deque(self._prune_records(list(state.records), now, self._max_window(options)))
-        state.records = records
-        hour = self._sum_within(list(records), now, 60 * 60 * 1000)
-        day = self._sum_within(list(records), now, 24 * 60 * 60 * 1000)
-        month = self._sum_within(list(records), now, 30 * 24 * 60 * 60 * 1000)
+        state = self._states.get_or_create(key, self._new_state)
+        max_window = self._max_window(options)
+        self._prune_records(state.records, now, max_window)
+        self._prune_reservations(state, now)
+        records = self._active_records(state, now, max_window)
+        hour = self._sum_within(records, now, 60 * 60 * 1000)
+        day = self._sum_within(records, now, 24 * 60 * 60 * 1000)
+        month = self._sum_within(records, now, 30 * 24 * 60 * 60 * 1000)
         active = self._active_window(hour, day, month, options)
-        retry_after = self._determine_retry_after(list(records), now, options.hour_limit or 0, options.day_limit or 0, options.month_limit or 0)
+        retry_after = self._determine_retry_after(records, now, options.hour_limit or 0, options.day_limit or 0, options.month_limit or 0)
         return {
             "hour": hour,
             "day": day,
@@ -203,6 +266,9 @@ class TokenBudgetManager:
             "window": snapshot["window"],
         }
 
+    def _new_state(self) -> _TokenBudgetState:
+        return _TokenBudgetState(deque(), {})
+
     def _max_window(self, options: TokenBudgetOptions) -> int:
         if (options.month_limit or 0) > 0:
             return 30 * 24 * 60 * 60 * 1000
@@ -212,17 +278,40 @@ class TokenBudgetManager:
             return 60 * 60 * 1000
         return 0
 
-    def _prune_records(self, records: list[_TokenBudgetRecord], now: float, max_window_ms: int) -> list[_TokenBudgetRecord]:
+    def _prune_records(self, records: deque[_TokenBudgetRecord], now: float, max_window_ms: int) -> None:
         if max_window_ms <= 0:
-            return []
+            records.clear()
+            return
         cutoff = now - max_window_ms
-        return [record for record in records if record.at > cutoff]
+        while records and records[0].at <= cutoff:
+            records.popleft()
 
-    def _sum_within(self, records: list[_TokenBudgetRecord], now: float, window_ms: int) -> int:
+    def _prune_reservations(self, state: _TokenBudgetState, now: float) -> None:
+        expired = [
+            reservation_id
+            for reservation_id, reservation in state.reservations.items()
+            if now - reservation.at >= _RESERVATION_TTL_MS
+        ]
+        for reservation_id in expired:
+            state.reservations.pop(reservation_id, None)
+
+    def _active_records(self, state: _TokenBudgetState, now: float, max_window_ms: int) -> deque[_TokenBudgetRecord] | list[_TokenBudgetRecord]:
+        if not state.reservations:
+            return state.records
+        cutoff = now - max_window_ms
+        records: list[_TokenBudgetRecord] = list(state.records)
+        records.extend(
+            reservation
+            for reservation in state.reservations.values()
+            if max_window_ms <= 0 or reservation.at > cutoff
+        )
+        return records
+
+    def _sum_within(self, records: deque[_TokenBudgetRecord] | list[_TokenBudgetRecord], now: float, window_ms: int) -> int:
         cutoff = now - window_ms
         return sum(record.tokens for record in records if record.at > cutoff)
 
-    def _determine_retry_after(self, records: list[_TokenBudgetRecord], now: float, hour_limit: int, day_limit: int, month_limit: int) -> int:
+    def _determine_retry_after(self, records: deque[_TokenBudgetRecord] | list[_TokenBudgetRecord], now: float, hour_limit: int, day_limit: int, month_limit: int) -> int:
         windows = ((hour_limit, 60 * 60 * 1000), (day_limit, 24 * 60 * 60 * 1000), (month_limit, 30 * 24 * 60 * 60 * 1000))
         max_retry = 0
         for limit, window_ms in windows:

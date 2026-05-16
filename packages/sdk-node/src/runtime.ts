@@ -74,7 +74,8 @@ export class RateGuardRuntime {
       };
     }
 
-    const tokenDecision = this.tokenBudget.check(key, this.config.tokenBudget);
+    const reservation = this.tokenBudget.reserve(key, this.config.tokenBudget);
+    const tokenDecision = reservation.decision;
     if (!tokenDecision.allowed) {
       await this.emit('request.token_budget_exceeded', request, breakerDecision.state, 429, start, rateDecision, tokenDecision, tokenDecision.retryAfterMs);
       return {
@@ -88,12 +89,16 @@ export class RateGuardRuntime {
       };
     }
 
-    return {
+    const allowed: PreflightDecision = {
       allowed: true,
       rateLimit: rateDecision,
       tokenBudget: tokenDecision,
       circuitBreaker: breakerDecision,
     };
+    if (reservation.reservationId) {
+      allowed.tokenBudgetReservationId = reservation.reservationId;
+    }
+    return allowed;
   }
 
   async observe(request: RequestContext, observation: CompletionObservation, startedAtMs: number): Promise<void> {
@@ -102,7 +107,9 @@ export class RateGuardRuntime {
 
     let usage;
     if (observation.snapshot) {
-      usage = this.tokenBudget.recordFromSnapshot(key, observation.snapshot);
+      usage = this.tokenBudget.recordFromSnapshot(key, observation.snapshot, observation.tokenBudgetReservationId);
+    } else {
+      this.tokenBudget.releaseReservation(key, observation.tokenBudgetReservationId);
     }
 
     const success = observation.error ? false : observation.statusCode < 500;

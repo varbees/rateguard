@@ -35,6 +35,7 @@ export function withRateGuard<TContext = Record<string, never>>(
     await runtime.observe(requestContext, {
       statusCode: response.status,
       snapshot,
+      ...(preflight.tokenBudgetReservationId ? { tokenBudgetReservationId: preflight.tokenBudgetReservationId } : {}),
     }, startedAt);
     return response;
   };

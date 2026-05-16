@@ -9,19 +9,6 @@ from ..types import HeadersLike, JsonObject, JsonValue, TokenUsage
 logger = logging.getLogger(__name__)
 
 
-def lower_bound(values: list[float], target: float) -> int:
-    low = 0
-    high = len(values)
-    while low < high:
-        mid = (low + high) // 2
-        value = values[mid] if mid < len(values) else float("inf")
-        if value < target:
-            low = mid + 1
-        else:
-            high = mid
-    return low
-
-
 def read_header(headers: HeadersLike | None, name: str) -> str:
     if headers is None:
         return ""

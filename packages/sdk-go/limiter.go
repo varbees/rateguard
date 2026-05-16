@@ -31,6 +31,7 @@ func (NoopLimiter) Allow(context.Context, string, PolicyPreset) (AdmissionDecisi
 }
 
 type memoryBucket struct {
+	mu     sync.Mutex
 	tokens float64
 	last   time.Time
 }
@@ -74,8 +75,6 @@ func (l *MemoryLimiter) Allow(_ context.Context, key string, policy PolicyPreset
 	now := clock.Now().UTC()
 
 	l.mu.Lock()
-	defer l.mu.Unlock()
-
 	if l.buckets == nil {
 		l.buckets = newBoundedCache[string, *memoryBucket](defaultMemoryLimiterCacheCapacity)
 	}
@@ -86,6 +85,10 @@ func (l *MemoryLimiter) Allow(_ context.Context, key string, policy PolicyPreset
 			last:   now,
 		}
 	})
+	l.mu.Unlock()
+
+	bucket.mu.Lock()
+	defer bucket.mu.Unlock()
 
 	if now.Sub(bucket.last) > 10*time.Minute {
 		bucket.tokens = float64(policy.Burst)

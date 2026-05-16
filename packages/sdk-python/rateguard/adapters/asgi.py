@@ -55,7 +55,15 @@ class RateGuardMiddleware:
 
         await self.app(scope, receive, wrapped_send)
         snapshot = ResponseSnapshot(headers=response_headers, body=b"".join(body_parts).decode("utf-8", "replace"), status_code=status_code)
-        await self.guard.observe_async(request, CompletionObservation(status_code=status_code, snapshot=snapshot), started_at)
+        await self.guard.observe_async(
+            request,
+            CompletionObservation(
+                status_code=status_code,
+                snapshot=snapshot,
+                token_budget_reservation_id=preflight.token_budget_reservation_id,
+            ),
+            started_at,
+        )
 
     async def _send_denied(self, send: ASGISend, status_code: int, retry_after_ms: int, error_code: AdmissionErrorCode | None = None) -> None:
         headers = denial_asgi_headers(retry_after_ms)

@@ -2,11 +2,15 @@ package rateguard
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"time"
 )
 
-const defaultTokenBudgetCacheCapacity = 50000
+const (
+	defaultTokenBudgetCacheCapacity = 50000
+	tokenBudgetReservationTTL       = 15 * time.Minute
+)
 
 // BudgetWaiter waits for a token budget to become available.
 type BudgetWaiter interface {
@@ -32,13 +36,15 @@ func (systemBudgetWaiter) Wait(ctx context.Context, delay time.Duration) error {
 }
 
 type tokenBudgetDecision struct {
-	Allowed    bool
-	Applied    bool
-	Queued     bool
-	Remaining  int64
-	RetryAfter time.Duration
-	Limit      int64
-	Window     string
+	Allowed       bool
+	Applied       bool
+	Queued        bool
+	Remaining     int64
+	RetryAfter    time.Duration
+	Limit         int64
+	Window        string
+	reservationID string
+	reserved      int64
 }
 
 type tokenBudgetRecord struct {
@@ -46,8 +52,17 @@ type tokenBudgetRecord struct {
 	tokens     int64
 }
 
+type tokenBudgetReservation struct {
+	id         string
+	occurredAt time.Time
+	tokens     int64
+}
+
 type tokenBudgetState struct {
-	records []tokenBudgetRecord
+	mu                sync.Mutex
+	records           []tokenBudgetRecord
+	reservations      map[string]tokenBudgetReservation
+	nextReservationID uint64
 }
 
 type tokenBudgetManager struct {
@@ -83,7 +98,7 @@ func (m *tokenBudgetManager) waitForAvailability(ctx context.Context, key string
 	var queued bool
 	var totalWait time.Duration
 	for {
-		decision := m.check(key, policy)
+		decision := m.reserve(key, policy, mode)
 		if !decision.Applied || decision.Allowed || mode != TokenBudgetModeSoftStop {
 			decision.Queued = queued
 			if queued && totalWait > 0 {
@@ -109,21 +124,11 @@ func (m *tokenBudgetManager) record(key string, tokens int64) {
 		return
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if m.states == nil {
-		m.states = newBoundedCache[string, *tokenBudgetState](defaultTokenBudgetCacheCapacity)
-	}
-
+	state := m.stateForKey(key)
+	state.mu.Lock()
+	defer state.mu.Unlock()
 	now := m.clock.Now()
-	state := m.states.getOrCreate(key, func() *tokenBudgetState {
-		return &tokenBudgetState{}
-	})
-	state.records = append(state.records, tokenBudgetRecord{
-		occurredAt: now,
-		tokens:     tokens,
-	})
+	state.records = append(state.records, tokenBudgetRecord{occurredAt: now, tokens: tokens})
 }
 
 func (m *tokenBudgetManager) check(key string, policy PolicyPreset) tokenBudgetDecision {
@@ -133,7 +138,80 @@ func (m *tokenBudgetManager) check(key string, policy PolicyPreset) tokenBudgetD
 	}
 
 	now := m.clock.Now()
+	state := m.stateForKey(key)
+	state.mu.Lock()
+	defer state.mu.Unlock()
 
+	return m.checkLocked(state, now, limits)
+}
+
+func (m *tokenBudgetManager) reserve(key string, policy PolicyPreset, mode TokenBudgetMode) tokenBudgetDecision {
+	limits := tokenBudgetLimitsFromPolicy(policy)
+	if !limits.enabled() {
+		return tokenBudgetDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}
+	}
+	if mode == "" {
+		mode = limits.Mode
+	}
+	now := m.clock.Now()
+	state := m.stateForKey(key)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	decision := m.checkLocked(state, now, limits)
+	if !decision.Allowed || !decision.Applied || mode != TokenBudgetModeHardStop || decision.Remaining <= 0 {
+		return decision
+	}
+
+	if state.reservations == nil {
+		state.reservations = make(map[string]tokenBudgetReservation)
+	}
+	state.nextReservationID++
+	reservationID := strconv.FormatUint(state.nextReservationID, 10)
+	state.reservations[reservationID] = tokenBudgetReservation{
+		id:         reservationID,
+		occurredAt: now,
+		tokens:     decision.Remaining,
+	}
+
+	decision.reservationID = reservationID
+	decision.reserved = decision.Remaining
+	decision.Remaining = 0
+	return decision
+}
+
+func (m *tokenBudgetManager) commitReservation(key string, reservationID string, tokens int64) {
+	if reservationID == "" {
+		m.record(key, tokens)
+		return
+	}
+
+	state := m.stateForKey(key)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+
+	if state.reservations != nil {
+		delete(state.reservations, reservationID)
+	}
+	if tokens > 0 {
+		state.records = append(state.records, tokenBudgetRecord{occurredAt: m.clock.Now(), tokens: tokens})
+	}
+}
+
+func (m *tokenBudgetManager) releaseReservation(key string, reservationID string) {
+	if reservationID == "" {
+		return
+	}
+
+	state := m.stateForKey(key)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if state.reservations != nil {
+		delete(state.reservations, reservationID)
+	}
+}
+
+func (m *tokenBudgetManager) stateForKey(key string) *tokenBudgetState {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -141,11 +219,15 @@ func (m *tokenBudgetManager) check(key string, policy PolicyPreset) tokenBudgetD
 		m.states = newBoundedCache[string, *tokenBudgetState](defaultTokenBudgetCacheCapacity)
 	}
 
-	state := m.states.getOrCreate(key, func() *tokenBudgetState {
+	return m.states.getOrCreate(key, func() *tokenBudgetState {
 		return &tokenBudgetState{}
 	})
+}
+
+func (m *tokenBudgetManager) checkLocked(state *tokenBudgetState, now time.Time, limits tokenBudgetLimits) tokenBudgetDecision {
 	state.records = pruneTokenBudgetRecords(state.records, now, limits.maxWindow())
-	records := state.records
+	pruneTokenBudgetReservations(state, now)
+	records := activeTokenBudgetRecords(state.records, state.reservations, now, limits.maxWindow())
 
 	usedHour := sumTokenBudget(records, now, time.Hour, limits.Hour)
 	usedDay := sumTokenBudget(records, now, 24*time.Hour, limits.Day)
@@ -257,9 +339,35 @@ func pruneTokenBudgetRecords(records []tokenBudgetRecord, now time.Time, maxWind
 		return nil
 	}
 
-	pruned := make([]tokenBudgetRecord, len(records)-index)
-	copy(pruned, records[index:])
-	return pruned
+	copy(records, records[index:])
+	return records[:len(records)-index]
+}
+
+func pruneTokenBudgetReservations(state *tokenBudgetState, now time.Time) {
+	if state.reservations == nil {
+		return
+	}
+	for id, reservation := range state.reservations {
+		if now.Sub(reservation.occurredAt) >= tokenBudgetReservationTTL {
+			delete(state.reservations, id)
+		}
+	}
+}
+
+func activeTokenBudgetRecords(records []tokenBudgetRecord, reservations map[string]tokenBudgetReservation, now time.Time, maxWindow time.Duration) []tokenBudgetRecord {
+	if len(reservations) == 0 {
+		return records
+	}
+	active := make([]tokenBudgetRecord, 0, len(records)+len(reservations))
+	active = append(active, records...)
+	cutoff := now.Add(-maxWindow)
+	for _, reservation := range reservations {
+		if maxWindow > 0 && !reservation.occurredAt.After(cutoff) {
+			continue
+		}
+		active = append(active, tokenBudgetRecord{occurredAt: reservation.occurredAt, tokens: reservation.tokens})
+	}
+	return active
 }
 
 func sumTokenBudget(records []tokenBudgetRecord, now time.Time, window time.Duration, limit int64) int64 {

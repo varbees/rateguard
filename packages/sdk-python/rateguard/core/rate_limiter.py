@@ -7,7 +7,6 @@ from typing import Awaitable
 import asyncio
 
 from .bounded_cache import BoundedCache
-from .utils import lower_bound
 from ..types import Clock, RateLimitDecision, RateLimitOptions
 
 
@@ -40,11 +39,8 @@ class RateLimiter:
         state = self._keys.get_or_create(key, lambda: _WindowState(deque()))
         timestamps = state.timestamps
         cutoff = now - window_ms
-        values = list(timestamps)
-        index = lower_bound(values, cutoff)
-        if index > 0:
-            state.timestamps = deque(values[index:])
-            timestamps = state.timestamps
+        while timestamps and timestamps[0] <= cutoff:
+            timestamps.popleft()
         if len(timestamps) >= capacity:
             oldest = timestamps[0] if timestamps else now
             retry_after_ms = max(1, int(oldest + window_ms - now))
