@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { RateGuardRuntime } from '../runtime.js';
-import { formatRetryAfterMs, readFirstHeader } from '../core/utils.js';
-import type { HeadersLike, RateGuardOptions, RequestContext, ResponseSnapshot } from '../types.js';
+import { formatRetryAfterMs } from '../core/utils.js';
+import { buildAdapterRequestContext } from './common.js';
+import type { HeadersLike, RateGuardOptions, ResponseSnapshot } from '../types.js';
 
 export interface ExpressLikeRequest {
   method?: string;
@@ -90,23 +91,15 @@ export function middleware(options: RateGuardOptions | RateGuardRuntime = {}): (
   };
 }
 
-function buildRequestContext(runtime: RateGuardRuntime, req: ExpressLikeRequest): RequestContext {
+function buildRequestContext(runtime: RateGuardRuntime, req: ExpressLikeRequest) {
   const path = req.originalUrl ?? req.url ?? '/';
-  const requestId = readFirstHeader(req.headers, ['x-request-id', 'x-request-id']) || hashPath(path);
-  const traceId = readFirstHeader(req.headers, ['traceparent', 'x-trace-id', 'x-trace-id', 'x-request-id']) || hashPath(`${path}:trace`);
-
-  return {
-    method: (req.method ?? 'GET').toUpperCase(),
+  return buildAdapterRequestContext(runtime, {
+    method: req.method,
     path,
     headers: req.headers,
-    requestId,
-    traceId,
-    tenantId: runtime.config.tenantId,
-    routeId: runtime.config.routeId,
-    upstreamId: runtime.config.upstreamId,
-    provider: runtime.config.provider,
-    model: runtime.config.model,
-  };
+    requestIdFallback: hashPath(path),
+    traceIdFallback: hashPath(`${path}:trace`),
+  });
 }
 
 function writeAdmissionHeaders(res: ExpressLikeResponse, runtime: RateGuardRuntime, limit: number, remaining: number, burst: number, retryAfterMs: number): void {

@@ -261,24 +261,24 @@ func (s *SDK) applyHeaders(h http.Header, decision AdmissionDecision) {
 }
 
 func (s *SDK) writeRateLimitResponse(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusTooManyRequests)
-	_, _ = w.Write([]byte(`{"error":"rate_limit_exceeded","message":"request rejected by RateGuard"}`))
+	writeJSONError(w, http.StatusTooManyRequests, "rate_limit_exceeded", "request rejected by RateGuard", 0)
 }
 
 func (s *SDK) writeTokenBudgetResponse(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusTooManyRequests)
-	_, _ = w.Write([]byte(`{"error":"token_budget_exceeded","message":"token budget exhausted by RateGuard"}`))
+	writeJSONError(w, http.StatusTooManyRequests, "token_budget_exceeded", "token budget exhausted by RateGuard", 0)
 }
 
 func (s *SDK) writeCircuitBreakerResponse(w http.ResponseWriter, decision CircuitBreakerDecision) {
-	if decision.RetryAfter > 0 {
-		w.Header().Set("Retry-After", strconv.FormatInt(ceilDurationSeconds(decision.RetryAfter), 10))
+	writeJSONError(w, http.StatusServiceUnavailable, "circuit_open", "request rejected by RateGuard circuit breaker", decision.RetryAfter)
+}
+
+func writeJSONError(w http.ResponseWriter, statusCode int, code string, message string, retryAfter time.Duration) {
+	if retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.FormatInt(ceilDurationSeconds(retryAfter), 10))
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusServiceUnavailable)
-	_, _ = w.Write([]byte(`{"error":"circuit_open","message":"request rejected by RateGuard circuit breaker"}`))
+	w.WriteHeader(statusCode)
+	_, _ = w.Write([]byte(`{"error":"` + code + `","message":"` + message + `"}`))
 }
 
 func (s *SDK) emitRequestEvent(ctx context.Context, r *http.Request, decision AdmissionDecision, statusCode int, start time.Time, tokenUsage TokenUsage, tokenDecision tokenBudgetDecision, circuitState CircuitBreakerState, retryAfter time.Duration) {

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
-from typing import Awaitable, Callable, Protocol
+from typing import Awaitable, Callable
 
 from ..runtime import RateGuardRuntime
 from ..types import CompletionObservation, RequestContext, ResponseSnapshot, RateGuardOptions
-from ..core.utils import read_first_header
+from ._common import build_request_context, denial_asgi_headers, denial_body
 
 
 ASGIReceive = Callable[[], Awaitable[dict[str, object]]]
@@ -54,30 +52,19 @@ class RateGuardMiddleware:
         await self.guard.observe_async(request, CompletionObservation(status_code=status_code, snapshot=snapshot), started_at)
 
     async def _send_denied(self, send: ASGISend, status_code: int, retry_after_ms: int) -> None:
-        headers: list[tuple[bytes, bytes]] = [(b"content-type", b"application/json")]
-        if retry_after_ms > 0:
-            headers.append((b"retry-after", str(max(1, (retry_after_ms + 999) // 1000)).encode()))
-            headers.append((b"x-retry-after-ms", str(retry_after_ms).encode()))
+        headers = denial_asgi_headers(retry_after_ms)
         await send({"type": "http.response.start", "status": status_code, "headers": headers})
-        await send({"type": "http.response.body", "body": json.dumps({"error": "rate_limit_exceeded" if status_code == 429 else "circuit_open", "retry_after_ms": retry_after_ms or None}).encode(), "more_body": False})
+        await send({"type": "http.response.body", "body": denial_body(status_code, retry_after_ms), "more_body": False})
 
     def _build_request(self, scope: dict[str, object]) -> RequestContext:
         headers = self._headers(scope)
         path = str(scope.get("path") or "/")
         method = str(scope.get("method") or "GET").upper()
-        request_id = read_first_header(headers, ["x-request-id"]) or path
-        trace_id = read_first_header(headers, ["traceparent", "x-trace-id", "x-request-id"]) or request_id
-        return RequestContext(
+        return build_request_context(
+            self.guard.config,
             method=method,
             path=path,
             headers=headers,
-            request_id=request_id,
-            trace_id=trace_id,
-            tenant_id=self.guard.config.tenant_id,
-            route_id=self.guard.config.route_id,
-            upstream_id=self.guard.config.upstream_id,
-            provider=self.guard.config.provider,
-            model=self.guard.config.model,
         )
 
     def _headers(self, scope: dict[str, object]) -> dict[str, object]:

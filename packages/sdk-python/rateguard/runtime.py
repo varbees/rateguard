@@ -10,7 +10,7 @@ from .core.circuit_breaker import CircuitBreaker
 from .core.event_emitter import build_event_envelope, create_event_emitter
 from .core.rate_limiter import RateLimiter
 from .core.token_budget import TokenBudgetManager
-from .exceptions import BudgetExceeded, RateGuardException
+from .exceptions import RateGuardException
 from .types import CircuitBreakerDecision, CircuitBreakerOptions, CircuitBreakerState, Clock, CompletionObservation, EventEmitterLike, PreflightDecision, RateGuardEventPayload, RateGuardEventType, RateGuardOptions, RateLimitDecision, RateLimitOptions, RequestContext, ResponseSnapshot, TokenBudgetDecision, TokenBudgetOptions, TokenUsage
 
 
@@ -356,13 +356,5 @@ class BudgetFacade:
         resolved = self._resolve_key(user_id, key=key)
         decision = await self._runtime.token_budget.check_async(resolved, self._runtime.config.token_budget)
         if not decision.allowed and hard_stop:
-            usage = self._runtime.token_budget.usage(resolved, self._runtime.config.token_budget)
-            used = int(usage.get(decision.window or "month", usage.get("month", 0)) or 0)
-            raise BudgetExceeded.from_decision(
-                used=used,
-                limit=decision.limit,
-                window=decision.window or "month",
-                retry_after_ms=decision.retry_after_ms,
-                retry_after_at_ms=self._runtime.config.clock.now() + max(0, decision.retry_after_ms),
-            )
+            raise self._runtime.token_budget.budget_exceeded(resolved, decision, self._runtime.config.token_budget)
         yield

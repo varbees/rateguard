@@ -74,6 +74,17 @@ class TokenBudgetManager:
         with self._lock:
             return self._usage_locked(key, options or self._limits)
 
+    def budget_exceeded(self, key: str, decision: TokenBudgetDecision, options: TokenBudgetOptions | None = None) -> BudgetExceeded:
+        usage = self.usage(key, options)
+        used = int(usage.get(decision.window or "month", usage.get("month", 0)) or 0)
+        return BudgetExceeded.from_decision(
+            used=used,
+            limit=decision.limit,
+            window=decision.window or "month",
+            retry_after_ms=decision.retry_after_ms,
+            retry_after_at_ms=self._clock.now() + max(0, decision.retry_after_ms),
+        )
+
     def record_from_snapshot(self, key: str, snapshot: object) -> TokenUsage | None:
         usage = extract_token_usage_from_headers(getattr(snapshot, "headers", None)) or extract_token_usage_from_text(getattr(snapshot, "body", "") or "")
         if usage is None:
@@ -85,15 +96,7 @@ class TokenBudgetManager:
     async def enforce(self, key: str) -> AsyncIterator[None]:
         decision = await self.check_async(key)
         if not decision.allowed:
-            usage = self.usage(key)
-            used = int(usage.get(decision.window or "month", usage.get("month", 0)) or 0)
-            raise BudgetExceeded.from_decision(
-                used=used,
-                limit=decision.limit,
-                window=decision.window or "month",
-                retry_after_ms=decision.retry_after_ms,
-                retry_after_at_ms=self._clock.now() + max(0, decision.retry_after_ms),
-            )
+            raise self.budget_exceeded(key, decision)
         yield
 
     async def track_stream(self, stream: AsyncIterable[object], key: str) -> AsyncIterator[object]:

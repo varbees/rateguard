@@ -1,6 +1,6 @@
 import { RateGuardRuntime } from '../runtime.js';
-import { formatRetryAfterMs, readFirstHeader } from '../core/utils.js';
-import type { RateGuardOptions, RequestContext, ResponseSnapshot } from '../types.js';
+import { buildAdapterRequestContext, denialPayload, snapshotFromResponse } from './common.js';
+import type { RateGuardOptions, RequestContext } from '../types.js';
 
 export interface HonoLikeRequest {
   method: string;
@@ -26,13 +26,7 @@ export function rateguard(options: RateGuardOptions | RateGuardRuntime = {}) {
     const startedAt = runtime.config.clock.now();
     const preflight = await runtime.admit(request);
     if (!preflight.allowed) {
-      return c.json(
-        {
-          error: preflight.statusCode === 503 ? 'circuit_open' : 'rate_limit_exceeded',
-          retry_after_ms: preflight.retryAfterMs,
-        },
-        preflight.statusCode ?? 429,
-      );
+      return c.json(denialPayload(preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0), preflight.statusCode ?? 429);
     }
 
     await next();
@@ -51,40 +45,15 @@ export function rateguard(options: RateGuardOptions | RateGuardRuntime = {}) {
   };
 }
 
-async function snapshotFromResponse(response: Response): Promise<ResponseSnapshot> {
-  const clone = response.clone();
-  const body = await clone.text();
-  return {
-    headers: clone.headers,
-    body,
-    statusCode: clone.status,
-  };
-}
-
 function buildRequestContext(runtime: RateGuardRuntime, c: HonoLikeContext): RequestContext {
   const path = new URL(c.req.url).pathname;
-  const requestId = readFirstHeader(
-    {
-      'x-request-id': c.req.header('x-request-id') ?? '',
-      'x-request-id-alt': c.req.header('x-request-id') ?? '',
-    },
-    ['x-request-id'],
-  ) || path;
-  const traceId = c.req.header('traceparent') ?? c.req.header('x-trace-id') ?? requestId;
-
-  return {
-    method: c.req.method.toUpperCase(),
+  return buildAdapterRequestContext(runtime, {
+    method: c.req.method,
     path,
     headers: {
       'x-request-id': c.req.header('x-request-id') ?? undefined,
       traceparent: c.req.header('traceparent') ?? undefined,
+      'x-trace-id': c.req.header('x-trace-id') ?? undefined,
     },
-    requestId,
-    traceId,
-    tenantId: runtime.config.tenantId,
-    routeId: runtime.config.routeId,
-    upstreamId: runtime.config.upstreamId,
-    provider: runtime.config.provider,
-    model: runtime.config.model,
-  };
+  });
 }

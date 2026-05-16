@@ -1,5 +1,5 @@
 import { RateGuardRuntime } from '../runtime.js';
-import { formatRetryAfterMs, readFirstHeader } from '../core/utils.js';
+import { buildAdapterRequestContext, denialHeaders, denialPayload } from './common.js';
 import type { RateGuardOptions, RequestContext, ResponseSnapshot } from '../types.js';
 
 export interface FastifyLikeRequest {
@@ -86,32 +86,17 @@ export async function rateguardPlugin(
 
 function buildRequestContext(runtime: RateGuardRuntime, request: FastifyLikeRequest): RequestContext {
   const path = request.url ?? '/';
-  const requestId = readFirstHeader(request.headers, ['x-request-id', 'x-request-id']) || path;
-  const traceId = readFirstHeader(request.headers, ['traceparent', 'x-trace-id', 'x-request-id']) || path;
-
-  return {
-    method: (request.method ?? 'GET').toUpperCase(),
+  return buildAdapterRequestContext(runtime, {
+    method: request.method,
     path,
     headers: request.headers,
-    requestId,
-    traceId,
-    tenantId: runtime.config.tenantId,
-    routeId: runtime.config.routeId,
-    upstreamId: runtime.config.upstreamId,
-    provider: runtime.config.provider,
-    model: runtime.config.model,
-  };
+  });
 }
 
 function writeDeniedReply(reply: FastifyLikeReply, statusCode: number, retryAfterMs: number): void {
   reply.code(statusCode);
-  reply.header('content-type', 'application/json');
-  if (retryAfterMs > 0) {
-    reply.header('Retry-After', formatRetryAfterMs(retryAfterMs));
-    reply.header('X-Retry-After-Ms', String(retryAfterMs));
+  for (const [name, value] of Object.entries(denialHeaders(retryAfterMs))) {
+    reply.header(name, value);
   }
-  reply.send({
-    error: statusCode === 503 ? 'circuit_open' : 'rate_limit_exceeded',
-    retry_after_ms: retryAfterMs > 0 ? retryAfterMs : undefined,
-  });
+  reply.send(denialPayload(statusCode, retryAfterMs));
 }

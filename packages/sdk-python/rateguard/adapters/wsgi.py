@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import json
-from io import BytesIO
-from typing import Callable, Iterable, Protocol
+from typing import Callable, Iterable
 
 from ..runtime import RateGuardRuntime
 from ..types import CompletionObservation, RateGuardOptions, RequestContext, ResponseSnapshot
-from ..core.utils import read_first_header
+from ._common import build_request_context, denial_body, denial_headers
 
 
 StartResponse = Callable[[str, list[tuple[str, str]]], Callable[[bytes], None] | None]
@@ -45,30 +43,18 @@ class RateGuardMiddleware:
         return [body]
 
     def _deny(self, start_response: StartResponse, status_code: int, retry_after_ms: int) -> list[bytes]:
-        headers = [("Content-Type", "application/json")]
-        if retry_after_ms > 0:
-            headers.append(("Retry-After", str(max(1, (retry_after_ms + 999) // 1000))))
-            headers.append(("X-Retry-After-Ms", str(retry_after_ms)))
-        start_response(f"{status_code} ERROR", headers)
-        return [json.dumps({"error": "rate_limit_exceeded" if status_code == 429 else "circuit_open", "retry_after_ms": retry_after_ms or None}).encode()]
+        start_response(f"{status_code} ERROR", denial_headers(retry_after_ms))
+        return [denial_body(status_code, retry_after_ms)]
 
     def _build_request(self, environ: dict[str, object]) -> RequestContext:
         path = str(environ.get("PATH_INFO") or "/")
         method = str(environ.get("REQUEST_METHOD") or "GET").upper()
         headers = self._headers(environ)
-        request_id = read_first_header(headers, ["x-request-id"]) or path
-        trace_id = read_first_header(headers, ["traceparent", "x-trace-id", "x-request-id"]) or request_id
-        return RequestContext(
+        return build_request_context(
+            self.guard.config,
             method=method,
             path=path,
             headers=headers,
-            request_id=request_id,
-            trace_id=trace_id,
-            tenant_id=self.guard.config.tenant_id,
-            route_id=self.guard.config.route_id,
-            upstream_id=self.guard.config.upstream_id,
-            provider=self.guard.config.provider,
-            model=self.guard.config.model,
         )
 
     def _headers(self, environ: dict[str, object]) -> dict[str, object]:

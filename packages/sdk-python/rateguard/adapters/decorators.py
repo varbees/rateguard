@@ -8,7 +8,7 @@ from ..config import preset_policy
 from ..core.event_emitter import ConsoleEventEmitter
 from ..core.rate_limiter import RateLimiter
 from ..core.token_budget import TokenBudgetManager
-from ..exceptions import BudgetExceeded, RateGuardException
+from ..exceptions import RateGuardException
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -59,15 +59,7 @@ def token_budget(*, hard_stop: bool = True, monthly_limit: int = 0, soft_stop_at
             async def async_wrapper(*args: P.args, **kwargs: P.kwargs):
                 decision = await manager.check_async(key)
                 if not decision.allowed and hard_stop:
-                    usage = manager.usage(key)
-                    used = int(usage.get(decision.window or "month", usage.get("month", 0)) or 0)
-                    raise BudgetExceeded.from_decision(
-                        used=used,
-                        limit=decision.limit,
-                        window=decision.window or "month",
-                        retry_after_ms=decision.retry_after_ms,
-                        retry_after_at_ms=manager._clock.now() + max(0, decision.retry_after_ms),
-                    )
+                    raise manager.budget_exceeded(key, decision)
                 result = await func(*args, **kwargs)  # type: ignore[misc]
                 usage = getattr(result, "usage", None)
                 if usage is not None:
@@ -82,15 +74,7 @@ def token_budget(*, hard_stop: bool = True, monthly_limit: int = 0, soft_stop_at
         def sync_wrapper(*args: P.args, **kwargs: P.kwargs):
             decision = manager.check(key)
             if not decision.allowed and hard_stop:
-                usage = manager.usage(key)
-                used = int(usage.get(decision.window or "month", usage.get("month", 0)) or 0)
-                raise BudgetExceeded.from_decision(
-                    used=used,
-                    limit=decision.limit,
-                    window=decision.window or "month",
-                    retry_after_ms=decision.retry_after_ms,
-                    retry_after_at_ms=manager._clock.now() + max(0, decision.retry_after_ms),
-                )
+                raise manager.budget_exceeded(key, decision)
             result = func(*args, **kwargs)
             usage = getattr(result, "usage", None)
             total = getattr(usage, "total_tokens", 0) if usage is not None else 0
