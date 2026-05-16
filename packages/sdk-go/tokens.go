@@ -250,7 +250,7 @@ func looksLikeJSON(body []byte) bool {
 	return len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[')
 }
 
-// NormalizeTokenBudgetMode maps empty or historical values to the canonical token budget mode vocabulary.
+// NormalizeTokenBudgetMode accepts documented mode aliases and returns the canonical value.
 func NormalizeTokenBudgetMode(mode string) TokenBudgetMode {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "", "hard", "reject", "hard-stop":

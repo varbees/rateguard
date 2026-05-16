@@ -9,7 +9,7 @@ It runs entirely in-process by default:
 - circuit breaking
 - request events
 
-No Redis, Docker, dashboard, or control plane URL is required for standalone use. Add the control plane later only if you want realtime events and shared policy management.
+No external service is required for standalone use. Configure an event endpoint only when you want RateGuard events delivered outside the process.
 
 ## Install
 

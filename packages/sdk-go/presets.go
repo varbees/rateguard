@@ -10,7 +10,7 @@ const (
 	PresetStrictUpstreamProtect = "strict-upstream-protection"
 )
 
-// PolicyPreset mirrors the canonical OSS preset vocabulary.
+// PolicyPreset defines the resource limits behind a named preset.
 type PolicyPreset struct {
 	Name                   string `json:"name"`
 	RequestsPerSecond      int    `json:"requests_per_second"`
@@ -32,7 +32,7 @@ type PolicyPreset struct {
 	AnalyticsRetentionDays int    `json:"analytics_retention_days"`
 }
 
-// NormalizePreset maps historical plan names to canonical OSS preset names.
+// NormalizePreset accepts documented preset aliases and returns the canonical name.
 func NormalizePreset(preset string) string {
 	switch strings.ToLower(strings.TrimSpace(preset)) {
 	case "", "free", "dev":

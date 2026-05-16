@@ -14,8 +14,6 @@ Standalone mode is the default:
   - `X-RateGuard-Remaining`
   - `Retry-After` on 429 responses
 
-It is separate from `packages/sdk-ts`, which is the generated control-plane client.
-
 ## Install
 
 ```bash

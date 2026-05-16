@@ -7,7 +7,7 @@ Standalone mode is the default:
 - rate limiting, token budgets, and circuit breaking run locally
 - no Redis is required for the default preset
 - no external service is required for local enforcement
-- the SDK still emits the same request events when you do wire up a backend
+- request events can be delivered to an HTTP endpoint when configured
 - if your app already uses chi, this is the only new RateGuard dependency
 
 ## Install

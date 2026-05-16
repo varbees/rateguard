@@ -55,7 +55,7 @@
     "middleware",
     "llm",
     "token-budget",
-    "api-gateway"
+    "api-protection"
   ],
   "peerDependencies": {
     "express": ">=4.0.0",

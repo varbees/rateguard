@@ -20,7 +20,7 @@ const defaultEventEmitter: EventEmitterLike = {
 };
 
 /**
- * Normalize historical plan names into the canonical preset vocabulary.
+ * Normalize documented preset aliases into the canonical vocabulary.
  */
 export function normalizePreset(preset: string | undefined | null): PresetName {
   switch ((preset ?? '').trim().toLowerCase()) {

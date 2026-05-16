@@ -1,7 +1,7 @@
 # RateGuard Middleware
 
 RateGuard is a small SDK-only middleware repo for services that need local
-traffic protection without adopting a hosted gateway.
+traffic protection inside their application runtime.
 
 It provides:
 
@@ -10,10 +10,6 @@ It provides:
 - circuit breakers
 - request events
 - OpenTelemetry attributes where supported
-
-The old gateway, dashboard, proxy, workers, billing, Docker, KEDA, and OpenAPI
-client were archived on the `legacy/full-stack` branch. `main` is intentionally
-just the reusable SDK layer.
 
 ## Packages
 

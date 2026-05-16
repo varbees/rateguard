@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { deriveWsUrl, knownPresets, normalizePreset, presetPolicy } from '../src/config.js';
 
 describe('presets', () => {
-  it('normalizes historical preset aliases', () => {
+  it('normalizes documented preset aliases', () => {
     expect(normalizePreset('starter')).toBe('standard');
     expect(normalizePreset('business')).toBe('llm-heavy');
   });

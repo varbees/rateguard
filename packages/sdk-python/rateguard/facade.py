@@ -153,7 +153,7 @@ class RateGuard:
 
 
 class BudgetFacade:
-    """Friendly token-budget wrapper for the noob quickstart path."""
+    """High-level token-budget API for callers that key budgets by user or tenant."""
 
     def __init__(self, runtime: RateGuardRuntime) -> None:
         self._runtime = runtime
