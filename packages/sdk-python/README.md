@@ -92,4 +92,3 @@ app.wsgi_app = RateGuardMiddleware(app.wsgi_app, guard=rg.runtime)
 
 - Go SDK: `packages/sdk-go`
 - Node SDK: `packages/sdk-node`
-- Control plane: `apps/gateway`

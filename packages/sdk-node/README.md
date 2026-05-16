@@ -19,19 +19,19 @@ It is separate from `packages/sdk-ts`, which is the generated control-plane clie
 ## Install
 
 ```bash
-npm install @rateguard/node
+npm install @varbees/rateguard-node
 ```
 
 or
 
 ```bash
-bun add @rateguard/node
+bun add @varbees/rateguard-node
 ```
 
 ## Quick Start
 
 ```ts
-import { RateGuard } from '@rateguard/node';
+import { RateGuard } from '@varbees/rateguard-node';
 
 const rg = new RateGuard({ preset: 'standard' });
 
@@ -41,7 +41,7 @@ app.use(rg.middleware());
 For Next.js route handlers:
 
 ```ts
-import { RateGuard } from '@rateguard/node';
+import { RateGuard } from '@varbees/rateguard-node';
 
 const rg = new RateGuard({ preset: 'standard' });
 
@@ -50,10 +50,11 @@ export const POST = rg.withRateGuard(async (request) => {
 });
 ```
 
-GCRA in one sentence:
+Rate limiting:
 
-- It is a rate limiter that refills at a constant rate instead of resetting all at once every minute.
+- local mode uses an in-process sliding window per key
+- an optional remote endpoint can delegate rate decisions elsewhere
 
 ## Status
 
-This package is the Node middleware counterpart to `packages/sdk-go`.
+This package is the Node middleware counterpart to the Go and Python SDKs.

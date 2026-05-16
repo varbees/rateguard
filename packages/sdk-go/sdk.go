@@ -17,6 +17,7 @@ type SDK struct {
 	cfg     Config
 	policy  PolicyPreset
 	limiter Limiter
+	breaker *circuitBreaker
 	tokens  *tokenBudgetManager
 	extract TokenUsageExtractor
 	waiter  BudgetWaiter
@@ -97,6 +98,7 @@ func New(cfg Config) *SDK {
 		cfg:     cfg,
 		policy:  policy,
 		limiter: limiter,
+		breaker: newCircuitBreaker(clock, cfg.CircuitBreaker),
 		tokens:  newTokenBudgetManager(clock),
 		extract: extractor,
 		waiter:  waiter,
@@ -146,25 +148,34 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 	start := s.clock.Now()
 	key := s.admissionKey(r)
 	traceCtx := traceContextFromHeaders(r.Header)
+	breakerDecision := s.breaker.Allow()
 	attrs := requestAttributes(
 		s.tenantID(),
 		s.routeID(r),
 		s.upstreamID(),
 		true,
-		"closed",
+		string(breakerDecision.State),
 		0,
 	)
 	traceCtx, span := s.otel.startRequestSpan(traceCtx, attrs)
 	defer span.End()
 	r = r.WithContext(traceCtx)
 
+	if !breakerDecision.Allowed {
+		s.writeCircuitBreakerResponse(w, breakerDecision)
+		decision := AdmissionDecision{Allowed: false, Applied: false}
+		s.emitRequestEvent(r.Context(), r, decision, http.StatusServiceUnavailable, start, TokenUsage{}, tokenBudgetDecision{}, breakerDecision.State, breakerDecision.RetryAfter)
+		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), false, string(breakerDecision.State), 0), s.clock.Now().Sub(start), http.StatusServiceUnavailable)
+		return
+	}
+
 	decision, _ := s.limiter.Allow(r.Context(), key, s.policy)
 	s.applyHeaders(w.Header(), decision)
 
 	if !decision.Allowed {
 		s.writeRateLimitResponse(w)
-		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenBudgetDecision{})
-		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, "closed", 0), s.clock.Now().Sub(start), http.StatusTooManyRequests)
+		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenBudgetDecision{}, breakerDecision.State, decision.RetryAfter)
+		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, string(breakerDecision.State), 0), s.clock.Now().Sub(start), http.StatusTooManyRequests)
 		return
 	}
 
@@ -172,14 +183,14 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 	tokenDecision, err := s.tokens.waitForAvailability(r.Context(), tokenKey, s.policy, s.waiter, TokenBudgetMode(s.policy.TokenBudgetMode))
 	if err != nil {
 		s.writeTokenBudgetResponse(w)
-		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenDecision)
-		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, "closed", 0), s.clock.Now().Sub(start), http.StatusTooManyRequests)
+		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenDecision, breakerDecision.State, tokenDecision.RetryAfter)
+		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, string(breakerDecision.State), 0), s.clock.Now().Sub(start), http.StatusTooManyRequests)
 		return
 	}
 	if !tokenDecision.Allowed && tokenDecision.Applied && TokenBudgetMode(s.policy.TokenBudgetMode) != TokenBudgetModeSoftStop {
 		s.writeTokenBudgetResponse(w)
-		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenDecision)
-		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, "closed", 0), s.clock.Now().Sub(start), http.StatusTooManyRequests)
+		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenDecision, breakerDecision.State, tokenDecision.RetryAfter)
+		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, string(breakerDecision.State), 0), s.clock.Now().Sub(start), http.StatusTooManyRequests)
 		return
 	}
 
@@ -199,17 +210,18 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 	}
 
 	status := recorder.statusCode()
+	finalBreakerDecision := s.breaker.RecordOutcome(status < http.StatusInternalServerError)
 	finalAttrs := requestAttributes(
 		s.tenantID(),
 		s.routeID(r),
 		s.upstreamID(),
 		decision.Applied,
-		"closed",
+		string(finalBreakerDecision.State),
 		0,
 	)
 	s.otel.recordRequest(r.Context(), finalAttrs, s.clock.Now().Sub(start), status)
 
-	s.emitRequestEvent(r.Context(), r, decision, status, start, tokenUsage, finalTokenDecision)
+	s.emitRequestEvent(r.Context(), r, decision, status, start, tokenUsage, finalTokenDecision, finalBreakerDecision.State, finalBreakerDecision.RetryAfter)
 }
 
 func (s *SDK) admissionKey(r *http.Request) string {
@@ -258,7 +270,15 @@ func (s *SDK) writeTokenBudgetResponse(w http.ResponseWriter) {
 	_, _ = w.Write([]byte(`{"error":"token_budget_exceeded","message":"token budget exhausted by RateGuard"}`))
 }
 
-func (s *SDK) emitRequestEvent(ctx context.Context, r *http.Request, decision AdmissionDecision, statusCode int, start time.Time, tokenUsage TokenUsage, tokenDecision tokenBudgetDecision) {
+func (s *SDK) writeCircuitBreakerResponse(w http.ResponseWriter, decision CircuitBreakerDecision) {
+	if decision.RetryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.FormatInt(ceilDurationSeconds(decision.RetryAfter), 10))
+	}
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = w.Write([]byte(`{"error":"circuit_open","message":"request rejected by RateGuard circuit breaker"}`))
+}
+
+func (s *SDK) emitRequestEvent(ctx context.Context, r *http.Request, decision AdmissionDecision, statusCode int, start time.Time, tokenUsage TokenUsage, tokenDecision tokenBudgetDecision, circuitState CircuitBreakerState, retryAfter time.Duration) {
 	if s.emitter == nil {
 		return
 	}
@@ -273,11 +293,14 @@ func (s *SDK) emitRequestEvent(ctx context.Context, r *http.Request, decision Ad
 	traceID := traceIDFromHeader(r.Header)
 
 	eventType := EventTypeRequestCompleted
-	if !decision.Allowed {
+	if decision.Applied && !decision.Allowed {
 		eventType = EventTypeRequestRateLimited
 	}
 	if !tokenDecision.Allowed && tokenDecision.Applied && tokenDecision.Window != "" {
 		eventType = EventTypeTokenBudgetExceeded
+	}
+	if retryAfter <= 0 {
+		retryAfter = decision.RetryAfter
 	}
 
 	event := EventEnvelope{
@@ -298,9 +321,9 @@ func (s *SDK) emitRequestEvent(ctx context.Context, r *http.Request, decision Ad
 			RateLimitAllowed:     decision.Allowed,
 			RateLimitLimit:       decision.Limit,
 			RateLimitRemaining:   decision.Remaining,
-			RetryAfterMS:         decision.RetryAfter.Milliseconds(),
+			RetryAfterMS:         retryAfter.Milliseconds(),
 			Preset:               s.policy.Name,
-			CircuitBreakerState:  "closed",
+			CircuitBreakerState:  string(circuitState),
 			QueueDepth:           0,
 			TokenProvider:        tokenUsage.Provider,
 			TokenModel:           tokenUsage.Model,

@@ -1,7 +1,7 @@
 {
-  "name": "@rateguard/node",
+  "name": "@varbees/rateguard-node",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "description": "Node.js middleware SDK for RateGuard",
   "type": "module",
   "main": "dist/cjs/index.js",

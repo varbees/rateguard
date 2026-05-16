@@ -1,4 +1,4 @@
-module github.com/rateguard/sdk-go
+module github.com/varbees/rateguard/packages/sdk-go
 
 go 1.24.0
 

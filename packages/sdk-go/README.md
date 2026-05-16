@@ -4,15 +4,16 @@ RateGuard's Go SDK is an in-process middleware package for `net/http` and chi.
 
 Standalone mode is the default:
 
+- rate limiting, token budgets, and circuit breaking run locally
 - no Redis is required for the default preset
 - no external service is required for local enforcement
 - the SDK still emits the same request events when you do wire up a backend
-- if your app already uses chi, `go get github.com/rateguard/sdk-go` is the only new RateGuard dependency
+- if your app already uses chi, this is the only new RateGuard dependency
 
 ## Install
 
 ```bash
-go get github.com/rateguard/sdk-go
+go get github.com/varbees/rateguard/packages/sdk-go
 ```
 
 ## Quick Start
@@ -24,7 +25,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	rateguard "github.com/rateguard/sdk-go"
+	rateguard "github.com/varbees/rateguard/packages/sdk-go"
 )
 
 func main() {
@@ -46,8 +47,9 @@ Use `rg.Middleware()` or `rg.ChiMiddleware()` to protect the whole handler tree.
 - `X-RateGuard-Limit`
 - `X-RateGuard-Burst`
 - `X-RateGuard-Remaining`
-- `Retry-After` on 429 responses
+- `Retry-After` on 429 and circuit-open responses
 
-GCRA in one sentence:
+Rate limiting modes:
 
-- It is a rate limiter that refills at a constant rate instead of resetting all at once every minute.
+- local mode uses an in-process token bucket per key
+- Redis mode uses GCRA for distributed enforcement

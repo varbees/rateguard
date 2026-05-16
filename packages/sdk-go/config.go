@@ -45,6 +45,7 @@ type Config struct {
 	TokenBudgetPerHour  int64
 	TokenBudgetPerDay   int64
 	TokenBudgetPerMonth int64
+	CircuitBreaker      CircuitBreakerOptions
 
 	EventEmitter        EventEmitter
 	EventEndpoint       string

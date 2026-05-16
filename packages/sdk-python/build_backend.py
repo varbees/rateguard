@@ -26,16 +26,31 @@ class _WheelFile:
 
 
 def _metadata_text() -> str:
-    return "\n".join(
-        [
-            "Metadata-Version: 2.1",
-            "Name: rateguard",
-            "Version: 0.1.0",
-            "Summary: Python middleware SDK for RateGuard",
-            "Requires-Dist: cachetools>=5.0",
-            "",
-        ]
-    )
+	return "\n".join(
+		[
+			"Metadata-Version: 2.1",
+			"Name: rateguard",
+			"Version: 0.1.0",
+			"Summary: Python middleware SDK for RateGuard",
+			"Requires-Dist: cachetools>=5.0",
+			"Provides-Extra: fastapi",
+			"Requires-Dist: fastapi>=0.100.0; extra == 'fastapi'",
+			"Requires-Dist: starlette>=0.27.0; extra == 'fastapi'",
+			"Provides-Extra: flask",
+			"Requires-Dist: flask>=2.0.0; extra == 'flask'",
+			"Provides-Extra: django",
+			"Requires-Dist: django>=4.0; extra == 'django'",
+			"Provides-Extra: dev",
+			"Requires-Dist: pytest; extra == 'dev'",
+			"Requires-Dist: pytest-asyncio; extra == 'dev'",
+			"Requires-Dist: httpx; extra == 'dev'",
+			"Requires-Dist: anyio; extra == 'dev'",
+			"Requires-Dist: openai; extra == 'dev'",
+			"Requires-Dist: anthropic; extra == 'dev'",
+			"Requires-Dist: mypy; extra == 'dev'",
+			"",
+		]
+	)
 
 
 def _wheel_text() -> str:
