@@ -70,7 +70,7 @@ app.listen(3000);
 ## Python
 
 ```bash
-pip install rateguard
+pip install varbees-rateguard
 ```
 
 ```python

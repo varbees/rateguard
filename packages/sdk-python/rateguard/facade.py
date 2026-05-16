@@ -19,6 +19,7 @@ from .types import (
 if TYPE_CHECKING:
     from .adapters.asgi import ASGIApp
     from .adapters.wsgi import WSGIApp
+    from .core.token_budget import TokenBudgetManager
 
 
 def _request_context_from_object(
@@ -137,7 +138,7 @@ class RateGuard:
         soft_stop_at: float = 0.8,
         hourly_limit: int = 0,
         daily_limit: int = 0,
-    ):
+    ) -> "TokenBudgetManager":
         from .core.token_budget import TokenBudgetManager
 
         return TokenBudgetManager(
@@ -196,7 +197,7 @@ class BudgetFacade:
             yield chunk
 
     @asynccontextmanager
-    async def enforce(self, *, user_id: str | None = None, hard_stop: bool = True, key: str | None = None):
+    async def enforce(self, *, user_id: str | None = None, hard_stop: bool = True, key: str | None = None) -> AsyncIterator[None]:
         resolved = self._resolve_key(user_id, key=key)
         decision = await self._runtime.token_budget.check_async(resolved, self._runtime.config.token_budget)
         if not decision.allowed and hard_stop:

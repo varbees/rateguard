@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from threading import RLock
 import asyncio
-from typing import AsyncIterable, AsyncIterator, Literal, Protocol, TypedDict
+from typing import AsyncIterable, AsyncIterator, Literal, TypedDict
 
 from .bounded_cache import BoundedCache
 from .utils import extract_token_usage_from_headers, extract_token_usage_from_text
 from ..exceptions import BudgetExceeded
-from ..types import Clock, EventEmitterLike, ResponseSnapshot, TokenBudgetDecision, TokenBudgetOptions, TokenUsage
+from ..types import Clock, EventEmitterLike, ResponseSnapshot, TokenBudgetDecision, TokenBudgetMode, TokenBudgetOptions, TokenUsage
 
 
 TokenBudgetWindow = Literal["hour", "day", "month", ""]
@@ -30,10 +31,6 @@ class _ActiveWindow(TypedDict):
     used: int
     limit: int
     exceeded: bool
-
-
-class _UsageCarrier(Protocol):
-    usage: object | None
 
 
 @dataclass(slots=True)
@@ -57,7 +54,7 @@ class TokenBudgetManager:
         hour_limit: int,
         day_limit: int,
         month_limit: int,
-        mode: str,
+        mode: TokenBudgetMode,
         soft_stop_at: float = 0.8,
         event_emitter: EventEmitterLike | None = None,
         capacity: int = 50_000,
@@ -95,7 +92,7 @@ class TokenBudgetManager:
 
     def usage(self, key: str, options: TokenBudgetOptions | None = None) -> dict[str, int | str]:
         with self._lock:
-            return self._usage_locked(key, options or self._limits)
+            return self._public_usage(self._usage_locked(key, options or self._limits))
 
     def budget_exceeded(self, key: str, decision: TokenBudgetDecision, options: TokenBudgetOptions | None = None) -> BudgetExceeded:
         usage = self.usage(key, options)
@@ -183,16 +180,28 @@ class TokenBudgetManager:
         if isinstance(value, TokenUsage):
             return value
         usage = getattr(value, "__dict__", None)
-        if isinstance(usage, dict):
-            input_tokens = int(usage.get("input_tokens", usage.get("prompt_tokens", 0)) or 0)
-            output_tokens = int(usage.get("output_tokens", usage.get("completion_tokens", 0)) or 0)
-            total_tokens = int(usage.get("total_tokens", input_tokens + output_tokens) or input_tokens + output_tokens)
-            provider = usage.get("provider") if isinstance(usage.get("provider"), str) else None
-            model = usage.get("model") if isinstance(usage.get("model"), str) else None
+        if isinstance(usage, Mapping):
+            input_tokens = _int_field(usage, "input_tokens", "prompt_tokens")
+            output_tokens = _int_field(usage, "output_tokens", "completion_tokens")
+            total_tokens = _int_field(usage, "total_tokens", default=input_tokens + output_tokens)
+            raw_provider = usage.get("provider")
+            raw_model = usage.get("model")
+            provider = raw_provider if isinstance(raw_provider, str) else None
+            model = raw_model if isinstance(raw_model, str) else None
             if input_tokens == 0 and output_tokens == 0 and total_tokens == 0:
                 return None
             return TokenUsage(provider=provider, model=model, input_tokens=input_tokens, output_tokens=output_tokens, total_tokens=total_tokens)
         return None
+
+    def _public_usage(self, snapshot: _UsageSnapshot) -> dict[str, int | str]:
+        return {
+            "hour": snapshot["hour"],
+            "day": snapshot["day"],
+            "month": snapshot["month"],
+            "max_usage": snapshot["max_usage"],
+            "retry_after_ms": snapshot["retry_after_ms"],
+            "window": snapshot["window"],
+        }
 
     def _max_window(self, options: TokenBudgetOptions) -> int:
         if (options.month_limit or 0) > 0:
@@ -239,3 +248,23 @@ class TokenBudgetManager:
         if month_active:
             return {"window": "month", "used": month, "limit": options.month_limit or 0, "exceeded": month >= (options.month_limit or 0)}
         return {"window": "", "used": 0, "limit": 0, "exceeded": False}
+
+
+def _int_field(usage: Mapping[object, object], primary: str, fallback: str | None = None, *, default: int = 0) -> int:
+    raw = usage.get(primary)
+    if raw is None and fallback is not None:
+        raw = usage.get(fallback)
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return int(raw)
+    if isinstance(raw, int):
+        return raw
+    if isinstance(raw, float):
+        return int(raw)
+    if isinstance(raw, str):
+        try:
+            return int(raw)
+        except ValueError:
+            return default
+    return default

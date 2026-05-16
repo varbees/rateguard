@@ -113,7 +113,7 @@ export interface ResolvedRateGuardOptions {
   rateLimit: Required<RateLimitOptions>;
   tokenBudget: Required<TokenBudgetOptions>;
   circuitBreaker: Required<CircuitBreakerOptions>;
-  eventEmitter: EventEmitterLike;
+  eventEmitter: EventEmitterLike | undefined;
   clock: Clock;
 }
 

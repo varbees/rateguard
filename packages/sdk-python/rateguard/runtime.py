@@ -107,15 +107,15 @@ class RateGuardRuntime:
         retry_after_ms: int | None = None,
     ) -> RateGuardEventPayload:
         latency_ms = max(0, int(self.config.clock.now() - start_ms))
-        rate_applied = getattr(rate_limit, "applied", True) if rate_limit is not None else True
-        rate_allowed = getattr(rate_limit, "allowed", True) if rate_limit is not None else True
-        rate_limit_limit = getattr(rate_limit, "limit", self.config.rate_limit.requests_per_second)
-        rate_limit_remaining = getattr(rate_limit, "remaining", -1)
-        token_applied = getattr(token_budget, "applied", False) if token_budget is not None else False
-        token_queued = getattr(token_budget, "queued", False) if token_budget is not None else False
-        token_limit = getattr(token_budget, "limit", None)
-        token_remaining = getattr(token_budget, "remaining", None)
-        token_wait = getattr(token_budget, "retry_after_ms", None)
+        rate_applied = rate_limit.applied if rate_limit is not None else True
+        rate_allowed = rate_limit.allowed if rate_limit is not None else True
+        rate_limit_limit = rate_limit.limit if rate_limit is not None else self.config.rate_limit.requests_per_second or 0
+        rate_limit_remaining = rate_limit.remaining if rate_limit is not None else -1
+        token_applied = token_budget.applied if token_budget is not None else False
+        token_queued = token_budget.queued if token_budget is not None else False
+        token_limit = token_budget.limit if token_budget is not None else None
+        token_remaining = token_budget.remaining if token_budget is not None else None
+        token_wait = token_budget.retry_after_ms if token_budget is not None else None
         return RateGuardEventPayload(
             request_id=request.request_id,
             method=request.method,
@@ -176,7 +176,7 @@ class RateGuardRuntime:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            asyncio.run(awaitable)
+            asyncio.run(_await_emit(awaitable))
         else:
             task = asyncio.ensure_future(awaitable)
             task.add_done_callback(_log_async_emit_failure)
@@ -240,3 +240,7 @@ def _log_async_emit_failure(task: asyncio.Future[None]) -> None:
         task.result()
     except Exception as exc:
         logger.warning("RateGuard async event emitter failed: %s", exc)
+
+
+async def _await_emit(awaitable: Awaitable[None]) -> None:
+    await awaitable

@@ -40,7 +40,8 @@ class RateGuardMiddleware:
         async def wrapped_send(message: ASGIMessage) -> None:
             nonlocal status_code
             if message.get("type") == "http.response.start":
-                status_code = int(message.get("status", 200))
+                raw_status = message.get("status")
+                status_code = raw_status if isinstance(raw_status, int) else 200
                 raw_headers = message.get("headers")
                 if isinstance(raw_headers, list):
                     for key, value in raw_headers:

@@ -4,19 +4,24 @@ from base64 import urlsafe_b64encode
 from csv import writer as csv_writer
 from dataclasses import dataclass
 from hashlib import sha256
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
-from tarfile import TarFile, open as tar_open
+from tarfile import TarFile, TarInfo, open as tar_open
 from typing import Iterable
 from zipfile import ZIP_DEFLATED, ZipFile
 
-NAME = "rateguard"
+DIST_NAME = "varbees-rateguard"
+NORMALIZED_NAME = DIST_NAME.replace("-", "_")
+IMPORT_PACKAGE = "rateguard"
 VERSION = "0.1.0"
 TAG = "py3-none-any"
 ROOT = Path(__file__).resolve().parent
-DIST_INFO = f"{NAME}-{VERSION}.dist-info"
-WHEEL_NAME = f"{NAME}-{VERSION}-{TAG}.whl"
-SDIST_NAME = f"{NAME}-{VERSION}.tar.gz"
+REPO_ROOT = ROOT.parent.parent
+LICENSE_FILE = REPO_ROOT / "LICENSE"
+DIST_INFO = f"{NORMALIZED_NAME}-{VERSION}.dist-info"
+WHEEL_NAME = f"{NORMALIZED_NAME}-{VERSION}-{TAG}.whl"
+SDIST_ROOT = f"{NORMALIZED_NAME}-{VERSION}"
+SDIST_NAME = f"{SDIST_ROOT}.tar.gz"
 
 
 @dataclass(slots=True)
@@ -29,12 +34,16 @@ def _metadata_text() -> str:
     return "\n".join(
         [
             "Metadata-Version: 2.1",
-            "Name: rateguard",
-            "Version: 0.1.0",
+            f"Name: {DIST_NAME}",
+            f"Version: {VERSION}",
             "Summary: Python middleware SDK for RateGuard",
             "Requires-Python: >=3.10",
             "License: MIT",
-            "Requires-Dist: cachetools>=5.0",
+            "License-File: LICENSE",
+            "Description-Content-Type: text/markdown",
+            "Project-URL: Homepage, https://github.com/varbees/rateguard/tree/main/packages/sdk-python",
+            "Project-URL: Repository, https://github.com/varbees/rateguard",
+            "Project-URL: Issues, https://github.com/varbees/rateguard/issues",
             "Provides-Extra: fastapi",
             "Requires-Dist: fastapi>=0.100.0; extra == 'fastapi'",
             "Requires-Dist: starlette>=0.27.0; extra == 'fastapi'",
@@ -47,9 +56,11 @@ def _metadata_text() -> str:
             "Requires-Dist: pytest-asyncio; extra == 'dev'",
             "Requires-Dist: httpx; extra == 'dev'",
             "Requires-Dist: anyio; extra == 'dev'",
+            "Requires-Dist: mypy; extra == 'dev'",
             "Requires-Dist: openai; extra == 'dev'",
             "Requires-Dist: anthropic; extra == 'dev'",
             "",
+            _read_readme(),
         ]
     )
 
@@ -86,7 +97,7 @@ def _record_text(files: Iterable[_WheelFile]) -> str:
 
 def _package_files() -> list[_WheelFile]:
     files: list[_WheelFile] = []
-    for path in sorted(ROOT.joinpath(NAME).rglob("*")):
+    for path in sorted(ROOT.joinpath(IMPORT_PACKAGE).rglob("*")):
         if _skip_package_path(path):
             continue
         arcname = path.relative_to(ROOT).as_posix()
@@ -103,16 +114,19 @@ def _skip_package_path(path: Path) -> bool:
 
 
 def _dist_info_files() -> list[_WheelFile]:
-    return [
+    files = [
         _WheelFile(f"{DIST_INFO}/METADATA", _metadata_text().encode("utf-8")),
         _WheelFile(f"{DIST_INFO}/WHEEL", _wheel_text().encode("utf-8")),
         _WheelFile(f"{DIST_INFO}/top_level.txt", _top_level_text().encode("utf-8")),
     ]
+    if LICENSE_FILE.exists():
+        files.append(_WheelFile(f"{DIST_INFO}/licenses/LICENSE", LICENSE_FILE.read_bytes()))
+    return files
 
 
 def _wheel_files(*, editable: bool) -> list[_WheelFile]:
     files = [
-        *([_WheelFile(f"{NAME}.pth", _editable_pth_text().encode("utf-8"))] if editable else _package_files()),
+        *([_WheelFile(f"{NORMALIZED_NAME}.pth", _editable_pth_text().encode("utf-8"))] if editable else _package_files()),
         *_dist_info_files(),
     ]
     files.append(_WheelFile(f"{DIST_INFO}/RECORD", _record_text(files).encode("utf-8")))
@@ -166,15 +180,30 @@ def build_sdist(sdist_directory: str, config_settings: dict[str, object] | None 
         _add_sdist_file(archive, "pyproject.toml")
         _add_sdist_file(archive, "README.md")
         _add_sdist_file(archive, "build_backend.py")
-        for path in ROOT.joinpath("rateguard").rglob("*"):
+        _add_sdist_file(archive, "LICENSE", source_path=LICENSE_FILE)
+        _add_sdist_bytes(archive, "PKG-INFO", _metadata_text().encode("utf-8"))
+        for path in ROOT.joinpath(IMPORT_PACKAGE).rglob("*"):
             if _skip_package_path(path):
                 continue
-            arcname = f"{NAME}-{VERSION}/{path.relative_to(ROOT).as_posix()}"
+            arcname = f"{SDIST_ROOT}/{path.relative_to(ROOT).as_posix()}"
             archive.add(path, arcname=arcname)
     return sdist_path.name
 
 
-def _add_sdist_file(archive: TarFile, relative_path: str) -> None:
-    path = ROOT / relative_path
+def _add_sdist_file(archive: TarFile, relative_path: str, *, source_path: Path | None = None) -> None:
+    path = source_path or ROOT / relative_path
     if path.exists():
-        archive.add(path, arcname=f"{NAME}-{VERSION}/{relative_path}")
+        archive.add(path, arcname=f"{SDIST_ROOT}/{relative_path}")
+
+
+def _add_sdist_bytes(archive: TarFile, relative_path: str, content: bytes) -> None:
+    info = TarInfo(f"{SDIST_ROOT}/{relative_path}")
+    info.size = len(content)
+    archive.addfile(info, BytesIO(content))
+
+
+def _read_readme() -> str:
+    path = ROOT / "README.md"
+    if not path.exists():
+        return ""
+    return path.read_text(encoding="utf-8").strip()

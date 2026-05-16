@@ -1,7 +1,6 @@
 import {
   type Clock,
   type CircuitBreakerOptions,
-  type EventEmitterLike,
   type PolicyPreset,
   type PresetName,
   type RateGuardOptions,
@@ -11,12 +10,6 @@ import {
 
 const defaultClock: Clock = {
   now: () => Date.now(),
-};
-
-const defaultEventEmitter: EventEmitterLike = {
-  async emit() {
-    return;
-  },
 };
 
 /**
@@ -173,6 +166,9 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
   const preset = presetPolicy(options.preset);
   const tokenBudgetMode = normalizeTokenBudgetMode(options.tokenBudget?.mode ?? preset.tokenBudgetMode);
   const clock = options.clock ?? defaultClock;
+  const controlPlaneUrl = options.controlPlaneUrl?.trim() || undefined;
+  const derivedWsUrl = controlPlaneUrl ? deriveWsUrl(controlPlaneUrl) : undefined;
+  const wsUrl = options.wsUrl?.trim() || derivedWsUrl;
 
   return {
     apiKey: options.apiKey,
@@ -191,8 +187,8 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
     upstreamId: options.upstreamId?.trim() || 'local',
     provider: options.provider?.trim() || undefined,
     model: options.model?.trim() || undefined,
-    controlPlaneUrl: options.controlPlaneUrl?.trim() || undefined,
-    wsUrl: options.wsUrl?.trim() || undefined,
+    controlPlaneUrl,
+    wsUrl,
     keyFn: options.keyFn,
     rateLimit: {
       requestsPerSecond: options.rateLimit?.requestsPerSecond ?? preset.requestsPerSecond,
@@ -200,7 +196,7 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
       windowMs: options.rateLimit?.windowMs ?? 1_000,
       remoteRateLimitEndpoint:
         options.rateLimit?.remoteRateLimitEndpoint ??
-        (options.controlPlaneUrl ? `${options.controlPlaneUrl.replace(/\/$/, '')}/api/v1/ratelimit` : ''),
+        (controlPlaneUrl ? `${controlPlaneUrl.replace(/\/$/, '')}/api/v1/ratelimit` : ''),
     },
     tokenBudget: {
       hourLimit: options.tokenBudget?.hourLimit ?? preset.tokenBudgetPerHour,
@@ -210,7 +206,7 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
       softStopAt: options.tokenBudget?.softStopAt ?? 0.8,
     },
     circuitBreaker: normalizeCircuitBreakerOptions(options.circuitBreaker),
-    eventEmitter: options.eventEmitter ?? defaultEventEmitter,
+    eventEmitter: options.eventEmitter,
     clock,
   };
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { deriveWsUrl, knownPresets, normalizePreset, presetPolicy } from '../src/config.js';
+import { deriveWsUrl, knownPresets, normalizePreset, presetPolicy, resolveRateGuardOptions } from '../src/config.js';
+import { ConsoleEventEmitter, ControlPlaneEventEmitter, createEventEmitter } from '../src/core/event-emitter.js';
 
 describe('presets', () => {
   it('normalizes documented preset aliases', () => {
@@ -26,5 +27,10 @@ describe('presets', () => {
 
   it('rejects malformed control-plane URLs instead of disabling websocket events', () => {
     expect(() => deriveWsUrl('control.example')).toThrow(/Invalid RateGuard controlPlaneUrl/);
+  });
+
+  it('uses the documented event emitter fallbacks', () => {
+    expect(createEventEmitter(resolveRateGuardOptions())).toBeInstanceOf(ConsoleEventEmitter);
+    expect(createEventEmitter(resolveRateGuardOptions({ controlPlaneUrl: 'https://control.example' }))).toBeInstanceOf(ControlPlaneEventEmitter);
   });
 });

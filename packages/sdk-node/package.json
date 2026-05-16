@@ -5,6 +5,15 @@
   "description": "Node.js middleware SDK for RateGuard",
   "license": "MIT",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/varbees/rateguard.git",
+    "directory": "packages/sdk-node"
+  },
+  "bugs": {
+    "url": "https://github.com/varbees/rateguard/issues"
+  },
+  "homepage": "https://github.com/varbees/rateguard/tree/main/packages/sdk-node",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/types/index.d.ts",
@@ -41,12 +50,13 @@
     "build:esm": "tsc -p tsconfig.esm.json",
     "build:cjs": "tsc -p tsconfig.cjs.json",
     "build:types": "tsc -p tsconfig.types.json",
-    "prepack": "bun run build",
+    "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "files": [
     "dist",
+    "LICENSE",
     "README.md",
     "package.json"
   ],

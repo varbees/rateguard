@@ -1,5 +1,7 @@
 """RateGuard Python middleware SDK."""
 
+__version__ = "0.1.0"
+
 from .adapters.asgi import RateGuardMiddleware as ASGIRateGuardMiddleware
 from .adapters.decorators import rate_limited, token_budget
 from .adapters.wsgi import RateGuardMiddleware as WSGIRateGuardMiddleware
@@ -40,6 +42,7 @@ TokenBudget = TokenBudgetManager
 RateGuardMiddleware = WSGIRateGuardMiddleware
 
 __all__ = [
+    "__version__",
     "ASGIRateGuardMiddleware",
     "WSGIRateGuardMiddleware",
     "ConsoleEventEmitter",

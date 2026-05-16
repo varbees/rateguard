@@ -33,7 +33,7 @@ def rate_limited(*, preset: str = "dev", requests_per_second: int | None = None,
             return cast(Callable[P, R], async_wrapper)
 
         @wraps(func)
-        def sync_wrapper(*args: P.args, **kwargs: P.kwargs):
+        def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             decision = limiter.allow(key, rate_limit)
             if not decision.allowed:
                 raise RateGuardException("rate limit exceeded", status=429, retry_after=decision.retry_after_ms)
@@ -75,7 +75,7 @@ def token_budget(*, hard_stop: bool = True, monthly_limit: int = 0, soft_stop_at
             return cast(Callable[P, R], async_wrapper)
 
         @wraps(func)
-        def sync_wrapper(*args: P.args, **kwargs: P.kwargs):
+        def sync_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             decision = manager.check(key)
             if not decision.allowed and hard_stop:
                 raise manager.budget_exceeded(key, decision)

@@ -14,37 +14,31 @@ No external service is required for standalone use. Configure an event endpoint 
 ## Install
 
 ```bash
-pip install rateguard
+pip install varbees-rateguard
 ```
 
 ## Quick Start
 
 ```python
-from openai import AsyncOpenAI
 from rateguard import BudgetExceeded, RateGuard
 
-client = AsyncOpenAI()
 rg = RateGuard(preset="standard")
 budget = rg.budget
 
 
-async def chat(user_id: str, messages: list):
+async def call_provider(user_id: str) -> None:
     try:
         async with budget.enforce(user_id=user_id, hard_stop=True):
-            stream = await client.chat.completions.create(
-                model="gpt-4o",
-                messages=messages,
-                stream=True,
-            )
+            # Call your LLM, API, worker, or provider here.
+            pass
 
-            async for chunk in budget.track_stream(stream, user_id=user_id):
-                yield chunk
+        budget.record(user_id=user_id, tokens=1200)
     except BudgetExceeded as exc:
         print(exc)
         raise
 ```
 
-For non-streaming calls, enforce before the request and record the returned token usage afterward:
+For provider SDKs that return token usage, enforce before the request and record the returned usage afterward:
 
 ```python
 async with rg.budget.enforce(user_id="me", hard_stop=True):

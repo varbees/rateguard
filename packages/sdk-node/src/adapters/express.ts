@@ -6,18 +6,19 @@ import type { AdapterPayload } from './common.js';
 import type { HeadersLike, RateGuardOptions, ResponseSnapshot } from '../types.js';
 
 type ExpressResponseChunk = string | Uint8Array;
+type ExpressEncoding = string;
 type ExpressWriteCallback = (error?: Error | null) => void;
 type ExpressWriteArgs =
   | []
-  | [encoding: BufferEncoding]
+  | [encoding: ExpressEncoding]
   | [callback: ExpressWriteCallback]
-  | [encoding: BufferEncoding, callback: ExpressWriteCallback];
+  | [encoding: ExpressEncoding, callback: ExpressWriteCallback];
 type ExpressEndArgs =
   | []
   | [chunk: ExpressResponseChunk]
-  | [chunk: ExpressResponseChunk, encoding: BufferEncoding]
+  | [chunk: ExpressResponseChunk, encoding: ExpressEncoding]
   | [chunk: ExpressResponseChunk, callback: ExpressWriteCallback]
-  | [chunk: ExpressResponseChunk, encoding: BufferEncoding, callback: ExpressWriteCallback];
+  | [chunk: ExpressResponseChunk, encoding: ExpressEncoding, callback: ExpressWriteCallback];
 
 export interface ExpressLikeRequest {
   method?: string;

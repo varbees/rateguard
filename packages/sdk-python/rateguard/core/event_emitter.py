@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
+from importlib import import_module
 from json import dumps
 import logging
-from typing import Protocol
 from uuid import uuid4
 
 from ..config import derive_ws_url
@@ -28,13 +28,13 @@ class WebSocketEventEmitter:
             await self._fallback.emit(event)
             return
         try:
-            import websockets  # type: ignore[import-not-found]
-        except Exception as exc:
+            connect = getattr(import_module("websockets"), "connect")
+        except ImportError as exc:
             logger.warning("RateGuard websocket emitter unavailable; falling back to console: %s", exc)
             await self._fallback.emit(event)
             return
         try:
-            async with websockets.connect(self._ws_url) as socket:  # type: ignore[attr-defined]
+            async with connect(self._ws_url) as socket:
                 await socket.send(dumps(asdict(event), separators=(",", ":")))
         except Exception as exc:
             logger.warning("RateGuard websocket delivery failed; falling back to console: %s", exc)
