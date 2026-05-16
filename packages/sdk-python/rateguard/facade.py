@@ -1,0 +1,200 @@
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from typing import AsyncIterable, AsyncIterator, Callable
+
+from .exceptions import RateGuardException
+from .runtime import RateGuardRuntime
+from .types import (
+    CircuitBreakerOptions,
+    Clock,
+    EventEmitterLike,
+    RateGuardOptions,
+    RateLimitOptions,
+    RequestContext,
+    TokenBudgetDecision,
+    TokenBudgetOptions,
+)
+
+
+def _request_context_from_object(
+    request: object,
+    *,
+    tenant_id: str,
+    route_id: str,
+    upstream_id: str,
+    provider: str | None,
+    model: str | None,
+) -> RequestContext:
+    method = str(getattr(request, "method", "GET")).upper()
+    url = getattr(request, "url", None)
+    path = str(getattr(url, "path", getattr(request, "path", "/")))
+    headers = getattr(request, "headers", {}) or {}
+    request_id = str(headers.get("x-request-id", "")) if hasattr(headers, "get") else ""
+    trace_id = str(headers.get("traceparent", "")) if hasattr(headers, "get") else ""
+    if not request_id:
+        request_id = path
+    if not trace_id:
+        trace_id = request_id
+    return RequestContext(method, path, headers, request_id, trace_id, tenant_id, route_id, upstream_id, provider, model)
+
+
+class RateGuard:
+    """User-facing SDK facade."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str | None = None,
+        preset: str | None = None,
+        tenant_id: str | None = None,
+        route_id: str | None = None,
+        upstream_id: str | None = None,
+        provider: str | None = None,
+        model: str | None = None,
+        control_plane_url: str | None = None,
+        ws_url: str | None = None,
+        key_fn: Callable[[RequestContext], str] | None = None,
+        rate_limit: RateLimitOptions | None = None,
+        token_budget: TokenBudgetOptions | None = None,
+        circuit_breaker: CircuitBreakerOptions | None = None,
+        event_emitter: EventEmitterLike | None = None,
+        clock: Clock | None = None,
+    ) -> None:
+        self.options = RateGuardOptions(
+            api_key=api_key,
+            preset=preset,
+            tenant_id=tenant_id,
+            route_id=route_id,
+            upstream_id=upstream_id,
+            provider=provider,
+            model=model,
+            control_plane_url=control_plane_url,
+            ws_url=ws_url,
+            key_fn=key_fn,
+            rate_limit=rate_limit,
+            token_budget=token_budget,
+            circuit_breaker=circuit_breaker,
+            event_emitter=event_emitter,
+            clock=clock,
+        )
+        self.runtime = RateGuardRuntime(self.options)
+
+    @property
+    def asgi_middleware(self) -> type:
+        from .adapters.asgi import RateGuardMiddleware as Middleware
+
+        runtime = self.runtime
+
+        class BoundMiddleware(Middleware):
+            def __init__(self, app: Callable[[dict[str, object], Callable, Callable], object]) -> None:
+                super().__init__(app, runtime)
+
+        return BoundMiddleware
+
+    @property
+    def wsgi_middleware(self) -> type:
+        from .adapters.wsgi import RateGuardMiddleware as Middleware
+
+        runtime = self.runtime
+
+        class BoundMiddleware(Middleware):
+            def __init__(self, app: Callable[..., object]) -> None:
+                super().__init__(app, guard=runtime)
+
+        return BoundMiddleware
+
+    async def require(self, request: object) -> None:
+        request_context = _request_context_from_object(
+            request,
+            tenant_id=self.runtime.config.tenant_id,
+            route_id=self.runtime.config.route_id,
+            upstream_id=self.runtime.config.upstream_id,
+            provider=self.runtime.config.provider,
+            model=self.runtime.config.model,
+        )
+        decision = await self.runtime.admit_async(request_context)
+        if not decision.allowed:
+            raise RateGuardException(
+                "rate limited",
+                status=decision.status_code or 429,
+                retry_after=decision.retry_after_ms or 0,
+            )
+
+    @property
+    def budget(self) -> "BudgetFacade":
+        return BudgetFacade(self.runtime)
+
+    def token_budget(
+        self,
+        *,
+        hard_stop: bool = True,
+        monthly_limit: int = 0,
+        soft_stop_at: float = 0.8,
+        hourly_limit: int = 0,
+        daily_limit: int = 0,
+    ):
+        from .core.token_budget import TokenBudgetManager
+
+        return TokenBudgetManager(
+            clock=self.runtime.config.clock,
+            hour_limit=hourly_limit,
+            day_limit=daily_limit,
+            month_limit=monthly_limit,
+            mode="hard-stop" if hard_stop else "soft-stop",
+            soft_stop_at=soft_stop_at,
+            event_emitter=self.runtime.event_emitter,
+            capacity=50_000,
+        )
+
+
+class BudgetFacade:
+    """Friendly token-budget wrapper for the noob quickstart path."""
+
+    def __init__(self, runtime: RateGuardRuntime) -> None:
+        self._runtime = runtime
+
+    def _resolve_key(self, user_id: str | None = None, *, key: str | None = None) -> str:
+        resolved = (user_id or key or "").strip()
+        if not resolved:
+            raise ValueError("user_id is required")
+        return resolved
+
+    def check(self, *, user_id: str | None = None, key: str | None = None) -> TokenBudgetDecision:
+        resolved = self._resolve_key(user_id, key=key)
+        return self._runtime.token_budget.check(resolved, self._runtime.config.token_budget)
+
+    async def check_async(self, *, user_id: str | None = None, key: str | None = None) -> TokenBudgetDecision:
+        resolved = self._resolve_key(user_id, key=key)
+        return await self._runtime.token_budget.check_async(resolved, self._runtime.config.token_budget)
+
+    def record(self, *, user_id: str | None = None, tokens: int, key: str | None = None) -> None:
+        resolved = self._resolve_key(user_id, key=key)
+        self._runtime.token_budget.record(resolved, tokens)
+
+    async def record_async(self, *, user_id: str | None = None, tokens: int, key: str | None = None) -> None:
+        resolved = self._resolve_key(user_id, key=key)
+        await self._runtime.token_budget.record_async(resolved, tokens)
+
+    def usage(self, *, user_id: str | None = None, key: str | None = None) -> dict[str, int | str]:
+        resolved = self._resolve_key(user_id, key=key)
+        return self._runtime.token_budget.usage(resolved, self._runtime.config.token_budget)
+
+    async def track_stream(
+        self,
+        stream: AsyncIterable[object],
+        *,
+        user_id: str | None = None,
+        key: str | None = None,
+    ) -> AsyncIterator[object]:
+        resolved = self._resolve_key(user_id, key=key)
+        async for chunk in self._runtime.token_budget.track_stream(stream, resolved):
+            yield chunk
+
+    @asynccontextmanager
+    async def enforce(self, *, user_id: str | None = None, hard_stop: bool = True, key: str | None = None):
+        resolved = self._resolve_key(user_id, key=key)
+        decision = await self._runtime.token_budget.check_async(resolved, self._runtime.config.token_budget)
+        if not decision.allowed and hard_stop:
+            raise self._runtime.token_budget.budget_exceeded(resolved, decision, self._runtime.config.token_budget)
+        yield

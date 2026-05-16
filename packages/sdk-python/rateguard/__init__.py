@@ -9,7 +9,7 @@ from .core.event_emitter import ConsoleEventEmitter, WebSocketEventEmitter
 from .core.rate_limiter import RateLimiter
 from .core.token_budget import TokenBudgetManager
 from .exceptions import BudgetExceeded, RateGuardException
-from .runtime import RateGuard
+from .facade import RateGuard
 from .types import (
     CircuitBreakerDecision,
     CircuitBreakerOptions,
