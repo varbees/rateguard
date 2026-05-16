@@ -5,12 +5,35 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from threading import RLock
 import asyncio
-from typing import AsyncIterable, AsyncIterator
+from typing import AsyncIterable, AsyncIterator, Literal, Protocol, TypedDict
 
 from .bounded_cache import BoundedCache
 from .utils import extract_token_usage_from_headers, extract_token_usage_from_text
 from ..exceptions import BudgetExceeded
-from ..types import Clock, TokenBudgetDecision, TokenBudgetOptions, TokenUsage
+from ..types import Clock, EventEmitterLike, ResponseSnapshot, TokenBudgetDecision, TokenBudgetOptions, TokenUsage
+
+
+TokenBudgetWindow = Literal["hour", "day", "month", ""]
+
+
+class _UsageSnapshot(TypedDict):
+    hour: int
+    day: int
+    month: int
+    max_usage: int
+    retry_after_ms: int
+    window: TokenBudgetWindow
+
+
+class _ActiveWindow(TypedDict):
+    window: TokenBudgetWindow
+    used: int
+    limit: int
+    exceeded: bool
+
+
+class _UsageCarrier(Protocol):
+    usage: object | None
 
 
 @dataclass(slots=True)
@@ -36,7 +59,7 @@ class TokenBudgetManager:
         month_limit: int,
         mode: str,
         soft_stop_at: float = 0.8,
-        event_emitter: object | None = None,
+        event_emitter: EventEmitterLike | None = None,
         capacity: int = 50_000,
     ) -> None:
         self._clock = clock
@@ -85,8 +108,8 @@ class TokenBudgetManager:
             retry_after_at_ms=self._clock.now() + max(0, decision.retry_after_ms),
         )
 
-    def record_from_snapshot(self, key: str, snapshot: object) -> TokenUsage | None:
-        usage = extract_token_usage_from_headers(getattr(snapshot, "headers", None)) or extract_token_usage_from_text(getattr(snapshot, "body", "") or "")
+    def record_from_snapshot(self, key: str, snapshot: ResponseSnapshot) -> TokenUsage | None:
+        usage = extract_token_usage_from_headers(snapshot.headers) or extract_token_usage_from_text(snapshot.body)
         if usage is None:
             return None
         self.record(key, usage.total_tokens)
@@ -123,7 +146,7 @@ class TokenBudgetManager:
             return TokenBudgetDecision(False, True, False, 0, int(usage["retry_after_ms"]), active["limit"], active["window"], False)
         return TokenBudgetDecision(True, active["limit"] > 0, False, max(0, active["limit"] - active["used"]) if active["limit"] > 0 else -1, 0, active["limit"], active["window"], warning)
 
-    def _usage_locked(self, key: str, options: TokenBudgetOptions) -> dict[str, int | str]:
+    def _usage_locked(self, key: str, options: TokenBudgetOptions) -> _UsageSnapshot:
         now = self._clock.now()
         state = self._states.get_or_create(key, lambda: _TokenBudgetState(deque()))
         records = deque(self._prune_records(list(state.records), now, self._max_window(options)))
@@ -205,7 +228,7 @@ class TokenBudgetManager:
                     break
         return max(0, max_retry)
 
-    def _active_window(self, hour: int, day: int, month: int, options: TokenBudgetOptions) -> dict[str, object]:
+    def _active_window(self, hour: int, day: int, month: int, options: TokenBudgetOptions) -> _ActiveWindow:
         hour_active = (options.hour_limit or 0) > 0
         day_active = (options.day_limit or 0) > 0
         month_active = (options.month_limit or 0) > 0

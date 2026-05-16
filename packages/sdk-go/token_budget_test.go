@@ -1,9 +1,12 @@
 package rateguard
 
 import (
+	"bytes"
 	"context"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -59,6 +62,25 @@ func TestDefaultTokenUsageExtractorParsesResponseHeaders(t *testing.T) {
 	}
 	if usage.Model != "gpt-4.1" {
 		t.Fatalf("usage.model = %q, want %q", usage.Model, "gpt-4.1")
+	}
+}
+
+func TestDefaultTokenUsageExtractorLogsMalformedJSONBody(t *testing.T) {
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(previous)
+
+	extractor := DefaultTokenUsageExtractor{}
+	_, ok := extractor.Extract(ResponseSnapshot{
+		Body: []byte(`{"usage":{"total_tokens":7}`),
+	})
+
+	if ok {
+		t.Fatal("expected malformed token usage JSON to be ignored")
+	}
+	if got := logs.String(); !strings.Contains(got, "parse token usage response body") {
+		t.Fatalf("log output = %q, want parse token usage response body", got)
 	}
 }
 

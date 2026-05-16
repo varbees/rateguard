@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -91,6 +92,7 @@ func New(cfg Config) *SDK {
 
 	otel, err := newObservability(cfg)
 	if err != nil {
+		log.Printf("rateguard: initialize observability: %v", err)
 		otel = &observability{}
 	}
 
@@ -169,7 +171,16 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 		return
 	}
 
-	decision, _ := s.limiter.Allow(r.Context(), key, s.policy)
+	decision, err := s.limiter.Allow(r.Context(), key, s.policy)
+	if err != nil {
+		decision = AdmissionDecision{Allowed: false, Applied: false, Remaining: 0, Limit: s.policy.RequestsPerSecond}
+		s.applyHeaders(w.Header(), decision)
+		s.writeRateLimitUnavailableResponse(w)
+		s.emitRequestEvent(r.Context(), r, decision, http.StatusServiceUnavailable, start, TokenUsage{}, tokenBudgetDecision{}, breakerDecision.State, 0)
+		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), false, string(breakerDecision.State), 0), s.clock.Now().Sub(start), http.StatusServiceUnavailable)
+		log.Printf("rateguard: rate limiter unavailable: %v", err)
+		return
+	}
 	s.applyHeaders(w.Header(), decision)
 
 	if !decision.Allowed {
@@ -264,6 +275,10 @@ func (s *SDK) writeRateLimitResponse(w http.ResponseWriter) {
 	writeJSONError(w, http.StatusTooManyRequests, "rate_limit_exceeded", "request rejected by RateGuard", 0)
 }
 
+func (s *SDK) writeRateLimitUnavailableResponse(w http.ResponseWriter) {
+	writeJSONError(w, http.StatusServiceUnavailable, "rate_limit_unavailable", "RateGuard rate limiter unavailable", 0)
+}
+
 func (s *SDK) writeTokenBudgetResponse(w http.ResponseWriter) {
 	writeJSONError(w, http.StatusTooManyRequests, "token_budget_exceeded", "token budget exhausted by RateGuard", 0)
 }
@@ -278,7 +293,9 @@ func writeJSONError(w http.ResponseWriter, statusCode int, code string, message 
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	_, _ = w.Write([]byte(`{"error":"` + code + `","message":"` + message + `"}`))
+	if _, err := w.Write([]byte(`{"error":"` + code + `","message":"` + message + `"}`)); err != nil {
+		log.Printf("rateguard: write error response: %v", err)
+	}
 }
 
 func (s *SDK) emitRequestEvent(ctx context.Context, r *http.Request, decision AdmissionDecision, statusCode int, start time.Time, tokenUsage TokenUsage, tokenDecision tokenBudgetDecision, circuitState CircuitBreakerState, retryAfter time.Duration) {
@@ -342,7 +359,9 @@ func (s *SDK) emitRequestEvent(ctx context.Context, r *http.Request, decision Ad
 		},
 	}
 
-	_ = s.emitter.Emit(ctx, event)
+	if err := s.emitter.Emit(ctx, event); err != nil {
+		log.Printf("rateguard: emit request event: %v", err)
+	}
 }
 
 func (s *SDK) tenantID() string {
@@ -418,7 +437,9 @@ func (r *responseRecorder) Write(b []byte) (int, error) {
 		r.status = http.StatusOK
 	}
 	if len(b) > 0 {
-		_, _ = r.body.Write(b)
+		if _, err := r.body.Write(b); err != nil {
+			return 0, err
+		}
 	}
 	return r.ResponseWriter.Write(b)
 }

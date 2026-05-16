@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
-from typing import Iterable
+import logging
+from typing import Iterable, TypeGuard
 
-from ..types import HeadersLike, TokenUsage
+from ..types import HeadersLike, JsonObject, JsonValue, TokenUsage
+
+logger = logging.getLogger(__name__)
 
 
 def lower_bound(values: list[float], target: float) -> int:
@@ -54,7 +57,8 @@ def read_first_int_header(headers: HeadersLike | None, names: list[str]) -> int:
             continue
         try:
             return int(value)
-        except ValueError:
+        except ValueError as exc:
+            logger.warning("RateGuard ignored invalid integer token header %s=%r: %s", name, value, exc)
             continue
     return 0
 
@@ -83,11 +87,25 @@ def extract_token_usage_from_headers(headers: HeadersLike | None) -> TokenUsage 
     )
 
 
-def safe_json_parse(text: str) -> object | None:
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
+def safe_json_parse(text: str) -> JsonValue | None:
+    if not looks_like_json(text):
         return None
+    try:
+        parsed: object = json.loads(text)
+    except json.JSONDecodeError as exc:
+        logger.warning("RateGuard failed to parse token usage JSON payload: %s", exc)
+        return None
+    return parsed if is_json_value(parsed) else None
+
+
+def is_json_value(value: object) -> TypeGuard[JsonValue]:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return True
+    if isinstance(value, list):
+        return all(is_json_value(item) for item in value)
+    if isinstance(value, dict):
+        return all(isinstance(key, str) and is_json_value(item) for key, item in value.items())
+    return False
 
 
 def extract_token_usage_from_text(text: str) -> TokenUsage | None:
@@ -105,6 +123,8 @@ def extract_token_usage_from_text(text: str) -> TokenUsage | None:
             payload = line[5:].strip()
             if not payload:
                 continue
+            if payload == "[DONE]":
+                continue
             usage = extract_token_usage_from_value(safe_json_parse(payload))
             if usage is None:
                 continue
@@ -121,6 +141,11 @@ def merge_usage(base: TokenUsage, addition: TokenUsage) -> TokenUsage:
         output_tokens=base.output_tokens + addition.output_tokens,
         total_tokens=base.total_tokens + addition.total_tokens,
     )
+
+
+def looks_like_json(text: str) -> bool:
+    stripped = text.strip()
+    return stripped.startswith("{") or stripped.startswith("[")
 
 
 def format_retry_after_ms(retry_after_ms: int) -> str:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterable, AsyncIterator, Callable
+from typing import TYPE_CHECKING, AsyncIterable, AsyncIterator, Callable
 
 from .exceptions import RateGuardException
 from .runtime import RateGuardRuntime
@@ -15,6 +15,10 @@ from .types import (
     TokenBudgetDecision,
     TokenBudgetOptions,
 )
+
+if TYPE_CHECKING:
+    from .adapters.asgi import ASGIApp
+    from .adapters.wsgi import WSGIApp
 
 
 def _request_context_from_object(
@@ -87,7 +91,7 @@ class RateGuard:
         runtime = self.runtime
 
         class BoundMiddleware(Middleware):
-            def __init__(self, app: Callable[[dict[str, object], Callable, Callable], object]) -> None:
+            def __init__(self, app: ASGIApp) -> None:
                 super().__init__(app, runtime)
 
         return BoundMiddleware
@@ -99,7 +103,7 @@ class RateGuard:
         runtime = self.runtime
 
         class BoundMiddleware(Middleware):
-            def __init__(self, app: Callable[..., object]) -> None:
+            def __init__(self, app: WSGIApp) -> None:
                 super().__init__(app, guard=runtime)
 
         return BoundMiddleware

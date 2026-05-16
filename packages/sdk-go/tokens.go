@@ -1,7 +1,9 @@
 package rateguard
 
 import (
+	"bytes"
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,6 +34,8 @@ type ResponseSnapshot struct {
 	Body       []byte
 	StatusCode int
 }
+
+type tokenJSONPayload map[string]json.RawMessage
 
 // TokenUsageExtractor extracts token usage from a response snapshot.
 type TokenUsageExtractor interface {
@@ -98,27 +102,34 @@ func extractTokenUsageFromHeaders(header http.Header) (TokenUsage, bool) {
 }
 
 func extractTokenUsageFromBody(body []byte) (TokenUsage, bool) {
-	var payload map[string]any
-	if err := json.Unmarshal(body, &payload); err != nil {
+	if !looksLikeJSON(body) {
+		return TokenUsage{}, false
+	}
+
+	var payload tokenJSONPayload
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.UseNumber()
+	if err := decoder.Decode(&payload); err != nil {
+		log.Printf("rateguard: parse token usage response body: %v", err)
 		return TokenUsage{}, false
 	}
 
 	usage := TokenUsage{}
-	if model, ok := payload["model"].(string); ok {
+	if model, ok := stringField(payload, "model"); ok {
 		usage.Model = model
 	}
-	if provider, ok := payload["provider"].(string); ok {
+	if provider, ok := stringField(payload, "provider"); ok {
 		usage.Provider = provider
 	}
 
-	if data, ok := payload["usage"].(map[string]any); ok {
+	if data, ok := objectField(payload, "usage"); ok {
 		usage.InputTokens = firstNumber(data, "prompt_tokens", "input_tokens", "promptTokenCount")
 		usage.OutputTokens = firstNumber(data, "completion_tokens", "output_tokens", "candidatesTokenCount")
 		usage.TotalTokens = firstNumber(data, "total_tokens", "totalTokenCount")
 	}
 
 	if usage.TotalTokens == 0 {
-		if data, ok := payload["usageMetadata"].(map[string]any); ok {
+		if data, ok := objectField(payload, "usageMetadata"); ok {
 			usage.InputTokens = firstNumber(data, "promptTokenCount", "input_tokens")
 			usage.OutputTokens = firstNumber(data, "candidatesTokenCount", "output_tokens")
 			usage.TotalTokens = firstNumber(data, "totalTokenCount", "total_tokens")
@@ -134,6 +145,33 @@ func extractTokenUsageFromBody(body []byte) (TokenUsage, bool) {
 	}
 
 	return usage, true
+}
+
+func objectField(payload tokenJSONPayload, name string) (tokenJSONPayload, bool) {
+	raw, ok := payload[name]
+	if !ok || len(raw) == 0 {
+		return nil, false
+	}
+
+	var value tokenJSONPayload
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return nil, false
+	}
+	return value, true
+}
+
+func stringField(payload tokenJSONPayload, name string) (string, bool) {
+	raw, ok := payload[name]
+	if !ok || len(raw) == 0 {
+		return "", false
+	}
+
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	return value, value != ""
 }
 
 func firstNonEmptyHeader(header http.Header, names ...string) string {
@@ -153,6 +191,7 @@ func firstIntHeader(header http.Header, names ...string) (int64, bool) {
 		}
 		n, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
+			log.Printf("rateguard: ignore invalid token header %s=%q: %v", name, value, err)
 			continue
 		}
 		return n, true
@@ -178,28 +217,37 @@ func headerValue(header http.Header, name string) string {
 	return ""
 }
 
-func firstNumber(values map[string]any, names ...string) int64 {
+func firstNumber(values tokenJSONPayload, names ...string) int64 {
 	for _, name := range names {
-		value, ok := values[name]
-		if !ok {
+		raw, ok := values[name]
+		if !ok || len(raw) == 0 {
 			continue
 		}
 
-		switch v := value.(type) {
-		case float64:
-			return int64(v)
-		case int64:
-			return v
-		case int:
-			return int64(v)
-		case json.Number:
-			n, err := v.Int64()
+		var number json.Number
+		if err := json.Unmarshal(raw, &number); err == nil {
+			if n, err := number.Int64(); err == nil {
+				return n
+			}
+			if n, err := number.Float64(); err == nil {
+				return int64(n)
+			}
+		}
+
+		var value string
+		if err := json.Unmarshal(raw, &value); err == nil {
+			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 			if err == nil {
 				return n
 			}
 		}
 	}
 	return 0
+}
+
+func looksLikeJSON(body []byte) bool {
+	trimmed := bytes.TrimSpace(body)
+	return len(trimmed) > 0 && (trimmed[0] == '{' || trimmed[0] == '[')
 }
 
 // NormalizeTokenBudgetMode maps empty or historical values to the canonical token budget mode vocabulary.

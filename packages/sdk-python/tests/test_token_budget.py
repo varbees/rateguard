@@ -116,3 +116,24 @@ def test_token_budget_extracts_response_header_usage() -> None:
     assert usage.model == "gpt-4.1"
     assert usage.total_tokens == 5
     assert budget.usage("header-user")["month"] == 5
+
+
+def test_token_budget_logs_malformed_json_payloads(caplog: pytest.LogCaptureFixture) -> None:
+    budget = TokenBudget(
+        clock=FixedClock(),
+        hour_limit=0,
+        day_limit=0,
+        month_limit=100,
+        mode="hard-stop",
+        soft_stop_at=0.8,
+        event_emitter=RecorderEmitter(),
+    )
+
+    with caplog.at_level("WARNING"):
+        usage = budget.record_from_snapshot(
+            "bad-json-user",
+            ResponseSnapshot(headers={}, body='{"usage":{"total_tokens":7}', status_code=200),
+        )
+
+    assert usage is None
+    assert "RateGuard failed to parse token usage JSON payload" in caplog.text

@@ -1,5 +1,6 @@
 import { RateGuardRuntime } from '../runtime.js';
 import { buildAdapterRequestContext, denialPayload, snapshotFromResponse } from './common.js';
+import type { AdapterPayload } from './common.js';
 import type { RateGuardOptions, RequestContext } from '../types.js';
 
 export interface HonoLikeRequest {
@@ -10,8 +11,8 @@ export interface HonoLikeRequest {
 
 export interface HonoLikeContext {
   req: HonoLikeRequest;
-  body(payload: unknown, status?: number): Response | Promise<Response>;
-  json(payload: unknown, status?: number): Response | Promise<Response>;
+  body(payload: AdapterPayload, status?: number): Response | Promise<Response>;
+  json(payload: AdapterPayload, status?: number): Response | Promise<Response>;
   res?: Response;
 }
 
@@ -26,7 +27,7 @@ export function rateguard(options: RateGuardOptions | RateGuardRuntime = {}) {
     const startedAt = runtime.config.clock.now();
     const preflight = await runtime.admit(request);
     if (!preflight.allowed) {
-      return c.json(denialPayload(preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0), preflight.statusCode ?? 429);
+      return c.json(denialPayload(preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0, preflight.errorCode), preflight.statusCode ?? 429);
     }
 
     await next();

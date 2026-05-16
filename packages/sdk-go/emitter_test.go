@@ -122,3 +122,49 @@ func TestHTTPEventEmitterSerializesEnvelope(t *testing.T) {
 		t.Fatalf("serialized body does not contain event_id: %s", string(rt.body))
 	}
 }
+
+func TestHTTPEventEmitterReturnsBodyDrainErrors(t *testing.T) {
+	t.Parallel()
+
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusAccepted,
+			Header:     make(http.Header),
+			Body:       failingReadCloser{},
+			Request:    req,
+		}, nil
+	})}
+	emitter := NewHTTPEventEmitter("https://controlplane.example/api/v1/events", client)
+
+	err := emitter.Emit(context.Background(), EventEnvelope{
+		EventID:    "evt-123",
+		EventType:  EventTypeRequestCompleted,
+		OccurredAt: time.Date(2026, 3, 20, 10, 30, 0, 0, time.UTC),
+		Payload: RequestEventPayload{
+			Method:              http.MethodGet,
+			Path:                "/v1/widgets",
+			StatusCode:          http.StatusOK,
+			Preset:              "dev",
+			CircuitBreakerState: "closed",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "drain event response body") {
+		t.Fatalf("Emit() error = %v, want drain event response body", err)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type failingReadCloser struct{}
+
+func (failingReadCloser) Read([]byte) (int, error) {
+	return 0, io.ErrUnexpectedEOF
+}
+
+func (failingReadCloser) Close() error {
+	return nil
+}

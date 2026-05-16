@@ -6,6 +6,13 @@ interface WindowState {
   timestamps: number[];
 }
 
+interface RemoteRateLimitResponse {
+  allowed: boolean;
+  remaining?: number;
+  retry_after_ms?: number;
+  retryAfterMs?: number;
+}
+
 /**
  * Local sliding-window rate limiter with optional remote control-plane fallback.
  */
@@ -47,22 +54,11 @@ export class RateLimiter {
       });
 
       if (!response.ok) {
-        return {
-          ...local,
-          degraded: true,
-        };
+        return remoteUnavailable(local);
       }
 
-      const body = (await response.json().catch(() => undefined)) as
-        | {
-            allowed?: boolean;
-            remaining?: number;
-            retry_after_ms?: number;
-            retryAfterMs?: number;
-          }
-        | undefined;
-
-      if (body && typeof body.allowed === 'boolean') {
+      const body: unknown = await response.json();
+      if (isRemoteRateLimitResponse(body)) {
         return {
           allowed: body.allowed,
           applied: true,
@@ -78,12 +74,9 @@ export class RateLimiter {
         };
       }
 
-      return local;
+      return remoteUnavailable(local);
     } catch {
-      return {
-        ...local,
-        degraded: true,
-      };
+      return remoteUnavailable(local);
     }
   }
 
@@ -122,4 +115,23 @@ export class RateLimiter {
       degraded: false,
     };
   }
+}
+
+function remoteUnavailable(local: RateLimitDecision): RateLimitDecision {
+  return {
+    ...local,
+    allowed: false,
+    applied: false,
+    remaining: 0,
+    retryAfterMs: 0,
+    degraded: true,
+  };
+}
+
+function isRemoteRateLimitResponse(value: unknown): value is RemoteRateLimitResponse {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  return typeof record.allowed === 'boolean';
 }

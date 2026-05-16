@@ -22,7 +22,7 @@ export function withRateGuard<TContext = Record<string, never>>(
     const preflight = await runtime.admit(requestContext);
     if (!preflight.allowed) {
       return new Response(
-        JSON.stringify(denialPayload(preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0)),
+        JSON.stringify(denialPayload(preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0, preflight.errorCode)),
         {
           status: preflight.statusCode ?? 429,
           headers: denialHeaders(preflight.retryAfterMs ?? 0),

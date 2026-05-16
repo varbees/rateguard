@@ -1,6 +1,12 @@
 import { EventEmitter } from 'node:events';
+import type { AdapterPayload } from '../src/adapters/common.js';
 import type { ExpressLikeResponse } from '../src/adapters/express.js';
 import type { FastifyLikeInstance, FastifyLikeReply, FastifyLikeRequest } from '../src/adapters/fastify.js';
+import type { DenialPayload } from '../src/adapters/common.js';
+
+type ExpressResponseChunk = Parameters<ExpressLikeResponse['write']>[0];
+type ExpressEndArgs = Parameters<ExpressLikeResponse['end']>;
+type FastifyHook = Parameters<FastifyLikeInstance['addHook']>[1];
 
 export class FakeExpressResponse extends EventEmitter implements ExpressLikeResponse {
   statusCode = 200;
@@ -25,7 +31,7 @@ export class FakeExpressResponse extends EventEmitter implements ExpressLikeResp
     return Object.fromEntries(this.headers);
   }
 
-  write(chunk: unknown): boolean {
+  write(chunk: ExpressResponseChunk): boolean {
     if (typeof chunk === 'string') {
       this.chunks.push(chunk);
     } else if (chunk instanceof Uint8Array) {
@@ -34,7 +40,8 @@ export class FakeExpressResponse extends EventEmitter implements ExpressLikeResp
     return true;
   }
 
-  end(chunk?: unknown): this {
+  end(...args: ExpressEndArgs): this {
+    const chunk = args[0];
     if (chunk !== undefined) {
       void this.write(chunk);
     }
@@ -42,7 +49,7 @@ export class FakeExpressResponse extends EventEmitter implements ExpressLikeResp
     return this;
   }
 
-  send(body?: unknown): this {
+  send(body?: AdapterPayload): this {
     if (body !== undefined) {
       if (typeof body === 'string') {
         this.chunks.push(body);
@@ -54,7 +61,7 @@ export class FakeExpressResponse extends EventEmitter implements ExpressLikeResp
     return this;
   }
 
-  json(body: unknown): this {
+  json(body: AdapterPayload): this {
     return this.send(JSON.stringify(body));
   }
 
@@ -65,9 +72,9 @@ export class FakeExpressResponse extends EventEmitter implements ExpressLikeResp
 
 export class FakeFastify implements FastifyLikeInstance {
   readonly hooks: {
-    onRequest: Array<(request: FastifyLikeRequest, reply: FastifyLikeReply) => Promise<unknown> | unknown>;
-    onSend: Array<(request: FastifyLikeRequest, reply: FastifyLikeReply, payload?: unknown) => Promise<unknown> | unknown>;
-    onResponse: Array<(request: FastifyLikeRequest, reply: FastifyLikeReply) => Promise<unknown> | unknown>;
+    onRequest: FastifyHook[];
+    onSend: FastifyHook[];
+    onResponse: FastifyHook[];
   } = {
     onRequest: [],
     onSend: [],
@@ -76,17 +83,17 @@ export class FakeFastify implements FastifyLikeInstance {
 
   addHook(
     name: 'onRequest' | 'onSend' | 'onResponse',
-    hook: (request: FastifyLikeRequest, reply: FastifyLikeReply, payload?: unknown) => Promise<unknown> | unknown,
+    hook: FastifyHook,
   ): void {
     if (name === 'onRequest') {
-      this.hooks.onRequest.push(hook as (request: FastifyLikeRequest, reply: FastifyLikeReply) => Promise<unknown> | unknown);
+      this.hooks.onRequest.push(hook);
       return;
     }
     if (name === 'onSend') {
       this.hooks.onSend.push(hook);
       return;
     }
-    this.hooks.onResponse.push(hook as (request: FastifyLikeRequest, reply: FastifyLikeReply) => Promise<unknown> | unknown);
+    this.hooks.onResponse.push(hook);
   }
 }
 
@@ -104,7 +111,7 @@ export class FakeFastifyReply implements FastifyLikeReply {
     return this;
   }
 
-  send(payload: unknown): unknown {
+  send(payload: AdapterPayload): AdapterPayload {
     return payload;
   }
 }

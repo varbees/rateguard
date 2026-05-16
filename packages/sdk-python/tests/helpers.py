@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+
+from rateguard.types import RateGuardEventEnvelope
 
 
 class FixedClock:
@@ -22,9 +23,9 @@ class RecordedEvent:
 
 class RecorderEmitter:
     def __init__(self) -> None:
-        self.events: list[Any] = []
+        self.events: list[RateGuardEventEnvelope] = []
 
-    async def emit(self, event: Any) -> None:
+    async def emit(self, event: RateGuardEventEnvelope) -> None:
         self.events.append(event)
 
 
@@ -38,4 +39,3 @@ class Usage:
 @dataclass(slots=True)
 class Chunk:
     usage: Usage | None = None
-

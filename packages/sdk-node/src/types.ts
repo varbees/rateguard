@@ -170,6 +170,12 @@ export interface RateLimitDecision {
   degraded: boolean;
 }
 
+export type AdmissionErrorCode =
+  | 'circuit_open'
+  | 'rate_limit_exceeded'
+  | 'rate_limit_unavailable'
+  | 'token_budget_exceeded';
+
 /**
  * Per-request token-budget outcome.
  */
@@ -264,6 +270,7 @@ export interface EventEmitterLike {
 export interface PreflightDecision {
   allowed: boolean;
   statusCode?: 429 | 503;
+  errorCode?: AdmissionErrorCode;
   body?: string;
   retryAfterMs?: number;
   rateLimit?: RateLimitDecision;

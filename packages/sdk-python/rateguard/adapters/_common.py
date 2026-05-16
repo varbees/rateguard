@@ -4,22 +4,22 @@ import json
 from typing import TypeAlias
 
 from ..core.utils import format_retry_after_ms, read_first_header
-from ..types import HeadersLike, RequestContext, ResolvedRateGuardOptions
+from ..types import AdmissionErrorCode, HeadersLike, RequestContext, ResolvedRateGuardOptions
 
 DenialPayload: TypeAlias = dict[str, str | int]
 
 
-def denial_payload(status_code: int, retry_after_ms: int) -> DenialPayload:
+def denial_payload(status_code: int, retry_after_ms: int, error_code: AdmissionErrorCode | None = None) -> DenialPayload:
     payload: DenialPayload = {
-        "error": "rate_limit_exceeded" if status_code == 429 else "circuit_open",
+        "error": error_code or ("rate_limit_exceeded" if status_code == 429 else "circuit_open"),
     }
     if retry_after_ms > 0:
         payload["retry_after_ms"] = retry_after_ms
     return payload
 
 
-def denial_body(status_code: int, retry_after_ms: int) -> bytes:
-    return json.dumps(denial_payload(status_code, retry_after_ms)).encode()
+def denial_body(status_code: int, retry_after_ms: int, error_code: AdmissionErrorCode | None = None) -> bytes:
+    return json.dumps(denial_payload(status_code, retry_after_ms, error_code)).encode()
 
 
 def denial_headers(retry_after_ms: int) -> list[tuple[str, str]]:

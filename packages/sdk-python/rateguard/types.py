@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Literal, Mapping, Protocol
+from typing import Awaitable, Callable, Literal, Mapping, Protocol, Sequence, TypeAlias
 
 PresetName = Literal["dev", "standard", "high-throughput", "llm-heavy", "strict-upstream-protection"]
 TokenBudgetMode = Literal["hard-stop", "soft-stop"]
@@ -11,8 +11,13 @@ RateGuardEventType = Literal[
     "request.rate_limited",
     "request.token_budget_exceeded",
 ]
+AdmissionErrorCode = Literal["circuit_open", "rate_limit_exceeded", "rate_limit_unavailable", "token_budget_exceeded"]
 
-HeadersLike = Mapping[str, object]
+JsonPrimitive: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonPrimitive | dict[str, "JsonValue"] | list["JsonValue"]
+JsonObject: TypeAlias = dict[str, JsonValue]
+HeaderValue: TypeAlias = str | bytes | bytearray | int | float | Sequence[str | bytes | bytearray] | None
+HeadersLike: TypeAlias = Mapping[str, HeaderValue]
 
 
 class Clock(Protocol):
@@ -215,6 +220,7 @@ RateGuardEventEnvelope = RateGuardEvent
 class PreflightDecision:
     allowed: bool
     status_code: int | None = None
+    error_code: AdmissionErrorCode | None = None
     body: str | None = None
     retry_after_ms: int | None = None
     rate_limit: RateLimitDecision | None = None

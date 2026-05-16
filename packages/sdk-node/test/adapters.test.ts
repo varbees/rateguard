@@ -5,6 +5,8 @@ import { rateguardPlugin } from '../src/adapters/fastify.js';
 import { rateguard } from '../src/adapters/hono.js';
 import { withRateGuard } from '../src/adapters/next.js';
 import { FakeExpressResponse, FakeFastify, FakeFastifyReply } from './helpers.js';
+import type { AdapterPayload } from '../src/adapters/common.js';
+import type { ExpressLikeRequest } from '../src/adapters/express.js';
 
 describe('adapters', () => {
   it('express middleware allows under limit and returns 429 with Retry-After when exceeded', async () => {
@@ -13,11 +15,11 @@ describe('adapters', () => {
       rateLimit: { requestsPerSecond: 1, burst: 0, windowMs: 60_000 },
     });
     const middleware = guard.middleware();
-    const req = {
+    const req: ExpressLikeRequest = {
       method: 'GET',
       url: '/hello',
       headers: {},
-    } as never;
+    };
 
     const firstResponse = new FakeExpressResponse();
     let nextCalled = 0;
@@ -61,11 +63,11 @@ describe('adapters', () => {
     guard.runtime.tokenBudget.record('global:root:local:GET', 5);
 
     const middleware = guard.middleware();
-    const req = {
+    const req: ExpressLikeRequest = {
       method: 'GET',
       url: '/hello',
       headers: {},
-    } as never;
+    };
     const res = new FakeExpressResponse();
     let nextCalled = false;
 
@@ -76,6 +78,27 @@ describe('adapters', () => {
 
     expect(nextCalled).toBe(true);
     expect(events).toEqual(['request.completed']);
+  });
+
+  it('express middleware reports token-budget denials with the token error code', async () => {
+    const guard = new RateGuard({
+      preset: 'dev',
+      tokenBudget: { monthLimit: 10, mode: 'hard-stop', softStopAt: 0.8 },
+    });
+    guard.runtime.tokenBudget.record('global:root:local:GET', 10);
+
+    const middleware = guard.middleware();
+    const res = new FakeExpressResponse();
+    let nextCalled = false;
+
+    await middleware({ method: 'GET', url: '/hello', headers: {} }, res, async () => {
+      nextCalled = true;
+      res.status(200).end('ok');
+    });
+
+    expect(nextCalled).toBe(false);
+    expect(res.statusCode).toBe(429);
+    expect(JSON.parse(res.body())).toMatchObject({ error: 'token_budget_exceeded' });
   });
 
   it('fastify plugin wires the same admission path', async () => {
@@ -112,10 +135,10 @@ describe('adapters', () => {
           return name === 'x-request-id' ? 'abc' : undefined;
         },
       },
-      async json(payload: unknown, status?: number) {
+      async json(payload: AdapterPayload, status?: number) {
         return new Response(JSON.stringify(payload), { status: status ?? 200, headers: { 'content-type': 'application/json' } });
       },
-      async body(payload: unknown, status?: number) {
+      async body(payload: AdapterPayload, status?: number) {
         return new Response(typeof payload === 'string' ? payload : JSON.stringify(payload), { status: status ?? 200 });
       },
       res: new Response('ok', { status: 200 }),
@@ -188,7 +211,7 @@ describe('adapters', () => {
 
     const middleware = guard.middleware();
     const res = new FakeExpressResponse();
-    await middleware({ method: 'GET', url: '/blocked', headers: {} } as never, res, async () => {
+    await middleware({ method: 'GET', url: '/blocked', headers: {} }, res, async () => {
       throw new Error('next should not run');
     });
 

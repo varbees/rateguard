@@ -3,11 +3,14 @@ from __future__ import annotations
 from dataclasses import asdict
 from datetime import datetime, timezone
 from json import dumps
+import logging
 from typing import Protocol
 from uuid import uuid4
 
 from ..config import derive_ws_url
 from ..types import EventEmitterLike, RateGuardEvent, RateGuardEventPayload, RateGuardEventType, ResolvedRateGuardOptions
+
+logger = logging.getLogger(__name__)
 
 
 class ConsoleEventEmitter:
@@ -26,13 +29,15 @@ class WebSocketEventEmitter:
             return
         try:
             import websockets  # type: ignore[import-not-found]
-        except Exception:
+        except Exception as exc:
+            logger.warning("RateGuard websocket emitter unavailable; falling back to console: %s", exc)
             await self._fallback.emit(event)
             return
         try:
             async with websockets.connect(self._ws_url) as socket:  # type: ignore[attr-defined]
                 await socket.send(dumps(asdict(event), separators=(",", ":")))
-        except Exception:
+        except Exception as exc:
+            logger.warning("RateGuard websocket delivery failed; falling back to console: %s", exc)
             await self._fallback.emit(event)
 
 
@@ -64,4 +69,3 @@ def build_event_envelope(
         occurred_at=datetime.now(timezone.utc).isoformat(),
         payload=payload,
     )
-

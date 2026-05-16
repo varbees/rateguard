@@ -46,10 +46,11 @@ export class ControlPlaneEventEmitter implements EventEmitterLike {
     const payload = toJson(event);
     const socket = this.ensureSocket();
     if (!socket || socket.readyState !== WebSocket.OPEN) {
-      this.queue.push(payload);
-      if (this.queue.length > 100) {
-        this.queue.shift();
+      if (this.queue.length >= 100) {
+        await this.fallback.emit(event);
+        return;
       }
+      this.queue.push(payload);
       return;
     }
 
@@ -66,7 +67,7 @@ export class ControlPlaneEventEmitter implements EventEmitterLike {
     }
 
     this.connecting = true;
-    const WebSocketImpl = globalThis.WebSocket as unknown as WebSocketCtor;
+    const WebSocketImpl: WebSocketCtor = globalThis.WebSocket;
     const socket = new WebSocketImpl(this.wsUrl);
     this.socket = socket;
 

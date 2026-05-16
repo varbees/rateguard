@@ -1,18 +1,18 @@
 import { RateGuardRuntime } from '../runtime.js';
 import { buildAdapterRequestContext, denialHeaders, denialPayload } from './common.js';
+import type { AdapterPayload } from './common.js';
 import type { HeadersLike, RateGuardOptions, RequestContext, ResponseSnapshot } from '../types.js';
 
 export interface FastifyLikeRequest {
   method?: string;
   url?: string;
   headers: HeadersLike;
-  body?: unknown;
 }
 
 export interface FastifyLikeReply {
   code(statusCode: number): FastifyLikeReply;
   header(name: string, value: string): FastifyLikeReply;
-  send(payload: unknown): unknown;
+  send(payload: AdapterPayload): AdapterPayload;
   statusCode?: number;
   raw?: {
     statusCode?: number;
@@ -23,7 +23,7 @@ export interface FastifyLikeReply {
 export interface FastifyLikeInstance {
   addHook(
     name: 'onRequest' | 'onSend' | 'onResponse',
-    hook: (request: FastifyLikeRequest, reply: FastifyLikeReply, payload?: unknown) => Promise<unknown> | unknown,
+    hook: (request: FastifyLikeRequest, reply: FastifyLikeReply, payload?: AdapterPayload) => Promise<AdapterPayload | void> | AdapterPayload | void,
   ): void;
 }
 
@@ -48,7 +48,7 @@ export async function rateguardPlugin(
     const requestContext = buildRequestContext(runtime, request);
     const preflight = await runtime.admit(requestContext);
     if (!preflight.allowed) {
-      writeDeniedReply(reply, preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0);
+      writeDeniedReply(reply, preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0, preflight.errorCode);
       return;
     }
 
@@ -93,10 +93,10 @@ function buildRequestContext(runtime: RateGuardRuntime, request: FastifyLikeRequ
   });
 }
 
-function writeDeniedReply(reply: FastifyLikeReply, statusCode: number, retryAfterMs: number): void {
+function writeDeniedReply(reply: FastifyLikeReply, statusCode: number, retryAfterMs: number, errorCode?: Parameters<typeof denialPayload>[2]): void {
   reply.code(statusCode);
   for (const [name, value] of Object.entries(denialHeaders(retryAfterMs))) {
     reply.header(name, value);
   }
-  reply.send(denialPayload(statusCode, retryAfterMs));
+  reply.send(denialPayload(statusCode, retryAfterMs, errorCode));
 }

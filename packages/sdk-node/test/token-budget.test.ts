@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { TokenBudgetManager } from '../src/core/token-budget.js';
 
 const clock = {
@@ -66,5 +66,25 @@ describe('TokenBudgetManager', () => {
       mode: 'hard-stop',
       softStopAt: 0.8,
     }).month).toBe(5);
+  });
+
+  it('logs malformed JSON token usage payloads instead of hiding parser failures', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const budget = new TokenBudgetManager({ clock, capacity: 50_000 });
+      const usage = budget.recordFromSnapshot('tenant:route:upstream:GET', {
+        headers: {},
+        body: '{"usage":{"total_tokens":7}',
+        statusCode: 200,
+      });
+
+      expect(usage).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'RateGuard failed to parse token usage JSON payload',
+        expect.any(SyntaxError),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });

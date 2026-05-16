@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from rateguard import RateGuard
+from rateguard.adapters.asgi import ASGIMessage, ASGIReceive, ASGIScope, ASGISend, RateGuardMiddleware
 from rateguard.types import RateLimitOptions, TokenBudgetOptions
 
 
@@ -50,3 +51,28 @@ async def test_fastapi_asgi_middleware_records_token_headers() -> None:
 
     assert response.status_code == 200
     assert guard.runtime.token_budget.usage("global:root:local:GET")["month"] == 7
+
+
+@pytest.mark.asyncio
+async def test_asgi_middleware_does_not_extract_tokens_from_invalid_utf8_body() -> None:
+    async def app(scope: ASGIScope, receive: ASGIReceive, send: ASGISend) -> None:
+        await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"application/json")]})
+        await send({"type": "http.response.body", "body": b'{"usage":{"total_tokens":7}}\xff', "more_body": False})
+
+    guard = RateGuard(
+        preset="dev",
+        token_budget=TokenBudgetOptions(hour_limit=0, day_limit=0, month_limit=100, mode="hard-stop"),
+    )
+    middleware = RateGuardMiddleware(app, guard.runtime)
+    sent: list[ASGIMessage] = []
+
+    async def receive() -> ASGIMessage:
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message: ASGIMessage) -> None:
+        sent.append(message)
+
+    await middleware({"type": "http", "method": "GET", "path": "/chat", "headers": []}, receive, send)
+
+    assert sent[-1]["body"] == b'{"usage":{"total_tokens":7}}\xff'
+    assert guard.runtime.token_budget.usage("global:root:local:GET")["month"] == 0

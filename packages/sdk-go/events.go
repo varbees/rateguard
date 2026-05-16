@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -15,36 +16,36 @@ import (
 
 const (
 	EventTypeRequestCompleted    = "request.completed"
-	EventTypeRequestRateLimited   = "request.rate_limited"
-	EventTypeTokenBudgetExceeded  = "request.token_budget_exceeded"
+	EventTypeRequestRateLimited  = "request.rate_limited"
+	EventTypeTokenBudgetExceeded = "request.token_budget_exceeded"
 )
 
 // RequestEventPayload is the structured payload emitted for request events.
 type RequestEventPayload struct {
-	RequestID           string `json:"request_id,omitempty"`
-	Method              string `json:"method"`
-	Path                string `json:"path"`
-	StatusCode          int    `json:"status_code"`
-	LatencyMS           int64  `json:"latency_ms"`
-	RateLimitApplied    bool   `json:"rate_limit_applied"`
-	RateLimitAllowed    bool   `json:"rate_limit_allowed"`
-	RateLimitLimit      int    `json:"rate_limit_limit"`
-	RateLimitRemaining  int    `json:"rate_limit_remaining"`
-	RetryAfterMS        int64  `json:"retry_after_ms,omitempty"`
-	Preset              string `json:"preset"`
-	CircuitBreakerState string `json:"circuit_breaker_state"`
-	QueueDepth          int    `json:"queue_depth"`
-	TokenProvider       string `json:"token_provider,omitempty"`
-	TokenModel          string `json:"token_model,omitempty"`
-	TokenInputTokens    int64  `json:"token_input_tokens,omitempty"`
-	TokenOutputTokens   int64  `json:"token_output_tokens,omitempty"`
-	TokenTotalTokens    int64  `json:"token_total_tokens,omitempty"`
-	TokenBudgetMode     string `json:"token_budget_mode,omitempty"`
-	TokenBudgetApplied  bool   `json:"token_budget_applied"`
-	TokenBudgetQueued   bool   `json:"token_budget_queued"`
-	TokenBudgetWaitMS   int64  `json:"token_budget_wait_ms,omitempty"`
-	TokenBudgetLimit    int64  `json:"token_budget_limit,omitempty"`
-	TokenBudgetRemaining int64 `json:"token_budget_remaining,omitempty"`
+	RequestID            string `json:"request_id,omitempty"`
+	Method               string `json:"method"`
+	Path                 string `json:"path"`
+	StatusCode           int    `json:"status_code"`
+	LatencyMS            int64  `json:"latency_ms"`
+	RateLimitApplied     bool   `json:"rate_limit_applied"`
+	RateLimitAllowed     bool   `json:"rate_limit_allowed"`
+	RateLimitLimit       int    `json:"rate_limit_limit"`
+	RateLimitRemaining   int    `json:"rate_limit_remaining"`
+	RetryAfterMS         int64  `json:"retry_after_ms,omitempty"`
+	Preset               string `json:"preset"`
+	CircuitBreakerState  string `json:"circuit_breaker_state"`
+	QueueDepth           int    `json:"queue_depth"`
+	TokenProvider        string `json:"token_provider,omitempty"`
+	TokenModel           string `json:"token_model,omitempty"`
+	TokenInputTokens     int64  `json:"token_input_tokens,omitempty"`
+	TokenOutputTokens    int64  `json:"token_output_tokens,omitempty"`
+	TokenTotalTokens     int64  `json:"token_total_tokens,omitempty"`
+	TokenBudgetMode      string `json:"token_budget_mode,omitempty"`
+	TokenBudgetApplied   bool   `json:"token_budget_applied"`
+	TokenBudgetQueued    bool   `json:"token_budget_queued"`
+	TokenBudgetWaitMS    int64  `json:"token_budget_wait_ms,omitempty"`
+	TokenBudgetLimit     int64  `json:"token_budget_limit,omitempty"`
+	TokenBudgetRemaining int64  `json:"token_budget_remaining,omitempty"`
 }
 
 // EventEnvelope is the standard event wrapper used by the SDK.
@@ -111,7 +112,9 @@ func (e *HTTPEventEmitter) Emit(ctx context.Context, event EventEnvelope) error 
 	}
 	defer resp.Body.Close()
 
-	_, _ = io.Copy(io.Discard, resp.Body)
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		return fmt.Errorf("drain event response body: %w", err)
+	}
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("event delivery failed: %s", resp.Status)
 	}
@@ -133,6 +136,7 @@ func newRandomHexID(size int) string {
 
 	buf := make([]byte, size)
 	if _, err := rand.Read(buf); err != nil {
+		log.Printf("rateguard: generate random id: %v", err)
 		return fmt.Sprintf("%x", time.Now().UTC().UnixNano())
 	}
 

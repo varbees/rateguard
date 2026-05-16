@@ -2,30 +2,44 @@ import { createHash } from 'node:crypto';
 import { RateGuardRuntime } from '../runtime.js';
 import { formatRetryAfterMs } from '../core/utils.js';
 import { buildAdapterRequestContext, denialHeaders, denialPayload } from './common.js';
+import type { AdapterPayload } from './common.js';
 import type { HeadersLike, RateGuardOptions, ResponseSnapshot } from '../types.js';
+
+type ExpressResponseChunk = string | Uint8Array;
+type ExpressWriteCallback = (error?: Error | null) => void;
+type ExpressWriteArgs =
+  | []
+  | [encoding: BufferEncoding]
+  | [callback: ExpressWriteCallback]
+  | [encoding: BufferEncoding, callback: ExpressWriteCallback];
+type ExpressEndArgs =
+  | []
+  | [chunk: ExpressResponseChunk]
+  | [chunk: ExpressResponseChunk, encoding: BufferEncoding]
+  | [chunk: ExpressResponseChunk, callback: ExpressWriteCallback]
+  | [chunk: ExpressResponseChunk, encoding: BufferEncoding, callback: ExpressWriteCallback];
 
 export interface ExpressLikeRequest {
   method?: string;
   originalUrl?: string;
   url?: string;
   headers: HeadersLike;
-  body?: unknown;
 }
 
 export interface ExpressLikeResponse {
   statusCode: number;
-  write(chunk: unknown): boolean;
-  end(chunk?: unknown): unknown;
-  setHeader(name: string, value: string | number | readonly string[]): unknown;
+  write(chunk: ExpressResponseChunk, ...args: ExpressWriteArgs): boolean;
+  end(...args: ExpressEndArgs): ExpressLikeResponse;
+  setHeader(name: string, value: string | number | readonly string[]): ExpressLikeResponse;
   getHeader(name: string): string | number | readonly string[] | undefined;
   getHeaders(): Record<string, string | number | readonly string[] | undefined>;
-  once(event: 'finish' | 'close', listener: () => void): unknown;
+  once(event: 'finish' | 'close', listener: () => void): ExpressLikeResponse;
   status?(code: number): ExpressLikeResponse;
-  send?(body?: unknown): ExpressLikeResponse;
-  json?(body: unknown): ExpressLikeResponse;
+  send?(body?: AdapterPayload): ExpressLikeResponse;
+  json?(body: AdapterPayload): ExpressLikeResponse;
 }
 
-export type NextFunction = (err?: unknown) => void;
+export type NextFunction = (err?: Error | 'route' | 'router') => void;
 
 /**
  * Build an Express/Connect compatible middleware.
@@ -41,7 +55,7 @@ export function middleware(options: RateGuardOptions | RateGuardRuntime = {}): (
     const preflight = await runtime.admit(request);
     if (!preflight.allowed) {
       writeAdmissionHeaders(res, runtime, preflight.rateLimit?.limit ?? runtime.config.rateLimit.requestsPerSecond + runtime.config.rateLimit.burst, preflight.rateLimit?.remaining ?? 0, runtime.config.rateLimit.burst, preflight.retryAfterMs ?? 0);
-      writeDeniedResponse(res, preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0);
+      writeDeniedResponse(res, preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0, preflight.errorCode);
       return;
     }
 
@@ -112,7 +126,7 @@ function writeAdmissionHeaders(res: ExpressLikeResponse, runtime: RateGuardRunti
   }
 }
 
-function writeDeniedResponse(res: ExpressLikeResponse, statusCode: number, retryAfterMs: number): void {
+function writeDeniedResponse(res: ExpressLikeResponse, statusCode: number, retryAfterMs: number, errorCode?: Parameters<typeof denialPayload>[2]): void {
   if (typeof res.status === 'function') {
     res.status(statusCode);
   } else {
@@ -121,7 +135,7 @@ function writeDeniedResponse(res: ExpressLikeResponse, statusCode: number, retry
   for (const [name, value] of Object.entries(denialHeaders(retryAfterMs))) {
     res.setHeader(name, value);
   }
-  const payload = denialPayload(statusCode, retryAfterMs);
+  const payload = denialPayload(statusCode, retryAfterMs, errorCode);
   if (typeof res.json === 'function') {
     res.json(payload);
     return;
@@ -141,16 +155,17 @@ function patchResponse(res: ExpressLikeResponse): {
   const write = res.write.bind(res);
   const end = res.end.bind(res);
 
-  res.write = ((chunk: unknown, ...rest: readonly unknown[]) => {
+  res.write = ((chunk: ExpressResponseChunk, ...rest: ExpressWriteArgs) => {
     pushChunk(chunks, chunk);
-    return write(chunk as never, ...(rest as []));
+    return write(chunk, ...rest);
   }) as typeof res.write;
 
-  res.end = ((chunk?: unknown, ...rest: readonly unknown[]) => {
+  res.end = ((...args: ExpressEndArgs) => {
+    const chunk = args[0];
     if (chunk !== undefined) {
       pushChunk(chunks, chunk);
     }
-    return end(chunk as never, ...(rest as []));
+    return end(...args);
   }) as typeof res.end;
 
   return {
@@ -158,17 +173,12 @@ function patchResponse(res: ExpressLikeResponse): {
   };
 }
 
-function pushChunk(chunks: Buffer[], chunk: unknown): void {
-  if (chunk === undefined || chunk === null) {
-    return;
-  }
+function pushChunk(chunks: Buffer[], chunk: ExpressResponseChunk): void {
   if (typeof chunk === 'string') {
     chunks.push(Buffer.from(chunk));
     return;
   }
-  if (chunk instanceof Uint8Array) {
-    chunks.push(Buffer.from(chunk));
-  }
+  chunks.push(Buffer.from(chunk));
 }
 
 function buildSnapshot(res: ExpressLikeResponse, body: string): ResponseSnapshot {

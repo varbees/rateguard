@@ -46,6 +46,7 @@ export class RateGuardRuntime {
       return {
         allowed: false,
         statusCode: 503,
+        errorCode: 'circuit_open',
         retryAfterMs: breakerDecision.retryAfterMs,
         circuitBreaker: breakerDecision,
       };
@@ -60,10 +61,13 @@ export class RateGuardRuntime {
     });
 
     if (!rateDecision.allowed) {
-      await this.emit('request.rate_limited', request, breakerDecision.state, 429, start, rateDecision, undefined, rateDecision.retryAfterMs);
+      const statusCode = rateDecision.degraded ? 503 : 429;
+      const errorCode = rateDecision.degraded ? 'rate_limit_unavailable' : 'rate_limit_exceeded';
+      await this.emit(rateDecision.degraded ? 'request.completed' : 'request.rate_limited', request, breakerDecision.state, statusCode, start, rateDecision, undefined, rateDecision.retryAfterMs);
       return {
         allowed: false,
-        statusCode: 429,
+        statusCode,
+        errorCode,
         retryAfterMs: rateDecision.retryAfterMs,
         rateLimit: rateDecision,
         circuitBreaker: breakerDecision,
@@ -76,6 +80,7 @@ export class RateGuardRuntime {
       return {
         allowed: false,
         statusCode: 429,
+        errorCode: 'token_budget_exceeded',
         retryAfterMs: tokenDecision.retryAfterMs,
         rateLimit: rateDecision,
         tokenBudget: tokenDecision,

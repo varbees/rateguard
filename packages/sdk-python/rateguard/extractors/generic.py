@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from ..types import TokenUsage
+from ..types import JsonObject, JsonValue, TokenUsage
 
 
-def _as_dict(value: object) -> dict[str, object] | None:
+def _as_dict(value: JsonValue | None) -> JsonObject | None:
     if isinstance(value, dict):
         return value
     return None
 
 
-def _first_str(source: dict[str, object], keys: list[str]) -> str | None:
+def _first_str(source: JsonObject, keys: list[str]) -> str | None:
     for key in keys:
         value = source.get(key)
         if isinstance(value, str) and value.strip():
@@ -17,7 +17,7 @@ def _first_str(source: dict[str, object], keys: list[str]) -> str | None:
     return None
 
 
-def _first_int(source: dict[str, object], keys: list[str]) -> int:
+def _first_int(source: JsonObject, keys: list[str]) -> int:
     for key in keys:
         value = source.get(key)
         if isinstance(value, int):
@@ -27,7 +27,7 @@ def _first_int(source: dict[str, object], keys: list[str]) -> int:
     return 0
 
 
-def extract_token_usage_from_value(value: object | None) -> TokenUsage | None:
+def extract_token_usage_from_value(value: JsonValue | None) -> TokenUsage | None:
     if value is None:
         return None
     if isinstance(value, list):
@@ -82,4 +82,3 @@ def extract_token_usage_from_value(value: object | None) -> TokenUsage | None:
         output_tokens=output_tokens,
         total_tokens=total_tokens or input_tokens + output_tokens,
     )
-

@@ -1,4 +1,8 @@
-import type { HeadersLike, TokenUsage } from '../types.js';
+import type { HeadersLike, RateGuardEventEnvelope, RateGuardEventPayload, TokenUsage } from '../types.js';
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonObject = { [key: string]: JsonValue | undefined };
+type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
 
 export function lowerBound(values: number[], target: number): number {
   let low = 0;
@@ -59,6 +63,8 @@ function readFirstIntHeader(headers: HeadersLike | undefined, names: readonly st
     if (!Number.isNaN(parsed)) {
       return parsed;
     }
+    // eslint-disable-next-line no-console
+    console.warn(`RateGuard ignored invalid integer token header ${name}: ${value}`);
   }
   return 0;
 }
@@ -95,15 +101,21 @@ export function extractTokenUsageFromHeaders(headers: HeadersLike | undefined): 
   };
 }
 
-function safeJsonParse(text: string): unknown | undefined {
+function safeJsonParse(text: string): JsonValue | undefined {
+  if (!looksLikeJson(text)) {
+    return undefined;
+  }
   try {
-    return JSON.parse(text) as unknown;
-  } catch {
+    const parsed: unknown = JSON.parse(text);
+    return isJsonValue(parsed) ? parsed : undefined;
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('RateGuard failed to parse token usage JSON payload', error);
     return undefined;
   }
 }
 
-function readObjectUsage(source: Record<string, unknown>): TokenUsage | undefined {
+function readObjectUsage(source: JsonObject): TokenUsage | undefined {
   const usageSource = asRecord(source.usage) ?? asRecord(source.usageMetadata) ?? source;
   const inputTokens = firstNumber(usageSource, ['input_tokens', 'prompt_tokens', 'promptTokenCount']);
   const outputTokens = firstNumber(usageSource, ['output_tokens', 'completion_tokens', 'candidatesTokenCount']);
@@ -125,14 +137,14 @@ function readObjectUsage(source: Record<string, unknown>): TokenUsage | undefine
   };
 }
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
+function asRecord(value: JsonValue | undefined): JsonObject | undefined {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
+    return value;
   }
   return undefined;
 }
 
-function firstString(source: Record<string, unknown>, keys: readonly string[]): string {
+function firstString(source: JsonObject, keys: readonly string[]): string {
   for (const key of keys) {
     const value = source[key];
     if (typeof value === 'string' && value.trim()) {
@@ -142,7 +154,7 @@ function firstString(source: Record<string, unknown>, keys: readonly string[]): 
   return '';
 }
 
-function firstNumber(source: Record<string, unknown>, keys: readonly string[]): number {
+function firstNumber(source: JsonObject, keys: readonly string[]): number {
   for (const key of keys) {
     const value = source[key];
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -186,6 +198,9 @@ export function extractTokenUsageFromText(text: string): TokenUsage | undefined 
 
     let aggregate: TokenUsage | undefined;
     for (const chunk of chunks) {
+      if (chunk === '[DONE]') {
+        continue;
+      }
       const parsed = safeJsonParse(chunk);
       const usage = extractTokenUsageFromValue(parsed);
       if (!usage) {
@@ -203,7 +218,7 @@ export function extractTokenUsageFromText(text: string): TokenUsage | undefined 
 /**
  * Extract token usage from a parsed JSON value.
  */
-function extractTokenUsageFromValue(value: unknown): TokenUsage | undefined {
+function extractTokenUsageFromValue(value: JsonValue | undefined): TokenUsage | undefined {
   if (!value) {
     return undefined;
   }
@@ -241,7 +256,31 @@ function extractTokenUsageFromValue(value: unknown): TokenUsage | undefined {
   return aggregate;
 }
 
-export function toJson(data: unknown): string {
+function looksLikeJson(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.startsWith('{') || trimmed.startsWith('[');
+}
+
+function isJsonValue(value: unknown): value is JsonValue {
+  if (value === null) {
+    return true;
+  }
+  switch (typeof value) {
+    case 'string':
+    case 'number':
+    case 'boolean':
+      return true;
+    case 'object':
+      if (Array.isArray(value)) {
+        return value.every(isJsonValue);
+      }
+      return Object.values(value).every((item) => item === undefined || isJsonValue(item));
+    default:
+      return false;
+  }
+}
+
+export function toJson(data: RateGuardEventEnvelope | RateGuardEventPayload): string {
   return JSON.stringify(data);
 }
 

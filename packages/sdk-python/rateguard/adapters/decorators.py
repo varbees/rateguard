@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import wraps
 from inspect import iscoroutinefunction
-from typing import Callable, ParamSpec, TypeVar
+from typing import Awaitable, Callable, ParamSpec, TypeVar, cast
 
 from ..config import preset_policy
 from ..core.event_emitter import ConsoleEventEmitter
@@ -21,14 +21,16 @@ def rate_limited(*, preset: str = "dev", requests_per_second: int | None = None,
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
         if iscoroutinefunction(func):
+            async_func = cast(Callable[P, Awaitable[R]], func)
+
             @wraps(func)
-            async def async_wrapper(*args: P.args, **kwargs: P.kwargs):
+            async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 decision = await limiter.allow_async(key, rate_limit)
                 if not decision.allowed:
                     raise RateGuardException("rate limit exceeded", status=429, retry_after=decision.retry_after_ms)
-                return await func(*args, **kwargs)  # type: ignore[misc]
+                return await async_func(*args, **kwargs)
 
-            return async_wrapper  # type: ignore[return-value]
+            return cast(Callable[P, R], async_wrapper)
 
         @wraps(func)
         def sync_wrapper(*args: P.args, **kwargs: P.kwargs):
@@ -55,12 +57,14 @@ def token_budget(*, hard_stop: bool = True, monthly_limit: int = 0, soft_stop_at
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
         if iscoroutinefunction(func):
+            async_func = cast(Callable[P, Awaitable[R]], func)
+
             @wraps(func)
-            async def async_wrapper(*args: P.args, **kwargs: P.kwargs):
+            async def async_wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
                 decision = await manager.check_async(key)
                 if not decision.allowed and hard_stop:
                     raise manager.budget_exceeded(key, decision)
-                result = await func(*args, **kwargs)  # type: ignore[misc]
+                result = await async_func(*args, **kwargs)
                 usage = getattr(result, "usage", None)
                 if usage is not None:
                     total = getattr(usage, "total_tokens", 0)
@@ -68,7 +72,7 @@ def token_budget(*, hard_stop: bool = True, monthly_limit: int = 0, soft_stop_at
                         await manager.record_async(key, total)
                 return result
 
-            return async_wrapper  # type: ignore[return-value]
+            return cast(Callable[P, R], async_wrapper)
 
         @wraps(func)
         def sync_wrapper(*args: P.args, **kwargs: P.kwargs):

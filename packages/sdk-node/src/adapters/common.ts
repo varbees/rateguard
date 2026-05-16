@@ -1,13 +1,18 @@
 import { RateGuardRuntime } from '../runtime.js';
 import { formatRetryAfterMs, readFirstHeader } from '../core/utils.js';
-import type { HeadersLike, RequestContext, ResponseSnapshot } from '../types.js';
+import type { AdmissionErrorCode, HeadersLike, RequestContext, ResponseSnapshot } from '../types.js';
 
-type DenialErrorCode = 'circuit_open' | 'rate_limit_exceeded';
+type DenialErrorCode = AdmissionErrorCode;
 
-export interface DenialPayload {
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | { [key: string]: JsonValue | undefined } | JsonValue[];
+export type AdapterPayload = BodyInit | JsonValue | undefined;
+
+export type DenialPayload = {
+  [key: string]: JsonValue | undefined;
   error: DenialErrorCode;
   retry_after_ms?: number;
-}
+};
 
 export type DenialHeaders = Record<string, string>;
 
@@ -40,9 +45,9 @@ export function buildAdapterRequestContext(
   };
 }
 
-export function denialPayload(statusCode: number, retryAfterMs: number): DenialPayload {
+export function denialPayload(statusCode: number, retryAfterMs: number, errorCode?: DenialErrorCode): DenialPayload {
   const payload: DenialPayload = {
-    error: statusCode === 503 ? 'circuit_open' : 'rate_limit_exceeded',
+    error: errorCode ?? (statusCode === 503 ? 'circuit_open' : 'rate_limit_exceeded'),
   };
   if (retryAfterMs > 0) {
     payload.retry_after_ms = retryAfterMs;

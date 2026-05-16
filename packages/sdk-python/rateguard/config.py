@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+from urllib.parse import urlsplit, urlunsplit
 
 from .types import (
     CircuitBreakerOptions,
@@ -126,10 +127,10 @@ def normalize_circuit_breaker_options(options: CircuitBreakerOptions | None) -> 
 def derive_ws_url(control_plane_url: str | None) -> str | None:
     if not control_plane_url:
         return None
-    match control_plane_url:
-        case url if url.startswith("https://"):
-            return url.replace("https://", "wss://", 1).rstrip("/") + "/ws"
-        case url if url.startswith("http://"):
-            return url.replace("http://", "ws://", 1).rstrip("/") + "/ws"
-        case _:
-            return None
+    parsed = urlsplit(control_plane_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"Invalid RateGuard control_plane_url: {control_plane_url}")
+
+    scheme = "wss" if parsed.scheme == "https" else "ws"
+    path = f"{parsed.path.rstrip('/')}/ws"
+    return urlunsplit((scheme, parsed.netloc, path, parsed.query, parsed.fragment))

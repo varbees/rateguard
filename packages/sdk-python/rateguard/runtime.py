@@ -3,6 +3,7 @@ from __future__ import annotations
 from inspect import isawaitable
 from typing import Awaitable, cast
 import asyncio
+import logging
 
 from .config import resolve_rateguard_options
 from .core.circuit_breaker import CircuitBreaker
@@ -10,6 +11,8 @@ from .core.event_emitter import build_event_envelope, create_event_emitter
 from .core.rate_limiter import RateLimiter
 from .core.token_budget import TokenBudgetManager
 from .types import CircuitBreakerState, CompletionObservation, PreflightDecision, RateGuardEventPayload, RateGuardEventType, RateGuardOptions, RateLimitDecision, RequestContext, TokenBudgetDecision, TokenUsage
+
+logger = logging.getLogger(__name__)
 
 
 class RateGuardRuntime:
@@ -45,18 +48,39 @@ class RateGuardRuntime:
         breaker_decision = await self.circuit_breaker.allow_async()
         if not breaker_decision.allowed:
             await self.emit("request.completed", request, breaker_decision.state, 503, start_ms, None, None, breaker_decision.retry_after_ms)
-            return PreflightDecision(False, 503, None, breaker_decision.retry_after_ms, None, None, breaker_decision)
+            return PreflightDecision(
+                allowed=False,
+                status_code=503,
+                error_code="circuit_open",
+                retry_after_ms=breaker_decision.retry_after_ms,
+                circuit_breaker=breaker_decision,
+            )
 
         rate_decision = await self.rate_limiter.allow_async(key, self.config.rate_limit, api_key=self.config.api_key)
         if not rate_decision.allowed:
             await self.emit("request.rate_limited", request, breaker_decision.state, 429, start_ms, rate_decision, None, rate_decision.retry_after_ms)
-            return PreflightDecision(False, 429, None, rate_decision.retry_after_ms, rate_decision, None, breaker_decision)
+            return PreflightDecision(
+                allowed=False,
+                status_code=429,
+                error_code="rate_limit_exceeded",
+                retry_after_ms=rate_decision.retry_after_ms,
+                rate_limit=rate_decision,
+                circuit_breaker=breaker_decision,
+            )
 
         token_decision = await self.token_budget.check_async(key, self.config.token_budget)
         if not token_decision.allowed:
             await self.emit("request.token_budget_exceeded", request, breaker_decision.state, 429, start_ms, rate_decision, token_decision, token_decision.retry_after_ms)
-            return PreflightDecision(False, 429, None, token_decision.retry_after_ms, rate_decision, token_decision, breaker_decision)
-        return PreflightDecision(True, None, None, None, rate_decision, token_decision, breaker_decision)
+            return PreflightDecision(
+                allowed=False,
+                status_code=429,
+                error_code="token_budget_exceeded",
+                retry_after_ms=token_decision.retry_after_ms,
+                rate_limit=rate_decision,
+                token_budget=token_decision,
+                circuit_breaker=breaker_decision,
+            )
+        return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision)
 
     def observe(self, request: RequestContext, observation: CompletionObservation, started_at_ms: float) -> None:
         self._observe_sync(request, observation, started_at_ms)
@@ -148,13 +172,14 @@ class RateGuardRuntime:
         )
         if not isawaitable(result):
             return
-        awaitable = cast(Awaitable[object], result)
+        awaitable = cast(Awaitable[None], result)
         try:
             asyncio.get_running_loop()
         except RuntimeError:
             asyncio.run(awaitable)
         else:
-            asyncio.ensure_future(awaitable)
+            task = asyncio.ensure_future(awaitable)
+            task.add_done_callback(_log_async_emit_failure)
 
     def _admit_sync(self, request: RequestContext) -> PreflightDecision:
         start_ms = self.config.clock.now()
@@ -163,20 +188,41 @@ class RateGuardRuntime:
         if not breaker_decision.allowed:
             payload = self.build_payload(request, breaker_decision.state, 503, start_ms, None, None, None, breaker_decision.retry_after_ms)
             self._emit_event_sync("request.completed", request, payload)
-            return PreflightDecision(False, 503, None, breaker_decision.retry_after_ms, None, None, breaker_decision)
+            return PreflightDecision(
+                allowed=False,
+                status_code=503,
+                error_code="circuit_open",
+                retry_after_ms=breaker_decision.retry_after_ms,
+                circuit_breaker=breaker_decision,
+            )
 
         rate_decision = self.rate_limiter.allow(key, self.config.rate_limit, api_key=self.config.api_key)
         if not rate_decision.allowed:
             payload = self.build_payload(request, breaker_decision.state, 429, start_ms, rate_decision, None, None, rate_decision.retry_after_ms)
             self._emit_event_sync("request.rate_limited", request, payload)
-            return PreflightDecision(False, 429, None, rate_decision.retry_after_ms, rate_decision, None, breaker_decision)
+            return PreflightDecision(
+                allowed=False,
+                status_code=429,
+                error_code="rate_limit_exceeded",
+                retry_after_ms=rate_decision.retry_after_ms,
+                rate_limit=rate_decision,
+                circuit_breaker=breaker_decision,
+            )
 
         token_decision = self.token_budget.check(key, self.config.token_budget)
         if not token_decision.allowed:
             payload = self.build_payload(request, breaker_decision.state, 429, start_ms, rate_decision, token_decision, None, token_decision.retry_after_ms)
             self._emit_event_sync("request.token_budget_exceeded", request, payload)
-            return PreflightDecision(False, 429, None, token_decision.retry_after_ms, rate_decision, token_decision, breaker_decision)
-        return PreflightDecision(True, None, None, None, rate_decision, token_decision, breaker_decision)
+            return PreflightDecision(
+                allowed=False,
+                status_code=429,
+                error_code="token_budget_exceeded",
+                retry_after_ms=token_decision.retry_after_ms,
+                rate_limit=rate_decision,
+                token_budget=token_decision,
+                circuit_breaker=breaker_decision,
+            )
+        return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision)
 
     def _observe_sync(self, request: RequestContext, observation: CompletionObservation, started_at_ms: float) -> None:
         key = self.resolve_key(request)
@@ -187,3 +233,10 @@ class RateGuardRuntime:
         breaker_decision = self.circuit_breaker.record_outcome(success)
         payload = self.build_payload(request, breaker_decision.state, observation.status_code, started_at_ms, None, None, usage, breaker_decision.retry_after_ms)
         self._emit_event_sync("request.completed", request, payload)
+
+
+def _log_async_emit_failure(task: asyncio.Future[None]) -> None:
+    try:
+        task.result()
+    except Exception as exc:
+        logger.warning("RateGuard async event emitter failed: %s", exc)

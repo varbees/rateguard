@@ -263,16 +263,22 @@ export function deriveWsUrl(controlPlaneUrl?: string): string | undefined {
     return undefined;
   }
 
+  let url: URL;
   try {
-    const url = new URL(controlPlaneUrl);
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    if (!url.pathname.endsWith('/ws')) {
-      url.pathname = `${url.pathname.replace(/\/$/, '')}/ws`;
-    }
-    return url.toString();
+    url = new URL(controlPlaneUrl);
   } catch {
-    return undefined;
+    throw new Error(`Invalid RateGuard controlPlaneUrl: ${controlPlaneUrl}`);
   }
+
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error(`Invalid RateGuard controlPlaneUrl: ${controlPlaneUrl}`);
+  }
+
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  if (!url.pathname.endsWith('/ws')) {
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/ws`;
+  }
+  return url.toString();
 }
 
 /**

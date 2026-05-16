@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { knownPresets, normalizePreset, presetPolicy } from '../src/config.js';
+import { deriveWsUrl, knownPresets, normalizePreset, presetPolicy } from '../src/config.js';
 
 describe('presets', () => {
   it('normalizes historical preset aliases', () => {
@@ -22,5 +22,9 @@ describe('presets', () => {
       'llm-heavy',
       'strict-upstream-protection',
     ]);
+  });
+
+  it('rejects malformed control-plane URLs instead of disabling websocket events', () => {
+    expect(() => deriveWsUrl('control.example')).toThrow(/Invalid RateGuard controlPlaneUrl/);
   });
 });

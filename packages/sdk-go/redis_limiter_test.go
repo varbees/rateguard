@@ -2,8 +2,10 @@ package rateguard
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -86,4 +88,42 @@ func TestRedisLimiterUsesInjectedClock(t *testing.T) {
 	if got := client.nowUs.Load(); got != want {
 		t.Fatalf("redis nowUs = %d, want %d", got, want)
 	}
+}
+
+func TestHTTPMiddlewareFailsClosedWhenRedisLimiterErrors(t *testing.T) {
+	t.Parallel()
+
+	client := failingRedisLimiterClient{}
+	sdk := New(Config{
+		Preset:            PresetDev,
+		RequestsPerSecond: 100,
+		Burst:             100,
+		RedisClient:       client,
+	})
+
+	var calls int32
+	handler := sdk.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/api/v1/openapi.json", nil)
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	if res.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", res.Code, http.StatusServiceUnavailable)
+	}
+	if got := atomic.LoadInt32(&calls); got != 0 {
+		t.Fatalf("handler calls = %d, want 0", got)
+	}
+	if got := res.Body.String(); !strings.Contains(got, `"error":"rate_limit_unavailable"`) {
+		t.Fatalf("body = %s, want rate_limit_unavailable", got)
+	}
+}
+
+type failingRedisLimiterClient struct{}
+
+func (failingRedisLimiterClient) Eval(context.Context, string, []string, ...interface{}) *redis.Cmd {
+	return redis.NewCmdResult(nil, errors.New("redis unavailable"))
 }
