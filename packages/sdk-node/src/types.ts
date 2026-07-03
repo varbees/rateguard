@@ -5,7 +5,10 @@ export type PresetName =
   | 'dev'
   | 'standard'
   | 'high-throughput'
+  | 'streaming-llm'
+  | 'agent-orchestrator'
   | 'llm-heavy'
+  | 'mcp-server'
   | 'strict-upstream-protection';
 
 /**

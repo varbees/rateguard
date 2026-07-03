@@ -25,6 +25,7 @@ type SDK struct {
 	otel    *observability
 	emitter EventEmitter
 	clock   Clock
+	metrics atomicMetrics
 }
 
 // New constructs a new SDK instance with sensible defaults.

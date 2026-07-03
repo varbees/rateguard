@@ -33,6 +33,18 @@ export function normalizePreset(preset: string | undefined | null): PresetName {
       return 'llm-heavy';
     case 'strict-upstream-protection':
       return 'strict-upstream-protection';
+    case 'streaming-llm':
+    case 'streaming':
+    case 'llm-stream':
+      return 'streaming-llm';
+    case 'agent-orchestrator':
+    case 'agent':
+    case 'multi-agent':
+    case 'orchestrator':
+      return 'agent-orchestrator';
+    case 'mcp-server':
+    case 'mcp':
+      return 'mcp-server';
     default:
       return 'dev';
   }
@@ -127,6 +139,39 @@ export function presetPolicy(preset: string | undefined | null): PolicyPreset {
         apiAccess: true,
         analyticsRetentionDays: 14,
       };
+    case 'streaming-llm':
+      return {
+        name: 'streaming-llm',
+        requestsPerSecond: 200, burst: 500, maxApis: 0,
+        monthlyRequestLimit: 2_000_000, maxRequestsPerDay: 5_000_000, maxRequestsPerMonth: 2_000_000,
+        maxTokensPerMonth: 500_000_000,
+        tokenBudgetPerHour: 500_000, tokenBudgetPerDay: 5_000_000, tokenBudgetPerMonth: 500_000_000,
+        tokenBudgetMode: 'soft-stop',
+        advancedAnalytics: true, prioritySupport: true, customRateLimits: true, webhooks: true, apiAccess: true,
+        analyticsRetentionDays: 90,
+      };
+    case 'agent-orchestrator':
+      return {
+        name: 'agent-orchestrator',
+        requestsPerSecond: 500, burst: 1_000, maxApis: 0,
+        monthlyRequestLimit: 10_000_000, maxRequestsPerDay: 50_000_000, maxRequestsPerMonth: 10_000_000,
+        maxTokensPerMonth: 1_000_000_000,
+        tokenBudgetPerHour: 1_000_000, tokenBudgetPerDay: 10_000_000, tokenBudgetPerMonth: 1_000_000_000,
+        tokenBudgetMode: 'soft-stop',
+        advancedAnalytics: true, prioritySupport: true, customRateLimits: true, webhooks: true, apiAccess: true,
+        analyticsRetentionDays: 180,
+      };
+    case 'mcp-server':
+      return {
+        name: 'mcp-server',
+        requestsPerSecond: 30, burst: 60, maxApis: 0,
+        monthlyRequestLimit: 500_000, maxRequestsPerDay: 1_000_000, maxRequestsPerMonth: 500_000,
+        maxTokensPerMonth: 50_000_000,
+        tokenBudgetPerHour: 50_000, tokenBudgetPerDay: 500_000, tokenBudgetPerMonth: 50_000_000,
+        tokenBudgetMode: 'hard-stop',
+        advancedAnalytics: true, prioritySupport: false, customRateLimits: true, webhooks: true, apiAccess: true,
+        analyticsRetentionDays: 30,
+      };
     case 'dev':
     default:
       return {
@@ -156,7 +201,7 @@ export function presetPolicy(preset: string | undefined | null): PolicyPreset {
  * Return the canonical preset names in display order.
  */
 export function knownPresets(): PresetName[] {
-  return ['dev', 'standard', 'high-throughput', 'llm-heavy', 'strict-upstream-protection'];
+  return ['dev', 'standard', 'high-throughput', 'streaming-llm', 'agent-orchestrator', 'llm-heavy', 'mcp-server', 'strict-upstream-protection'];
 }
 
 /**
