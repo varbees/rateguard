@@ -15,24 +15,24 @@ const (
 
 // PolicyPreset defines the resource limits behind a named preset.
 type PolicyPreset struct {
-	Name                   string `json:"name"`
-	RequestsPerSecond      int    `json:"requests_per_second"`
-	Burst                  int    `json:"burst"`
-	MaxAPIs                int    `json:"max_apis"`
-	MonthlyRequestLimit    int    `json:"monthly_request_limit"`
-	MaxRequestsPerDay      int64  `json:"max_requests_per_day"`
-	MaxRequestsPerMonth    int64  `json:"max_requests_per_month"`
-	MaxTokensPerMonth      int64  `json:"max_tokens_per_month"`
-	TokenBudgetPerHour     int64  `json:"token_budget_per_hour"`
-	TokenBudgetPerDay      int64  `json:"token_budget_per_day"`
-	TokenBudgetPerMonth    int64  `json:"token_budget_per_month"`
+	Name                   string          `json:"name"`
+	RequestsPerSecond      int             `json:"requests_per_second"`
+	Burst                  int             `json:"burst"`
+	MaxAPIs                int             `json:"max_apis"`
+	MonthlyRequestLimit    int             `json:"monthly_request_limit"`
+	MaxRequestsPerDay      int64           `json:"max_requests_per_day"`
+	MaxRequestsPerMonth    int64           `json:"max_requests_per_month"`
+	MaxTokensPerMonth      int64           `json:"max_tokens_per_month"`
+	TokenBudgetPerHour     int64           `json:"token_budget_per_hour"`
+	TokenBudgetPerDay      int64           `json:"token_budget_per_day"`
+	TokenBudgetPerMonth    int64           `json:"token_budget_per_month"`
 	TokenBudgetMode        TokenBudgetMode `json:"token_budget_mode"`
-	AdvancedAnalytics      bool   `json:"advanced_analytics"`
-	PrioritySupport        bool   `json:"priority_support"`
-	CustomRateLimits       bool   `json:"custom_rate_limits"`
-	Webhooks               bool   `json:"webhooks"`
-	APIAccess              bool   `json:"api_access"`
-	AnalyticsRetentionDays int    `json:"analytics_retention_days"`
+	AdvancedAnalytics      bool            `json:"advanced_analytics"`
+	PrioritySupport        bool            `json:"priority_support"`
+	CustomRateLimits       bool            `json:"custom_rate_limits"`
+	Webhooks               bool            `json:"webhooks"`
+	APIAccess              bool            `json:"api_access"`
+	AnalyticsRetentionDays int             `json:"analytics_retention_days"`
 }
 
 // NormalizePreset accepts documented preset aliases and returns the canonical name.
@@ -191,7 +191,7 @@ func PresetPolicy(preset string) PolicyPreset {
 	case PresetMCPServer:
 		return PolicyPreset{
 			Name:                   PresetMCPServer,
-			RequestsPerSecond:      30,  // MCP servers are tool-call heavy, low request count
+			RequestsPerSecond:      30, // MCP servers are tool-call heavy, low request count
 			Burst:                  60,
 			MaxAPIs:                0,
 			MonthlyRequestLimit:    500000,

@@ -43,6 +43,20 @@ func writePrometheusMetrics(w http.ResponseWriter, s *SDK) {
 	}
 	promGauge(w, "rateguard_circuit_breaker_state", cbState)
 
+	// Runtime counters (incremented on the middleware hot path)
+	fmt.Fprint(w, s.metrics.prometheusText())
+
+	// Loop detector state
+	if s.loops != nil {
+		stats := s.loops.Stats()
+		if total, ok := stats["total_fingerprints"].(int); ok {
+			promGauge(w, "rateguard_loop_fingerprints", total)
+		}
+		if halted, ok := stats["halted"].(int); ok {
+			promGauge(w, "rateguard_loops_halted", halted)
+		}
+	}
+
 	// SDK info
 	promGauge(w, "rateguard_sdk_info", 1, "version", Version, "language", "go")
 }

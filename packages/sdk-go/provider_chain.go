@@ -6,20 +6,20 @@ import (
 	"sync"
 )
 
-// ── Provider Chain: automatic LLM provider fallback ──
+// ── Provider Chain: LLM provider fallback routing ──
 //
-// When the primary LLM provider (e.g. OpenAI) returns 429/503 and the circuit
-// breaker opens, RateGuard auto-routes to the next provider in the chain.
-// No application code changes needed — the middleware handles it transparently.
+// ProviderChain is a routing decision helper: given a failing provider and
+// its circuit breaker state, Route returns the next provider to try. The
+// application performs the actual request to the returned provider — the
+// chain decides, it does not proxy.
 //
-// Pattern: circuit-breaker → next provider → circuit-breaker → next provider
-// Each provider has its own circuit breaker so a cascading failure on provider 1
-// doesn't trip provider 2's breaker unless provider 2 is also failing.
+// Roadmap: per-provider circuit breakers and an outbound http.RoundTripper
+// that performs the fallback automatically.
 
 // ProviderChain defines an ordered list of LLM providers with automatic fallback.
 type ProviderChain struct {
-	mu        sync.RWMutex
-	providers []ProviderEntry
+	mu              sync.RWMutex
+	providers       []ProviderEntry
 	defaultProvider string
 }
 
@@ -32,8 +32,12 @@ type ProviderEntry struct {
 	Weight  int // priority (lower = higher priority)
 }
 
-// NewProviderChain creates a chain with ordered providers.
+// NewProviderChain creates a chain with ordered providers. Position in the
+// argument list is the priority: earlier entries are tried first.
 func NewProviderChain(providers ...ProviderEntry) *ProviderChain {
+	for i := range providers {
+		providers[i].Weight = i
+	}
 	pc := &ProviderChain{providers: providers}
 	if len(providers) > 0 {
 		pc.defaultProvider = providers[0].Name
@@ -73,9 +77,10 @@ func (pc *ProviderChain) Route(failingProvider string, breakerState CircuitBreak
 	return pc.providers[0], pc.providers[0].Name, true
 }
 
-// Provider creates a new provider entry for the chain.
+// Provider creates a new provider entry for the chain. Weight is assigned
+// by NewProviderChain from argument position.
 func Provider(name, model, baseURL string) ProviderEntry {
-	return ProviderEntry{Name: name, Model: model, BaseURL: baseURL, Weight: len(name)}
+	return ProviderEntry{Name: name, Model: model, BaseURL: baseURL}
 }
 
 // ── Provider-aware token budget key ──

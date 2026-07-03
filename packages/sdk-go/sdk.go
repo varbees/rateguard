@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -12,6 +13,11 @@ import (
 	"strings"
 	"time"
 )
+
+// defaultMaxBufferedResponseBytes caps response body buffering for token
+// usage extraction. Streaming LLM responses can be arbitrarily large;
+// buffering them whole would defeat the zero-overhead positioning.
+const defaultMaxBufferedResponseBytes = 1 << 20 // 1 MiB
 
 // SDK is the top-level middleware entrypoint.
 type SDK struct {
@@ -26,6 +32,7 @@ type SDK struct {
 	emitter EventEmitter
 	clock   Clock
 	metrics atomicMetrics
+	loops   *LoopDetector
 }
 
 // New constructs a new SDK instance with sensible defaults.
@@ -108,6 +115,7 @@ func New(cfg Config) *SDK {
 		otel:    otel,
 		emitter: emitter,
 		clock:   clock,
+		loops:   NewLoopDetector(cfg.LoopMaxDepth),
 	}
 }
 
@@ -149,6 +157,7 @@ func (s *SDK) Middleware() func(http.Handler) http.Handler {
 
 func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	start := s.clock.Now()
+	s.metrics.totalRequests.Add(1)
 	key := s.admissionKey(r)
 	traceCtx := traceContextFromHeaders(r.Header)
 	breakerDecision := s.breaker.Allow()
@@ -185,14 +194,21 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 	s.applyHeaders(w.Header(), decision)
 
 	if !decision.Allowed {
+		s.metrics.rateLimitHits.Add(1)
 		s.writeRateLimitResponse(w)
 		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenBudgetDecision{}, breakerDecision.State, decision.RetryAfter)
 		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, string(breakerDecision.State), 0), s.clock.Now().Sub(start), http.StatusTooManyRequests)
 		return
 	}
 
+	// Agent loop detection + content guardrails inspect the request body.
+	if blocked := s.checkRequestBody(w, r); blocked {
+		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, string(breakerDecision.State), 0), s.clock.Now().Sub(start), http.StatusUnprocessableEntity)
+		return
+	}
+
 	tokenKey := s.tokenBudgetKey(r)
-	tokenDecision, err := s.tokens.waitForAvailability(r.Context(), tokenKey, s.policy, s.waiter, TokenBudgetMode(s.policy.TokenBudgetMode))
+	tokenDecision, err := s.tokens.waitForAvailability(r.Context(), tokenKey, s.policy, s.waiter, TokenBudgetMode(s.policy.TokenBudgetMode), s.cfg.EstimatedTokensPerRequest)
 	if err != nil {
 		s.writeTokenBudgetResponse(w)
 		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenDecision, breakerDecision.State, tokenDecision.RetryAfter)
@@ -200,13 +216,18 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 		return
 	}
 	if !tokenDecision.Allowed && tokenDecision.Applied && TokenBudgetMode(s.policy.TokenBudgetMode) != TokenBudgetModeSoftStop {
+		s.metrics.tokenBudgetExhausted.Add(1)
 		s.writeTokenBudgetResponse(w)
 		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenDecision, breakerDecision.State, tokenDecision.RetryAfter)
 		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, string(breakerDecision.State), 0), s.clock.Now().Sub(start), http.StatusTooManyRequests)
 		return
 	}
 
-	recorder := &responseRecorder{ResponseWriter: w}
+	maxBody := s.cfg.MaxBufferedResponseBytes
+	if maxBody <= 0 {
+		maxBody = defaultMaxBufferedResponseBytes
+	}
+	recorder := &responseRecorder{ResponseWriter: w, maxBody: maxBody}
 	next.ServeHTTP(recorder, r)
 	snapshot := recorder.snapshot()
 
@@ -223,8 +244,15 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 		finalTokenDecision.RetryAfter = tokenDecision.RetryAfter
 	}
 
+	if tokenUsage.TotalTokens > 0 {
+		s.metrics.tokensConsumed.Add(tokenUsage.TotalTokens)
+	}
+
 	status := recorder.statusCode()
 	finalBreakerDecision := s.breaker.RecordOutcome(status < http.StatusInternalServerError)
+	if breakerDecision.State != CircuitBreakerOpen && finalBreakerDecision.State == CircuitBreakerOpen {
+		s.metrics.circuitBreakerTrips.Add(1)
+	}
 	finalAttrs := requestAttributes(
 		s.tenantID(),
 		s.routeID(r),
@@ -236,6 +264,60 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 	s.otel.recordRequest(r.Context(), finalAttrs, s.clock.Now().Sub(start), status)
 
 	s.emitRequestEvent(r.Context(), r, decision, status, start, tokenUsage, finalTokenDecision, finalBreakerDecision.State, finalBreakerDecision.RetryAfter)
+}
+
+// maxInspectedBodyBytes bounds how much request body loop detection and
+// guardrails read. Bodies beyond the cap are checked on their prefix only.
+const maxInspectedBodyBytes = 256 * 1024
+
+// checkRequestBody runs loop detection and guardrails against the request
+// body when either is enabled. Returns true if the request was rejected
+// (a response has already been written).
+func (s *SDK) checkRequestBody(w http.ResponseWriter, r *http.Request) bool {
+	loopActive := s.cfg.LoopDetection && s.loops != nil && r.Header.Get("X-Sequence-Depth") != ""
+	guardActive := s.cfg.Guardrails != nil && r.Body != nil && r.Method != http.MethodGet && r.Method != http.MethodHead
+
+	if !loopActive && !guardActive {
+		return false
+	}
+
+	var body []byte
+	if r.Body != nil {
+		limited := io.LimitReader(r.Body, maxInspectedBodyBytes)
+		read, err := io.ReadAll(limited)
+		if err != nil {
+			log.Printf("rateguard: read request body for inspection: %v", err)
+			return false
+		}
+		body = read
+		r.Body = struct {
+			io.Reader
+			io.Closer
+		}{io.MultiReader(bytes.NewReader(read), r.Body), r.Body}
+	}
+
+	if loopActive {
+		depth, err := strconv.Atoi(strings.TrimSpace(r.Header.Get("X-Sequence-Depth")))
+		if err == nil {
+			fingerprint := strings.TrimSpace(r.Header.Get("X-Payload-Fingerprint"))
+			if fingerprint == "" {
+				fingerprint = Fingerprint(r.Method, r.URL.Path, string(body))
+			}
+			if allowed, reason := s.loops.Check(fingerprint, depth); !allowed {
+				writeJSONError(w, http.StatusTooManyRequests, "loop_detected", reason, 0)
+				return true
+			}
+		}
+	}
+
+	if guardActive && len(body) > 0 {
+		if violation := s.cfg.Guardrails.Check(string(body)); violation != nil {
+			WriteGuardrailReject(w, violation)
+			return true
+		}
+	}
+
+	return false
 }
 
 func (s *SDK) admissionKey(r *http.Request) string {
@@ -269,6 +351,19 @@ func (s *SDK) applyHeaders(h http.Header, decision AdmissionDecision) {
 	h.Set("X-RateGuard-Limit", strconv.Itoa(s.policy.RequestsPerSecond))
 	h.Set("X-RateGuard-Burst", strconv.Itoa(s.policy.Burst))
 	h.Set("X-RateGuard-Remaining", strconv.Itoa(decision.Remaining))
+
+	// IETF RateLimit headers (draft-ietf-httpapi-ratelimit-headers) so
+	// standard clients and SDK retry logic work without RateGuard awareness.
+	if decision.Applied {
+		h.Set("RateLimit-Limit", strconv.Itoa(decision.Limit))
+		remaining := decision.Remaining
+		if remaining < 0 {
+			remaining = 0
+		}
+		h.Set("RateLimit-Remaining", strconv.Itoa(remaining))
+		h.Set("RateLimit-Reset", strconv.FormatInt(ceilDurationSeconds(decision.RetryAfter), 10))
+	}
+
 	if !decision.Allowed && decision.RetryAfter > 0 {
 		h.Set("Retry-After", strconv.FormatInt(ceilDurationSeconds(decision.RetryAfter), 10))
 	}
@@ -420,8 +515,10 @@ func ceilDurationSeconds(d time.Duration) int64 {
 
 type responseRecorder struct {
 	http.ResponseWriter
-	status int
-	body   bytes.Buffer
+	status    int
+	body      bytes.Buffer
+	maxBody   int
+	truncated bool
 }
 
 func (r *responseRecorder) Unwrap() http.ResponseWriter {
@@ -439,9 +536,20 @@ func (r *responseRecorder) Write(b []byte) (int, error) {
 	if r.status == 0 {
 		r.status = http.StatusOK
 	}
-	if len(b) > 0 {
-		if _, err := r.body.Write(b); err != nil {
-			return 0, err
+	if len(b) > 0 && !r.truncated {
+		room := r.maxBody - r.body.Len()
+		if r.maxBody <= 0 {
+			room = len(b) // no cap configured (zero value used in tests)
+		}
+		if room >= len(b) {
+			if _, err := r.body.Write(b); err != nil {
+				return 0, err
+			}
+		} else {
+			// Body exceeds the cap: stop buffering. A truncated JSON body
+			// would fail extraction anyway, so drop the partial buffer.
+			r.truncated = true
+			r.body.Reset()
 		}
 	}
 	return r.ResponseWriter.Write(b)

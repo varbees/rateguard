@@ -86,7 +86,7 @@ func newTokenBudgetManagerWithCapacity(clock Clock, capacity int) *tokenBudgetMa
 	}
 }
 
-func (m *tokenBudgetManager) waitForAvailability(ctx context.Context, key string, policy PolicyPreset, waiter BudgetWaiter, mode TokenBudgetMode) (tokenBudgetDecision, error) {
+func (m *tokenBudgetManager) waitForAvailability(ctx context.Context, key string, policy PolicyPreset, waiter BudgetWaiter, mode TokenBudgetMode, estimate int64) (tokenBudgetDecision, error) {
 	if waiter == nil {
 		waiter = systemBudgetWaiter{}
 	}
@@ -98,7 +98,7 @@ func (m *tokenBudgetManager) waitForAvailability(ctx context.Context, key string
 	var queued bool
 	var totalWait time.Duration
 	for {
-		decision := m.reserve(key, policy, mode)
+		decision := m.reserveWithEstimate(key, policy, mode, estimate)
 		if !decision.Applied || decision.Allowed || mode != TokenBudgetModeSoftStop {
 			decision.Queued = queued
 			if queued && totalWait > 0 {
@@ -146,6 +146,15 @@ func (m *tokenBudgetManager) check(key string, policy PolicyPreset) tokenBudgetD
 }
 
 func (m *tokenBudgetManager) reserve(key string, policy PolicyPreset, mode TokenBudgetMode) tokenBudgetDecision {
+	return m.reserveWithEstimate(key, policy, mode, 0)
+}
+
+// reserveWithEstimate reserves budget for one in-flight request. estimate
+// bounds the reservation: zero reserves the entire remaining budget
+// (never overshoots, but serializes concurrent requests on the same key);
+// a positive estimate reserves min(estimate, remaining) so concurrent
+// requests can proceed while the estimate holds.
+func (m *tokenBudgetManager) reserveWithEstimate(key string, policy PolicyPreset, mode TokenBudgetMode, estimate int64) tokenBudgetDecision {
 	limits := tokenBudgetLimitsFromPolicy(policy)
 	if !limits.enabled() {
 		return tokenBudgetDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}
@@ -163,6 +172,11 @@ func (m *tokenBudgetManager) reserve(key string, policy PolicyPreset, mode Token
 		return decision
 	}
 
+	reserved := decision.Remaining
+	if estimate > 0 && estimate < reserved {
+		reserved = estimate
+	}
+
 	if state.reservations == nil {
 		state.reservations = make(map[string]tokenBudgetReservation)
 	}
@@ -171,12 +185,12 @@ func (m *tokenBudgetManager) reserve(key string, policy PolicyPreset, mode Token
 	state.reservations[reservationID] = tokenBudgetReservation{
 		id:         reservationID,
 		occurredAt: now,
-		tokens:     decision.Remaining,
+		tokens:     reserved,
 	}
 
 	decision.reservationID = reservationID
-	decision.reserved = decision.Remaining
-	decision.Remaining = 0
+	decision.reserved = reserved
+	decision.Remaining -= reserved
 	return decision
 }
 

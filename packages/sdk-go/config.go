@@ -47,6 +47,31 @@ type Config struct {
 	TokenBudgetPerMonth int64
 	CircuitBreaker      CircuitBreakerOptions
 
+	// EstimatedTokensPerRequest bounds the hard-stop token budget reservation
+	// per in-flight request. Zero (default) reserves the entire remaining
+	// budget — guaranteed never to overshoot, but serializes concurrent
+	// requests on the same budget key. Set to a realistic per-call estimate
+	// (e.g. 8000 for chat workloads) to allow concurrency; actual usage is
+	// reconciled after the response.
+	EstimatedTokensPerRequest int64
+
+	// Guardrails, when set, are checked against request bodies before the
+	// request reaches your handler. Violations return HTTP 422.
+	Guardrails *GuardrailChain
+
+	// LoopDetection enables agent loop detection for requests carrying an
+	// X-Sequence-Depth header. Detected loops return HTTP 429 with code
+	// "loop_detected". Fingerprints come from the X-Payload-Fingerprint
+	// header when present, otherwise from a SHA-256 hash of method+path+body.
+	LoopDetection bool
+	// LoopMaxDepth overrides the maximum agent sequence depth (default 50).
+	LoopMaxDepth int
+
+	// MaxBufferedResponseBytes caps how much response body the middleware
+	// buffers for token usage extraction. Default 1 MiB. Responses larger
+	// than the cap simply skip body-based extraction.
+	MaxBufferedResponseBytes int
+
 	EventEmitter        EventEmitter
 	EventEndpoint       string
 	HTTPClient          *http.Client

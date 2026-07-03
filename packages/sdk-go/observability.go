@@ -30,6 +30,7 @@ type observability struct {
 	tracer         trace.Tracer
 	requestCounter metric.Int64Counter
 	requestLatency metric.Float64Histogram
+	genai          *genaiObserver
 }
 
 func newObservability(cfg Config) (*observability, error) {
@@ -89,12 +90,18 @@ func newObservability(cfg Config) (*observability, error) {
 		return nil, fmt.Errorf("create request latency histogram: %w", err)
 	}
 
+	genai, err := newGenAIObserver(meterProvider, tracerProvider, serviceName)
+	if err != nil {
+		return nil, fmt.Errorf("create genai observer: %w", err)
+	}
+
 	return &observability{
 		tracerProvider: tracerProvider,
 		meterProvider:  meterProvider,
 		tracer:         tracerProvider.Tracer(serviceName),
 		requestCounter: requestCounter,
 		requestLatency: requestLatency,
+		genai:          genai,
 	}, nil
 }
 

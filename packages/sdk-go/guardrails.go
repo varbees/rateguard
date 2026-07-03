@@ -26,8 +26,8 @@ type Guardrail interface {
 
 // GuardrailViolation describes why content was blocked.
 type GuardrailViolation struct {
-	Code    string // e.g. "pii_detected", "prompt_injection", "toxic_content"
-	Message string // human-readable explanation
+	Code    string  // e.g. "pii_detected", "prompt_injection", "toxic_content"
+	Message string  // human-readable explanation
 	Score   float64 // 0.0–1.0 severity (optional, for logging)
 }
 
