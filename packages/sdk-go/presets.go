@@ -8,6 +8,9 @@ const (
 	PresetHighThroughput        = "high-throughput"
 	PresetLLMHeavy              = "llm-heavy"
 	PresetStrictUpstreamProtect = "strict-upstream-protection"
+	PresetStreamingLLM          = "streaming-llm"
+	PresetAgentOrchestrator     = "agent-orchestrator"
+	PresetMCPServer             = "mcp-server"
 )
 
 // PolicyPreset defines the resource limits behind a named preset.
@@ -45,6 +48,12 @@ func NormalizePreset(preset string) string {
 		return PresetLLMHeavy
 	case "strict-upstream-protection":
 		return PresetStrictUpstreamProtect
+	case "streaming-llm", "streaming", "llm-stream":
+		return PresetStreamingLLM
+	case "agent-orchestrator", "agent", "multi-agent", "orchestrator":
+		return PresetAgentOrchestrator
+	case "mcp-server", "mcp":
+		return PresetMCPServer
 	default:
 		return PresetDev
 	}
@@ -137,6 +146,69 @@ func PresetPolicy(preset string) PolicyPreset {
 			APIAccess:              true,
 			AnalyticsRetentionDays: 14,
 		}
+	case PresetStreamingLLM:
+		return PolicyPreset{
+			Name:                   PresetStreamingLLM,
+			RequestsPerSecond:      200,
+			Burst:                  500,
+			MaxAPIs:                0,
+			MonthlyRequestLimit:    2000000,
+			MaxRequestsPerDay:      5000000,
+			MaxRequestsPerMonth:    2000000,
+			MaxTokensPerMonth:      500000000, // 500M tokens/month for streaming
+			TokenBudgetPerHour:     500000,
+			TokenBudgetPerDay:      5000000,
+			TokenBudgetPerMonth:    500000000,
+			TokenBudgetMode:        TokenBudgetModeSoftStop, // Streaming: queue, don't reject
+			AdvancedAnalytics:      true,
+			PrioritySupport:        true,
+			CustomRateLimits:       true,
+			Webhooks:               true,
+			APIAccess:              true,
+			AnalyticsRetentionDays: 90,
+		}
+	case PresetAgentOrchestrator:
+		return PolicyPreset{
+			Name:                   PresetAgentOrchestrator,
+			RequestsPerSecond:      500,
+			Burst:                  1000,
+			MaxAPIs:                0,
+			MonthlyRequestLimit:    10000000,
+			MaxRequestsPerDay:      50000000,
+			MaxRequestsPerMonth:    10000000,
+			MaxTokensPerMonth:      1000000000, // 1B tokens for multi-agent systems
+			TokenBudgetPerHour:     1000000,
+			TokenBudgetPerDay:      10000000,
+			TokenBudgetPerMonth:    1000000000,
+			TokenBudgetMode:        TokenBudgetModeSoftStop,
+			AdvancedAnalytics:      true,
+			PrioritySupport:        true,
+			CustomRateLimits:       true,
+			Webhooks:               true,
+			APIAccess:              true,
+			AnalyticsRetentionDays: 180,
+		}
+	case PresetMCPServer:
+		return PolicyPreset{
+			Name:                   PresetMCPServer,
+			RequestsPerSecond:      30,  // MCP servers are tool-call heavy, low request count
+			Burst:                  60,
+			MaxAPIs:                0,
+			MonthlyRequestLimit:    500000,
+			MaxRequestsPerDay:      1000000,
+			MaxRequestsPerMonth:    500000,
+			MaxTokensPerMonth:      50000000,
+			TokenBudgetPerHour:     50000,
+			TokenBudgetPerDay:      500000,
+			TokenBudgetPerMonth:    50000000,
+			TokenBudgetMode:        TokenBudgetModeHardStop,
+			AdvancedAnalytics:      true,
+			PrioritySupport:        false,
+			CustomRateLimits:       true,
+			Webhooks:               true,
+			APIAccess:              true,
+			AnalyticsRetentionDays: 30,
+		}
 	default:
 		return PolicyPreset{
 			Name:                   PresetDev,
@@ -167,7 +239,10 @@ func KnownPresets() []string {
 		PresetDev,
 		PresetStandard,
 		PresetHighThroughput,
+		PresetStreamingLLM,
+		PresetAgentOrchestrator,
 		PresetLLMHeavy,
+		PresetMCPServer,
 		PresetStrictUpstreamProtect,
 	}
 }
