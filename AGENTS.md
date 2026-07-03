@@ -35,7 +35,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Circuit breakers | ✅ | ✅ | ✅ | `circuit_breaker.go` |
 | GenAI OTel observability | ✅ | ✅ | ✅ | `genai_observability.go` |
 | 28-model pricing | ✅ | ✅ | ✅ | Same file |
-| Prometheus /metrics | ✅ | ❌ | ❌ | `prometheus.go` |
+| Prometheus /metrics | ✅ | ✅ | ✅ | `prometheus.go` |
 | Provider chain | ✅ | ✅ | ✅ | `provider_chain.go` |
 | Content guardrails (PII, injection) | ✅ | ✅ | ✅ | `guardrails.go` |
 | 8 presets | ✅ | ✅ | ❌ (config only) | `presets.go` |
