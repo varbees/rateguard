@@ -77,6 +77,15 @@ func (pc *ProviderChain) Route(failingProvider string, breakerState CircuitBreak
 	return pc.providers[0], pc.providers[0].Name, true
 }
 
+// Providers returns a copy of the provider list in priority order.
+func (pc *ProviderChain) Providers() []ProviderEntry {
+	pc.mu.RLock()
+	defer pc.mu.RUnlock()
+	out := make([]ProviderEntry, len(pc.providers))
+	copy(out, pc.providers)
+	return out
+}
+
 // Provider creates a new provider entry for the chain. Weight is assigned
 // by NewProviderChain from argument position.
 func Provider(name, model, baseURL string) ProviderEntry {

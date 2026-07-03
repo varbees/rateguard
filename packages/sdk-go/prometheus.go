@@ -88,6 +88,8 @@ type atomicMetrics struct {
 	tokenBudgetExhausted atomic.Int64
 	circuitBreakerTrips  atomic.Int64
 	tokensConsumed       atomic.Int64
+	outboundCalls        atomic.Int64
+	outboundFallbacks    atomic.Int64
 }
 
 func (m *atomicMetrics) prometheusText() string {
@@ -106,11 +108,19 @@ func (m *atomicMetrics) prometheusText() string {
 			"rateguard_circuit_breaker_trips_total %d\n"+
 			"# HELP rateguard_tokens_consumed_total Total tokens consumed\n"+
 			"# TYPE rateguard_tokens_consumed_total counter\n"+
-			"rateguard_tokens_consumed_total %d\n",
+			"rateguard_tokens_consumed_total %d\n"+
+			"# HELP rateguard_outbound_calls_total Total outbound LLM calls tracked\n"+
+			"# TYPE rateguard_outbound_calls_total counter\n"+
+			"rateguard_outbound_calls_total %d\n"+
+			"# HELP rateguard_outbound_fallbacks_total Provider fallback events\n"+
+			"# TYPE rateguard_outbound_fallbacks_total counter\n"+
+			"rateguard_outbound_fallbacks_total %d\n",
 		m.totalRequests.Load(),
 		m.rateLimitHits.Load(),
 		m.tokenBudgetExhausted.Load(),
 		m.circuitBreakerTrips.Load(),
 		m.tokensConsumed.Load(),
+		m.outboundCalls.Load(),
+		m.outboundFallbacks.Load(),
 	)
 }
