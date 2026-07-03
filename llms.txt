@@ -1,5 +1,5 @@
 # RateGuard — AI-Native Rate Limiting SDK
-> Go, Node.js, Python middleware. Token budgets, GenAI OTel, circuit breakers, guardrails. No proxy needed.
+> Go, Node.js, Python middleware. Pre-flight rate limit queries for AI agents (MCP), token budgets, GenAI OTel, circuit breakers, loop detection, guardrails. No proxy needed.
 
 ## Quick Start
 
@@ -8,18 +8,22 @@
 import rateguard "github.com/varbees/rateguard/packages/sdk-go"
 rg := rateguard.New(rateguard.Config{Preset: "streaming-llm"})
 http.Handle("/metrics", rg.Metrics())
+// Expose limits to MCP clients (Claude Code, Cursor, custom agents):
+_ = rg.ServeMCP(ctx, os.Stdin, os.Stdout)
 ```
 
 ### Node.js
 ```ts
 import { RateGuard } from '@varbees/rateguard-node';
 const rg = new RateGuard({ preset: 'streaming-llm' });
+const tools = rg.mcpTools(); // 5 MCP tools, peek semantics
 ```
 
 ### Python
 ```python
 from rateguard import RateGuard
 rg = RateGuard(preset="streaming-llm")
+tools = rg.mcp_tools()  # 5 MCP tools, peek semantics
 ```
 
 ## Architecture
@@ -27,6 +31,7 @@ RateGuard is MIDDLEWARE (runs inside your app), not a proxy or gateway. Three SD
 
 ## Core Algorithm (all 3 SDKs)
 Token Bucket (RFC standard, same as Kong/Envoy/AWS): `tokens = min(burst, tokens + elapsed × rps)`
+Every limiter also implements Peek — a non-consuming pre-flight query.
 
 ## 8 Presets
 | Preset | RPS | Tokens/hr | Mode |
@@ -41,16 +46,21 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS): `tokens = min(burst, tokens
 | strict-upstream-protection | 50 | 5K | hard-stop |
 
 ## Features
-- Token budgets (hour/day/month, hard-stop or soft-stop)
+- MCP tools (5, all SDKs): get_rate_limit_state, get_token_budget, get_circuit_breaker_state, check_loop, list_limits — peek semantics, querying never consumes budget
+- MCP stdio server (Go): zero-dependency JSON-RPC 2.0, plugs into any MCP client config
+- Loop detection: SHA-256 payload fingerprinting + max sequence depth, LRU-bounded; wired into Go middleware via X-Sequence-Depth header (429 loop_detected)
+- Token budgets (hour/day/month, hard-stop or soft-stop); estimate-based reservations (Go: EstimatedTokensPerRequest) keep concurrency high under hard-stop
 - Circuit breakers (closed → open → half-open)
-- GenAI OTel: gen_ai.* spans, 28-model pricing, cost estimation, streaming chunk tracking
-- Provider chain: auto-fallback (OpenAI → Anthropic → Google)
-- Content guardrails: PII detection, prompt injection (5 vectors), token/length limits
-- Prometheus /metrics endpoint (stdlib only, zero deps)
-- Events/webhooks for every request
+- GenAI OTel per semconv: span name "{operation} {model}", gen_ai.usage.input_tokens/output_tokens, low-cardinality error.type; public API rg.StartGenAICall → span.End with auto cost estimation, TTFT/TPOT
+- 14-model pricing table, verified against provider pricing pages
+- Content guardrails: PII, prompt injection (5 vectors), token/length limits; wired into Go middleware (422)
+- Prometheus /metrics endpoint (stdlib only): live counters — requests, rate limit hits, budget exhaustion, breaker trips, tokens consumed, loop stats
+- IETF RateLimit-* response headers (draft-ietf-httpapi-ratelimit-headers)
+- Events/webhooks for every request (Go)
+- Redis distributed limiter: atomic Lua GCRA, read-only peek script (Go)
 
 ## Tests
-All 3 SDKs: `go test ./...` (23/23), `bun run test` (22/22), `pytest -q` (18/18)
+All 3 SDKs green: `go test ./...` (51 passing), `bun run test` (38 passing), `pytest -q` (34 passing)
 
 ## Docs
 - AGENTS.md: full agent contract with architecture, domain types, rules, commands
@@ -60,4 +70,4 @@ All 3 SDKs: `go test ./...` (23/23), `bun run test` (22/22), `pytest -q` (18/18)
 - docs/RELEASE_NOTES.md: changelog
 
 ## vs Competition
-Nobody else combines multi-language SDKs + LLM token budgets + GenAI OTel + circuit breakers + guardrails in one package.
+The only in-process SDK where agents can ask "can I make this call?" before spending tokens — across Go, Node, and Python. Nobody else combines multi-language SDKs + MCP pre-flight tools + LLM token budgets + GenAI OTel + circuit breakers + loop detection + guardrails in one package.

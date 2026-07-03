@@ -1,13 +1,65 @@
 # Release Notes
 
-## Unreleased (v0.2.0-dev) — July 4, 2026
+## Unreleased (v0.2.0-dev) — July 4, 2026 (late-night wiring release)
+
+### Everything advertised is now reachable 🔌
+A source-level audit found several headline features existed as modules but were not
+wired into the middleware or exported from package entry points. This release closes
+that gap — features are now real, tested through the public surface, and demoable:
+
+- **MCP stdio server (Go)** 🆕: `rg.ServeMCP(ctx, stdin, stdout)` — zero-dependency
+  JSON-RPC 2.0 implementing `initialize`, `tools/list`, `tools/call`, `ping`. Plug
+  RateGuard into Claude Code/Desktop/Cursor as an MCP server.
+- **MCP tools now in all 3 SDKs** (were Go-only): 5 tools including new `check_loop`.
+  Node: `rg.mcpTools()` / `rg.mcpCall()`. Python: `rg.mcp_tools()` / `rg.mcp_call()`.
+- **Peek semantics** 🆕: every limiter implements a non-consuming `Peek` (memory,
+  Redis read-only Lua, noop). MCP pre-flight queries no longer consume the caller's
+  budget (they previously called `Allow`, burning a token per query), and the
+  breaker query no longer claims the half-open probe slot.
+- **Prometheus runtime counters wired**: `/metrics` now reports live
+  `rateguard_requests_total`, rate limit hits, budget exhaustion, breaker trips,
+  tokens consumed, and loop detector stats (counters previously existed but were
+  never incremented or rendered).
+- **GenAI OTel public API (Go)** 🆕: `StartGenAICall` → `GenAISpan.End` with
+  automatic cost estimation and TTFT/TPOT from `RecordChunk()`. The observer was
+  previously unreachable dead code.
+- **GenAI semconv corrections (all 3 SDKs)**: span names are now
+  `{operation} {model}`; `gen_ai.usage.input_tokens`/`output_tokens` replace the
+  deprecated prompt/completion names; `error.type` is a low-cardinality class, not
+  the full error message; RateGuard-specific attributes moved to `rateguard.*`.
+- **Loop detection hardened + wired**: `maxDepth` is now enforced (was stored but
+  never used), fingerprint maps are LRU-bounded (were unbounded — a memory leak),
+  and Go middleware blocks loops via the `X-Sequence-Depth` header (429
+  `loop_detected`). Node/Python loop detectors gained the same fixes plus `peek`.
+- **Guardrails wired into Go middleware**: set `Config.Guardrails` and violating
+  request bodies return 422 (previously a standalone library the middleware ignored).
+- **Token budget concurrency fix (Go)**: hard-stop reservations previously reserved
+  the *entire remaining budget* per in-flight request, serializing concurrent
+  traffic on a budget key. New `Config.EstimatedTokensPerRequest` bounds the
+  reservation so concurrent requests proceed; default behavior unchanged.
+- **Response buffering capped (Go)**: token-extraction buffering is limited to 1 MiB
+  (configurable via `Config.MaxBufferedResponseBytes`) — streaming responses are no
+  longer buffered whole in memory.
+- **IETF `RateLimit-*` headers (Go)**: standard `RateLimit-Limit/Remaining/Reset`
+  emitted alongside `X-RateGuard-*` (draft-ietf-httpapi-ratelimit-headers).
+- **Pricing corrections (all 3 SDKs)**: Claude Opus 4.5 → $5/$25 per MTok, o3 →
+  $2/$8 per MTok, verified against provider pricing pages. Table is 14 models —
+  earlier docs claiming 28 were wrong.
+- **Provider chain honesty**: documented as a routing-decision helper (the app
+  performs the call); `Weight` is now assigned from chain position (was
+  accidentally the length of the provider name).
+
+Tests: Go 51 / Node 38 / Python 34 — all green, with new end-to-end wiring tests
+that drive every advertised feature through the public surface.
+
+## Earlier July 4, 2026 work (v0.2.0-dev)
 
 ### GenAI Observability 🆕
-- OpenTelemetry `gen_ai.*` semantic conventions (v1.29.0) for Go. Node.js and Python attribute builders included.
-- 28-model pricing table at 2026 market rates (OpenAI, Anthropic, Google, Llama, DeepSeek).
+- OpenTelemetry `gen_ai.*` semantic conventions (v1.29.0) for Go, Node.js, and Python.
+- **OTel compliance fixes (July 4):** `gen_ai.system` → `gen_ai.provider.name`, `error.type` on error spans, TTFT/TPOT streaming latency histograms, `gen_ai.conversation.id` / `gen_ai.response.id` span attributes.
+- 14-model pricing table, verified against provider pricing pages (OpenAI, Anthropic, Google, Llama, DeepSeek).
 - `estimateCost()` across all 3 SDKs. Unknown models return $0.00 — never fabricate costs.
 - Streaming chunk telemetry via `RecordStreamChunk()`.
-- Budget exhaustion and rate limit hit counters.
 
 ### Rate Limiting Algorithm Fix ⚠️
 - Fixed Python and Node.js rate limiters: were using sliding window with incorrect `capacity = rps + burst` formula (3x too permissive). Now use identical **Token Bucket** algorithm across all 3 SDKs, matching Go's original implementation.
@@ -18,6 +70,7 @@
 - `streaming-llm`: 200 RPS, 500K tokens/hr, soft-stop. For real-time LLM streaming workloads.
 - `agent-orchestrator`: 500 RPS, 1M tokens/hr, 1B tokens/month. For multi-agent AI systems.
 - `mcp-server`: 30 RPS, 50K tokens/hr, hard-stop. For MCP tool servers (low request count, high tool calls).
+- **Python presets parity (July 4):** All 8 presets now available in Python SDK (was 5). `known_presets()` added to Python public API.
 
 ### Provider Chain 🆕
 - Automatic LLM provider fallback when circuit breaker opens.

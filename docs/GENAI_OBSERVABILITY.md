@@ -1,28 +1,40 @@
 # GenAI Observability
 
-RateGuard emits OpenTelemetry spans and metrics for every LLM call using the official GenAI semantic conventions (v1.29.0, 2026).
+RateGuard emits OpenTelemetry spans and metrics for every LLM call using the official GenAI semantic conventions. Span names follow the semconv format `{operation} {model}` (e.g. `chat gpt-4o`). Standard `gen_ai.*` attributes are used where the convention defines them; RateGuard-specific data lives under the `rateguard.*` namespace so the reserved namespace stays clean.
 
 ## What gets traced
 
 Every LLM call through RateGuard produces:
 
 ```
-gen_ai.client.request
-├── gen_ai.system: "openai" | "anthropic" | "google"
+chat gpt-4o                                  ← span name: {operation} {model}
+├── gen_ai.provider.name: "openai" | "anthropic" | "google"
 ├── gen_ai.request.model: "gpt-4o" | "claude-opus-4-5" | "gemini-2.5-pro"
 ├── gen_ai.operation.name: "chat" | "text_completion" | "embedding"
-├── gen_ai.request.is_stream: true | false
-├── gen_ai.usage.prompt_tokens: 1234
-├── gen_ai.usage.completion_tokens: 567
-├── gen_ai.usage.total_tokens: 1801
-├── gen_ai.usage.cost_usd: 0.00877
-├── gen_ai.latency_seconds: 1.234
-├── gen_ai.stream.chunks: 42 (streaming only)
+├── gen_ai.usage.input_tokens: 1234
+├── gen_ai.usage.output_tokens: 567
+├── gen_ai.conversation.id / gen_ai.response.id (when provided)
+├── error.type: "timeout" | "canceled" | error class   (low-cardinality, errors only)
+├── rateguard.usage.total_tokens: 1801
+├── rateguard.usage.cost_usd: 0.00877
+├── rateguard.request.is_stream: true | false
+├── rateguard.stream.chunks: 42 (streaming only)
 ├── rateguard.rate_limit.applied: true | false
 ├── rateguard.token_budget.applied: true | false
 ├── rateguard.token_budget.remaining: 950000
 └── rateguard.circuit_breaker.state: "closed" | "open" | "half-open"
 ```
+
+## Public API (Go)
+
+```go
+ctx, span := rg.StartGenAICall(ctx, rateguard.GenAICall{Provider: "openai", Model: "gpt-4o", Operation: "chat"})
+resp, err := client.Chat(ctx, req)
+span.RecordChunk() // optional, per streaming chunk — first call sets TTFT
+span.End(rateguard.GenAICall{PromptTokens: usage.Input, CompletionTokens: usage.Output}, err)
+```
+
+Cost is estimated automatically from the pricing table when not provided. TTFT and TPOT are derived from `RecordChunk()` timing. Node and Python expose the same attribute builders via `genaiSpanName`/`genai_span_name`, `genaiSpanAttributes`/`genai_span_attributes`, and `genaiSpanEndAttributes`/`genai_span_end_attributes`.
 
 ## Metrics emitted
 
@@ -37,13 +49,13 @@ gen_ai.client.request
 
 ## Model pricing
 
-28 models priced at 2026 market rates. Costs are approximate (USD per 1K tokens).
+14 models priced, verified against provider public pricing pages (July 2026). Costs are approximate (USD per 1K tokens).
 
 | Model | Prompt ($/1K) | Completion ($/1K) |
 |---|---|---|
 | GPT-4o | $0.0025 | $0.010 |
 | GPT-4o Mini | $0.00015 | $0.0006 |
-| Claude Opus 4.5 | $0.015 | $0.075 |
+| Claude Opus 4.5 | $0.005 | $0.025 |
 | Claude Sonnet 4 | $0.003 | $0.015 |
 | Claude Haiku 3.5 | $0.0008 | $0.004 |
 | Gemini 2.5 Pro | $0.00125 | $0.010 |
@@ -80,19 +92,20 @@ const attrs = genaiSpanAttributes(call);
 from rateguard.core.genai import estimate_cost, genai_span_attributes
 
 cost = estimate_cost("claude-opus-4-5", 5000, 2000)
-# $0.225 (5000/1000 * $0.015 + 2000/1000 * $0.075)
+# $0.075 (5000/1000 * $0.005 + 2000/1000 * $0.025)
 ```
 
 ## Streaming support
 
-For streaming LLM calls (SSE/WebSocket), call `RecordStreamChunk()` for each chunk:
+For streaming LLM calls (SSE/WebSocket), call `RecordChunk()` on the span for each chunk — the first call sets time-to-first-chunk (TTFT), and time-per-output-chunk (TPOT) is derived at `End`:
 
 ```go
+ctx, span := rg.StartGenAICall(ctx, rateguard.GenAICall{Provider: "openai", Model: "gpt-4o"})
 for chunk := range stream {
-    rg.GenAI.RecordStreamChunk(ctx, "openai")
+    span.RecordChunk()
     // ... process chunk
 }
-// EndSpan() after stream closes — total chunks counted
+span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, nil)
 ```
 
 ## Backend integration

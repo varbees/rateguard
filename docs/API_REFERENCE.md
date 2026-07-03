@@ -49,6 +49,12 @@ type Config struct {
     UpstreamID           string
     Provider             string          // LLM provider name
     Model                string          // LLM model name
+
+    EstimatedTokensPerRequest int64      // bound hard-stop budget reservations (0 = reserve all remaining)
+    Guardrails           *GuardrailChain // check request bodies, violations → 422
+    LoopDetection        bool            // agent loop detection via X-Sequence-Depth header
+    LoopMaxDepth         int             // max agent sequence depth (default 50)
+    MaxBufferedResponseBytes int         // cap response buffering for token extraction (default 1 MiB)
 }
 ```
 
@@ -89,6 +95,63 @@ app.wsgi_app = rg.wsgi_middleware(app.wsgi_app)
 async def my_endpoint(request): ...
 ```
 
+## MCP Tools (agent pre-flight)
+
+Five tools, identical across Go/Node/Python. All use **peek semantics** — querying never consumes budget.
+
+| Tool | What it answers |
+|---|---|
+| `get_rate_limit_state` | Would a call for this key be allowed right now? Remaining, limit, retry-after. |
+| `get_token_budget` | How many LLM tokens remain? Optionally: would `estimated_tokens` fit? |
+| `get_circuit_breaker_state` | Is the upstream healthy? closed / open / half-open. |
+| `check_loop` | Has this exact payload been seen at a lower sequence depth (runaway loop)? |
+| `list_limits` | Everything above in one call, for agent initialization. |
+
+### Go — serve over MCP stdio (zero dependencies)
+```go
+rg := rateguard.New(rateguard.Config{Preset: "agent-orchestrator"})
+_ = rg.ServeMCP(ctx, os.Stdin, os.Stdout) // JSON-RPC 2.0: initialize, tools/list, tools/call, ping
+// Or call tools directly: rg.MCPCall("get_token_budget", map[string]any{"key": "tenant-1", "estimated_tokens": 8000})
+```
+
+```jsonc
+// Claude Code / Claude Desktop / Cursor config
+{ "mcpServers": { "rateguard": { "command": "your-app", "args": ["mcp"] } } }
+```
+
+### Node
+```ts
+const rg = new RateGuard({ preset: 'agent-orchestrator' });
+const tools = rg.mcpTools();                       // MCPTool[] for your MCP server framework
+const result = await rg.mcpCall('check_loop', { system_prompt: s, user_input: u, sequence_depth: 3 });
+```
+
+### Python
+```python
+rg = RateGuard(preset="agent-orchestrator")
+tools = rg.mcp_tools()                             # list[MCPTool] for your MCP server framework
+result = rg.mcp_call("get_rate_limit_state", {"key": "tenant-1"})
+```
+
+## Loop Detection
+
+SHA-256 payload fingerprinting halts runaway agent loops. A loop is an identical fingerprint reappearing at a **higher** sequence depth; same-depth repeats are treated as retries. Depths beyond `LoopMaxDepth` (default 50) halt regardless. Fingerprint state is LRU-bounded (10K entries).
+
+```go
+// Middleware wiring (Go): enable, then agents send headers
+rg := rateguard.New(rateguard.Config{Preset: "agent-orchestrator", LoopDetection: true})
+// X-Sequence-Depth: 3                (required to activate the check)
+// X-Payload-Fingerprint: <sha256>    (optional — else SHA256(method+path+body))
+// Detected loops → 429 {"error":"loop_detected", ...}
+```
+
+```go
+// Library use (any SDK)
+fp := rateguard.Fingerprint(systemPrompt, userInput, toolDefs)
+allowed, reason := detector.Check(fp, depth)   // records
+allowed, reason  = detector.Peek(fp, depth)    // pre-flight, no recording
+```
+
 ## Provider Chain
 
 ```go
@@ -125,6 +188,15 @@ chain = rateguard.NewGuardrailChain(
 if v := chain.Check(prompt); v != nil {
     rateguard.WriteGuardrailReject(w, v) // HTTP 422
 }
+```
+
+Or let the middleware run the chain against every request body (Go):
+
+```go
+rg := rateguard.New(rateguard.Config{
+    Preset:     "standard",
+    Guardrails: rateguard.StandardGuardrails(), // violations → 422 automatically
+})
 ```
 
 ## Events

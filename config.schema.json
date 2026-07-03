@@ -103,6 +103,29 @@
       "type": "string",
       "format": "uri",
       "description": "HTTP endpoint to POST rate limit events."
+    },
+    "estimatedTokensPerRequest": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Bounds the hard-stop token budget reservation per in-flight request. 0 reserves the entire remaining budget (never overshoots, but serializes concurrent requests on the same budget key). Set a realistic per-call estimate (e.g. 8000 for chat) to allow concurrency. Go SDK."
+    },
+    "loopDetection": {
+      "type": "boolean",
+      "default": false,
+      "description": "Enable agent loop detection for requests carrying an X-Sequence-Depth header. Detected loops return HTTP 429 with code loop_detected. Fingerprint comes from X-Payload-Fingerprint or SHA-256 of method+path+body. Go SDK."
+    },
+    "loopMaxDepth": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 50,
+      "description": "Maximum agent sequence depth before halting, regardless of fingerprint repeats. Go SDK."
+    },
+    "maxBufferedResponseBytes": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1048576,
+      "description": "Cap on response body buffering for token usage extraction. Responses larger than the cap skip body-based extraction. Go SDK."
     }
   },
   "examples": [
@@ -115,6 +138,8 @@
       "preset": "agent-orchestrator",
       "provider": "openai",
       "model": "gpt-4o",
+      "estimatedTokensPerRequest": 8000,
+      "loopDetection": true,
       "circuitBreaker": {"errorRateThreshold": 0.3}
     },
     {

@@ -17,14 +17,17 @@ Every other rate limiting tool was built for REST APIs. RateGuard was built for 
 | Capability | What it means |
 |---|---|
 | **Rate limiting** | Token bucket algorithm (RFC standard). Configurable per-tenant, per-route, per-provider. |
-| **Token budgets** | Hourly, daily, monthly limits on LLM token consumption. Hard-stop or soft-stop (queue). |
+| **Pre-flight queries** | `Peek` semantics everywhere: agents ask "can I make this call?" without consuming budget. |
+| **MCP server** | 5 MCP tools + zero-dependency stdio server (Go). Any MCP client — Claude Code, Cursor, custom agents — can query limits before calling. |
+| **Loop detection** | SHA-256 payload fingerprinting halts runaway agent loops. Wired into middleware via `X-Sequence-Depth`. |
+| **Token budgets** | Hourly, daily, monthly limits on LLM token consumption. Hard-stop or soft-stop (queue). Estimate-based reservations keep concurrency high. |
 | **Circuit breakers** | Automatic upstream protection. Closed → Open → Half-Open state machine. |
-| **GenAI observability** | OpenTelemetry `gen_ai.*` spans for every LLM call. Tokens, model, cost, latency. |
-| **Provider chain** | Auto-fallback when circuit breaker trips. OpenAI → Anthropic → Google, transparently. |
-| **Content guardrails** | PII detection, prompt injection detection, token/length limits. Pluggable. |
-| **Prometheus metrics** | `/metrics` endpoint with rate limits, token budgets, circuit breaker state. Zero deps. |
-| **Streaming-aware** | Tracks SSE chunks for streaming LLM calls. Chunk counting, token estimation. |
-| **28 models priced** | 2026 market rates for GPT-4o, Claude Opus, Gemini, Llama, DeepSeek. Auto cost estimation. |
+| **GenAI observability** | OpenTelemetry `gen_ai.*` spans per semconv: `{operation} {model}` span names, input/output token attributes, low-cardinality `error.type`. |
+| **Provider chain** | Fallback routing decisions when a provider fails. Your app performs the call; the chain picks the next provider. |
+| **Content guardrails** | PII detection, prompt injection detection, token/length limits. Wired into middleware — violations return 422. |
+| **Prometheus metrics** | `/metrics` endpoint with live request/rate-limit/budget/breaker/loop counters. Zero deps. |
+| **Streaming-aware** | Tracks SSE chunks, TTFT, and TPOT for streaming LLM calls. Response buffering capped at 1 MiB. |
+| **14 models priced** | Verified against provider pricing pages. GPT-4o, o3, Claude Opus 4.5, Gemini 2.5, Llama, DeepSeek. Auto cost estimation. |
 
 ## Quick Start
 
@@ -65,6 +68,30 @@ app.add_middleware(rg.asgi_middleware)
 | `mcp-server` 🆕 | MCP tool servers | 30 | 50K |
 | `strict-upstream-protection` | Fragile upstreams | 50 | 5K |
 
+## Agents: ask before you call
+
+Every AI gateway makes agents discover limits by hitting 429s. RateGuard answers **before the request leaves the process** — and pre-flight queries never consume budget.
+
+```go
+// Expose RateGuard as an MCP server (stdlib-only, newline-delimited JSON-RPC)
+rg := rateguard.New(rateguard.Config{Preset: "agent-orchestrator"})
+_ = rg.ServeMCP(ctx, os.Stdin, os.Stdout)
+```
+
+```jsonc
+// Claude Code / Claude Desktop / Cursor config
+{ "mcpServers": { "rateguard": { "command": "your-app", "args": ["mcp"] } } }
+```
+
+Five tools, identical across Go/Node/Python: `get_rate_limit_state`, `get_token_budget`, `get_circuit_breaker_state`, `check_loop`, `list_limits`.
+
+```go
+// Track any LLM call with OTel GenAI spans + automatic cost estimation
+ctx, span := rg.StartGenAICall(ctx, rateguard.GenAICall{Provider: "openai", Model: "gpt-4o"})
+resp, err := client.Chat(ctx, req)
+span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
+```
+
 ## Packages
 
 | Language | Package | Install |
@@ -79,6 +106,8 @@ app.add_middleware(rg.asgi_middleware)
 |---|---|---|---|---|
 | Multi-language | ✅ Go+Node+Python | ❌ JS only | ❌ Python only | ❌ |
 | Zero infrastructure | ✅ Middleware | ✅ | ❌ Proxy required | ❌ Gateway |
+| Agent pre-flight queries (MCP) | ✅ 5 tools + stdio server | ❌ | ❌ | ❌ |
+| Agent loop detection | ✅ | ❌ | ❌ | ❌ |
 | LLM token budgets | ✅ | ❌ | ✅ | ❌ |
 | GenAI OTel conventions | ✅ | ❌ | ❌ | ❌ |
 | Circuit breakers | ✅ | ❌ | ❌ | ❌ |

@@ -21,12 +21,16 @@
     "model": {"@type": "xsd:string", "@id": "rateguard:modelId"},
     "provider": {"@type": "xsd:string", "@id": "rateguard:providerName"},
     "operation": {"@type": "xsd:string", "@id": "rateguard:genaiOperation"},
-    "promptTokens": {"@type": "xsd:integer", "@id": "gen_ai:usage.prompt_tokens"},
-    "completionTokens": {"@type": "xsd:integer", "@id": "gen_ai:usage.completion_tokens"},
-    "totalTokens": {"@type": "xsd:integer", "@id": "gen_ai:usage.total_tokens"},
-    "estimatedCostUSD": {"@type": "xsd:float", "@id": "gen_ai:usage.cost_usd"},
+    "promptTokens": {"@type": "xsd:integer", "@id": "gen_ai:usage.input_tokens"},
+    "completionTokens": {"@type": "xsd:integer", "@id": "gen_ai:usage.output_tokens"},
+    "totalTokens": {"@type": "xsd:integer", "@id": "rateguard:usage.total_tokens"},
+    "estimatedCostUSD": {"@type": "xsd:float", "@id": "rateguard:usage.cost_usd"},
     "streaming": {"@type": "xsd:boolean"},
     "streamChunks": {"@type": "xsd:integer"},
+    "timeToFirstChunkMs": {"@type": "xsd:integer", "@id": "gen_ai:operation.time_to_first_chunk"},
+    "timePerOutputChunkMs": {"@type": "xsd:float", "@id": "gen_ai:operation.time_per_output_chunk"},
+    "conversationId": {"@type": "xsd:string", "@id": "gen_ai:conversation.id"},
+    "responseId": {"@type": "xsd:string", "@id": "gen_ai:response.id"},
     "rateLimitApplied": {"@type": "xsd:boolean"},
     "tokenBudgetApplied": {"@type": "xsd:boolean"},
     "tokenBudgetRemaining": {"@type": "xsd:integer"},
@@ -52,12 +56,26 @@
       "allowCondition": "tokens >= 1.0",
       "denyRetryAfter": "ceil((1.0 - tokens) / rps) * 1000ms",
       "source": "https://en.wikipedia.org/wiki/Token_bucket"
+    },
+    "loopDetection": {
+      "fingerprint": "SHA256(system_prompt + user_input + tool_definitions)",
+      "haltCondition": "same fingerprint at higher sequence depth, or depth > maxDepth (default 50)",
+      "state": "LRU-bounded (10K fingerprints)"
     }
+  },
+  "rateguard:mcpTools": {
+    "transport": "stdio JSON-RPC 2.0 (Go: SDK.ServeMCP), tool factories in Node/Python",
+    "semantics": "peek — pre-flight queries never consume budget",
+    "tools": ["get_rate_limit_state", "get_token_budget", "get_circuit_breaker_state", "check_loop", "list_limits"]
   },
   "rateguard:modelPricing": {
     "gpt-4o": {"promptPer1K": 0.0025, "completionPer1K": 0.010},
     "gpt-4o-mini": {"promptPer1K": 0.00015, "completionPer1K": 0.0006},
-    "claude-opus-4-5": {"promptPer1K": 0.015, "completionPer1K": 0.075},
+    "gpt-4.1": {"promptPer1K": 0.002, "completionPer1K": 0.008},
+    "gpt-4.1-mini": {"promptPer1K": 0.0001, "completionPer1K": 0.0004},
+    "o3": {"promptPer1K": 0.002, "completionPer1K": 0.008},
+    "o4-mini": {"promptPer1K": 0.0011, "completionPer1K": 0.0044},
+    "claude-opus-4-5": {"promptPer1K": 0.005, "completionPer1K": 0.025},
     "claude-sonnet-4": {"promptPer1K": 0.003, "completionPer1K": 0.015},
     "claude-haiku-3.5": {"promptPer1K": 0.0008, "completionPer1K": 0.004},
     "gemini-2.5-pro": {"promptPer1K": 0.00125, "completionPer1K": 0.010},

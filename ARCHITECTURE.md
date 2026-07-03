@@ -17,8 +17,8 @@ RateGuard is the transparent window into your API internals. One line of code, a
 │  ┌──────────┐  ┌──────────┐  ┌────────────────────┐    │
 │  │  Rate    │  │  Token   │  │  Circuit            │    │
 │  │  Limiter │  │  Budget  │  │  Breaker            │    │
-│  │  (sliding│  │  (hr/day │  │  (closed→open→     │    │
-│  │  window) │  │  /month) │  │   half-open)       │    │
+│  │  (token  │  │  (hr/day │  │  (closed→open→     │    │
+│  │  bucket) │  │  /month) │  │   half-open)       │    │
 │  └──────────┘  └──────────┘  └────────────────────┘    │
 │  ┌──────────────────────────────────────────────────┐  │
 │  │  GenAI Observer (NEW 2026)                        │  │
@@ -81,6 +81,6 @@ RateGuard is the transparent window into your API internals. One line of code, a
 - Need: Redis Cluster with slot-aware key routing
 - Fallback: local limiter when Redis is partitioned
 
-### 4. Prometheus metrics endpoint (5 min, Hermes can do)
-- Expose `/metrics` with all RateGuard counters in Prometheus format
-- No new dependencies — already have counters via OTel
+### 4. Prometheus metrics endpoint ✅ DONE
+- `/metrics` endpoint with all RateGuard counters in Prometheus format
+- Zero new dependencies — stdlib only in Go, matching Node and Python

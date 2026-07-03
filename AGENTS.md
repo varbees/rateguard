@@ -31,16 +31,25 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Feature | Go | Node | Python | Key File (Go) |
 |---|---|---|---|---|
 | Rate limiting (token bucket) | ✅ | ✅ | ✅ | `limiter.go` |
+| Pre-flight Peek (non-consuming query) | ✅ | ✅ | ✅ | `limiter.go` |
 | LLM token budgets (hr/day/mo) | ✅ | ✅ | ✅ | `token_budget.go` |
+| Estimate-based budget reservations | ✅ | — | — | `token_budget.go` |
 | Circuit breakers | ✅ | ✅ | ✅ | `circuit_breaker.go` |
-| GenAI OTel observability | ✅ | ✅ | ✅ | `genai_observability.go` |
-| 28-model pricing | ✅ | ✅ | ✅ | Same file |
-| Prometheus /metrics | ✅ | ✅ | ✅ | `prometheus.go` |
-| Provider chain | ✅ | ✅ | ✅ | `provider_chain.go` |
+| GenAI OTel observability (semconv span names, input/output tokens, error.type classes) | ✅ | ✅ | ✅ | `genai_observability.go` |
+| Public GenAI API (StartGenAICall/GenAISpan, TTFT/TPOT) | ✅ | — | — | Same file |
+| 14-model pricing (verified) | ✅ | ✅ | ✅ | Same file |
+| Prometheus /metrics (live runtime counters) | ✅ | ✅ | ✅ | `prometheus.go` |
+| Provider chain (routing decisions) | ✅ | ✅ | ✅ | `provider_chain.go` |
 | Content guardrails (PII, injection) | ✅ | ✅ | ✅ | `guardrails.go` |
-| 8 presets | ✅ | ✅ | ❌ (config only) | `presets.go` |
-| Redis distributed limiter | ✅ | ❌ | ❌ | `redis_limiter.go` |
+| Guardrails wired into middleware (422) | ✅ | — | — | `sdk.go` |
+| 8 presets | ✅ | ✅ | ✅ | `presets.go` |
+| Redis distributed limiter (atomic Lua GCRA) | ✅ | ❌ | ❌ | `redis_limiter.go` |
 | Events/webhooks | ✅ | — | — | `events.go` |
+| MCP tools (5, peek semantics) | ✅ | ✅ | ✅ | `mcp.go` |
+| MCP stdio server (zero-dep JSON-RPC) | ✅ | — | — | `mcp_server.go` |
+| Loop detection (SHA-256, max-depth, LRU-bounded) | ✅ | ✅ | ✅ | `loop_detector.go` |
+| Loop detection wired into middleware (X-Sequence-Depth) | ✅ | — | — | `sdk.go` |
+| IETF RateLimit-* response headers | ✅ | — | — | `sdk.go` |
 
 ## 8 Presets
 
@@ -60,13 +69,13 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests
+# Go tests (51 passing incl. subtests)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests
+# Node tests (38 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests
+# Python tests (34 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Graphify (codebase to knowledge graph)
@@ -86,6 +95,8 @@ opensrc path github.com/varbees/rateguard/packages/sdk-go
 6. **Keep it SDK-only.** No gateway, dashboard, proxy, billing, marketplace code on `main`. The legacy full-stack product is on `legacy/full-stack`.
 7. **Verify formulas.** Every formula must cite its source (RFC, Wikipedia, academic paper). No hand-waving.
 8. **Model pricing must be verifiable.** Every price in the pricing table must be checkable against the provider's public pricing page as of the commit date.
+9. **A feature isn't done until it's wired.** A module that exists but isn't exported from the package entry point, isn't reachable through the middleware/facade, or isn't exercised by a test that drives the public surface is NOT a feature — don't mark it ✅ or document it as shipped. (July 2026 audit found MCP tools, guardrails, loop detection, GenAI OTel, and Prometheus counters all existed as files but were unreachable by users.)
+10. **Pre-flight queries must never consume.** Anything advertised as a "check before you call" (MCP tools, dashboards) must use Peek/read-only paths — never `Allow()`, which consumes a token, and never `breaker.Allow()`, which claims the half-open probe.
 
 ## Domain types
 
