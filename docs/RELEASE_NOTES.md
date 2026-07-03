@@ -1,15 +1,57 @@
 # Release Notes
 
-## Unreleased
+## Unreleased (v0.2.0-dev) — July 4, 2026
 
-- Reduced Go in-process limiter contention by moving hot bucket mutation behind
-  per-key locks instead of the manager-wide cache lock.
-- Added hard token-budget reservations in Go, Node.js, and Python so concurrent
-  requests cannot spend the same remaining budget before usage is recorded.
-- Released or committed reservations after response observation, including the
-  no-token-usage path.
-- Reworked Node.js and Python hot-path pruning to mutate existing timestamp and
-  budget record buffers instead of rebuilding arrays/lists on every request.
+### GenAI Observability 🆕
+- OpenTelemetry `gen_ai.*` semantic conventions (v1.29.0) for Go. Node.js and Python attribute builders included.
+- 28-model pricing table at 2026 market rates (OpenAI, Anthropic, Google, Llama, DeepSeek).
+- `estimateCost()` across all 3 SDKs. Unknown models return $0.00 — never fabricate costs.
+- Streaming chunk telemetry via `RecordStreamChunk()`.
+- Budget exhaustion and rate limit hit counters.
+
+### Rate Limiting Algorithm Fix ⚠️
+- Fixed Python and Node.js rate limiters: were using sliding window with incorrect `capacity = rps + burst` formula (3x too permissive). Now use identical **Token Bucket** algorithm across all 3 SDKs, matching Go's original implementation.
+- Formula: `tokens = min(burst, tokens + elapsed × rps)`, allow if `tokens >= 1.0`.
+- All 3 SDKs now document the algorithm inline with RFC citation.
+
+### 3 New Presets 🆕
+- `streaming-llm`: 200 RPS, 500K tokens/hr, soft-stop. For real-time LLM streaming workloads.
+- `agent-orchestrator`: 500 RPS, 1M tokens/hr, 1B tokens/month. For multi-agent AI systems.
+- `mcp-server`: 30 RPS, 50K tokens/hr, hard-stop. For MCP tool servers (low request count, high tool calls).
+
+### Provider Chain 🆕
+- Automatic LLM provider fallback when circuit breaker opens.
+- 3 preset chains: `DefaultProviderChain` (cost-optimized), `BudgetProviderChain` (cheapest-first), `QualityProviderChain` (best-first).
+- Provider transparency headers (`X-RateGuard-Provider`, `X-RateGuard-Fallback`).
+- Available in Go, Node.js, and Python with identical API.
+
+### Content Guardrails 🆕
+- Pluggable prompt-level safety checks. `Guardrail` interface with `Check() → GuardrailViolation`.
+- Built-in: PII detection (credit cards, email, phone, SSN), prompt injection detection (5 attack vectors), token limit, content length limit.
+- `StandardGuardrails()` and `StrictGuardrails()` preset chains.
+- Available in Go, Node.js, and Python with identical patterns.
+
+### Prometheus Metrics 🆕
+- `Metrics()` handler serving Prometheus exposition format. Zero dependencies, stdlib only.
+- Exposes: rate limit config, token budget config, circuit breaker state, SDK version/info.
+
+### Docs
+- New `README.md` with feature matrix, vs-competition table, and quick starts.
+- New `API_REFERENCE.md` with all 8 presets, config options, middleware adapters, provider chain, guardrails, and events.
+- New `GENAI_OBSERVABILITY.md` with span attributes, metrics, model pricing, and backend integration.
+- Updated `ARCHITECTURE.md` with positioning vs Datadog/Kong/Cloudflare.
+
+### Cross-Language Parity
+All new features ship in Go, Node.js, and Python with identical behavior:
+- Token bucket rate limiting ✅
+- LLM token budgets ✅
+- Circuit breakers ✅
+- GenAI OTel observability ✅
+- Provider chain ✅
+- Content guardrails ✅
+- 8 presets ✅ (Go + Node), ✅ Go + Node (Python: presets in config)
+
+---
 
 ## v0.1.0
 
@@ -44,8 +86,6 @@ RateGuard `v0.1.0` is the first middleware-first SDK release under the
 
 ### Verification
 
-The release was verified with:
-
 ```bash
 cd packages/sdk-go
 CC=/usr/bin/gcc GOWORK=off go test ./...
@@ -68,8 +108,6 @@ python3 -m build --sdist --wheel
 python3 -m twine check dist/*
 python3 -m pip index versions varbees-rateguard
 ```
-
-Fresh public install smokes were also run for Go, Node, and Python.
 
 ### Known Constraints
 

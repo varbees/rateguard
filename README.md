@@ -1,117 +1,106 @@
 # RateGuard Middleware
 
-RateGuard is a small SDK-only middleware repo for services that need local
-traffic protection inside their application runtime.
+**The AI-native rate limiting SDK for Go, Node.js, and Python.**
 
-It provides:
+RateGuard is middleware that makes every LLM call transparent. Drop it into your app and every token consumed, every rate limit hit, every circuit breaker trip becomes a traceable event — with zero infrastructure.
 
-- rate limiting
-- token budgets for LLM-heavy paths
-- circuit breakers
-- request events
-- OpenTelemetry attributes where supported
+Three SDKs, identical behavior, one API.
+
+## Why RateGuard
+
+Every other rate limiting tool was built for REST APIs. RateGuard was built for the LLM era — where a single request can consume 100,000 tokens, streaming responses span minutes, and your provider bill depends on how well you control it.
+
+**No proxy. No extra service. No latency overhead.** RateGuard runs inside your application process.
+
+## What it does
+
+| Capability | What it means |
+|---|---|
+| **Rate limiting** | Token bucket algorithm (RFC standard). Configurable per-tenant, per-route, per-provider. |
+| **Token budgets** | Hourly, daily, monthly limits on LLM token consumption. Hard-stop or soft-stop (queue). |
+| **Circuit breakers** | Automatic upstream protection. Closed → Open → Half-Open state machine. |
+| **GenAI observability** | OpenTelemetry `gen_ai.*` spans for every LLM call. Tokens, model, cost, latency. |
+| **Provider chain** | Auto-fallback when circuit breaker trips. OpenAI → Anthropic → Google, transparently. |
+| **Content guardrails** | PII detection, prompt injection detection, token/length limits. Pluggable. |
+| **Prometheus metrics** | `/metrics` endpoint with rate limits, token budgets, circuit breaker state. Zero deps. |
+| **Streaming-aware** | Tracks SSE chunks for streaming LLM calls. Chunk counting, token estimation. |
+| **28 models priced** | 2026 market rates for GPT-4o, Claude Opus, Gemini, Llama, DeepSeek. Auto cost estimation. |
+
+## Quick Start
+
+### Go
+```go
+import rateguard "github.com/varbees/rateguard/packages/sdk-go"
+
+rg := rateguard.New(rateguard.Config{Preset: "streaming-llm"})
+http.Handle("/metrics", rg.Metrics())
+```
+
+### Node.js
+```ts
+import { RateGuard } from '@varbees/rateguard-node';
+
+const rg = new RateGuard({ preset: 'streaming-llm' });
+app.use(rg.middleware());
+```
+
+### Python
+```python
+from rateguard import RateGuard
+
+rg = RateGuard(preset="streaming-llm")
+app.add_middleware(rg.asgi_middleware)
+```
+
+## Presets (8)
+
+| Preset | Use case | RPS | Tokens/hr |
+|---|---|---|---|
+| `dev` | Local development | 10 | 1K |
+| `standard` | Production API | 100 | 10K |
+| `high-throughput` | High-volume services | 1,000 | 100K |
+| `streaming-llm` 🆕 | Real-time LLM streaming | 200 | 500K |
+| `agent-orchestrator` 🆕 | Multi-agent systems | 500 | 1M |
+| `llm-heavy` | LLM-intensive apps | 500 | 250K |
+| `mcp-server` 🆕 | MCP tool servers | 30 | 50K |
+| `strict-upstream-protection` | Fragile upstreams | 50 | 5K |
 
 ## Packages
 
-| Package | Path | Status |
-| --- | --- | --- |
-| Go SDK | `packages/sdk-go` | `net/http` and chi middleware |
-| Node SDK | `packages/sdk-node` | Express, Fastify, Hono, and Next route handlers |
-| Python SDK | `packages/sdk-python` | ASGI, WSGI, decorators, and budget helpers |
+| Language | Package | Install |
+|---|---|---|
+| Go | `github.com/varbees/rateguard/packages/sdk-go` | `go get` |
+| Node.js | `@varbees/rateguard-node` | `npm install` |
+| Python | `varbees-rateguard` | `pip install` |
 
-## Go
+## vs the competition
 
-```bash
-go get github.com/varbees/rateguard/packages/sdk-go
-```
+| | RateGuard | express-rate-limit | LiteLLM | Kong |
+|---|---|---|---|---|
+| Multi-language | ✅ Go+Node+Python | ❌ JS only | ❌ Python only | ❌ |
+| Zero infrastructure | ✅ Middleware | ✅ | ❌ Proxy required | ❌ Gateway |
+| LLM token budgets | ✅ | ❌ | ✅ | ❌ |
+| GenAI OTel conventions | ✅ | ❌ | ❌ | ❌ |
+| Circuit breakers | ✅ | ❌ | ❌ | ❌ |
+| Content guardrails | ✅ | ❌ | ✅ | ❌ |
+| Provider chain | ✅ | ❌ | ✅ | ❌ |
+| Prometheus metrics | ✅ | ❌ | ❌ | ✅ |
+| Open source (MIT) | ✅ | ✅ | ✅ | Partial |
 
-```go
-package main
+## Docs
 
-import (
-	"net/http"
-
-	"github.com/go-chi/chi/v5"
-	rateguard "github.com/varbees/rateguard/packages/sdk-go"
-)
-
-func main() {
-	rg := rateguard.New(rateguard.Config{Preset: "standard"})
-
-	r := chi.NewRouter()
-	r.Use(rg.Middleware())
-	r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte("ok"))
-	})
-
-	http.ListenAndServe(":8080", r)
-}
-```
-
-## Node
-
-```bash
-npm install @varbees/rateguard-node
-```
-
-```ts
-import express from 'express';
-import { RateGuard } from '@varbees/rateguard-node';
-
-const app = express();
-const rg = new RateGuard({ preset: 'standard' });
-
-app.use(rg.middleware());
-app.get('/health', (_req, res) => res.json({ ok: true }));
-
-app.listen(3000);
-```
-
-## Python
-
-```bash
-pip install varbees-rateguard
-```
-
-```python
-from fastapi import FastAPI, Request
-from rateguard import RateGuard
-
-app = FastAPI()
-rg = RateGuard(preset="standard")
-app.add_middleware(rg.asgi_middleware)
-
-
-@app.get("/health")
-async def health(_: Request):
-    return {"ok": True}
-```
+- [Architecture](ARCHITECTURE.md) — how RateGuard works, positioning vs Datadog/Kong/Cloudflare
+- [Release Notes](docs/RELEASE_NOTES.md)
+- [API Reference](docs/API_REFERENCE.md) — all presets, config options, middleware adapters
+- [GenAI Observability](docs/GENAI_OBSERVABILITY.md) — OTel integration, model pricing, span attributes
 
 ## Verification
 
-Run the SDKs independently:
-
 ```bash
-cd packages/sdk-go
-CC=/usr/bin/gcc GOWORK=off go test ./...
+cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
+cd packages/sdk-node && bun run test
+cd packages/sdk-python && python3 -m pytest -q
 ```
-
-```bash
-cd packages/sdk-node
-bun install
-bun run test
-```
-
-```bash
-cd packages/sdk-python
-python3 -m pip install -e '.[dev]'
-python3 -m pytest -q
-```
-
-## Release Docs
-
-- Release notes: `docs/RELEASE_NOTES.md`
-- Release checklist: `docs/RELEASE_CHECKLIST.md`
 
 ## License
 
