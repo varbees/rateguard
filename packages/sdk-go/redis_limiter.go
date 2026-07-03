@@ -37,6 +37,36 @@ local remaining = math.max(math.floor(((burst * intervalUs) - (newTat - nowUs)) 
 return {1, remaining, 0, 0}
 `
 
+// Read-only variant: reports what the GCRA would decide without advancing
+// the theoretical arrival time. Used by Peek (pre-flight queries).
+const luaRedisGCRAPeekScript = `
+local tatRaw = redis.call('GET', KEYS[1])
+local nowUs = tonumber(ARGV[3])
+local intervalUs = tonumber(ARGV[1])
+local burst = tonumber(ARGV[2])
+
+if intervalUs == nil or burst == nil or nowUs == nil or intervalUs <= 0 or burst <= 0 then
+    return {1, 0, 0, 0}
+end
+
+local tat = nowUs
+if tatRaw ~= false and tatRaw ~= nil then
+    tat = tonumber(tatRaw) or nowUs
+end
+
+local tolerance = (burst - 1) * intervalUs
+local allowAt = tat - tolerance
+
+if nowUs < allowAt then
+    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000)
+    return {0, 0, retryAfterMs, 1}
+end
+
+local wouldTat = math.max(tat, nowUs) + intervalUs
+local remaining = math.max(math.floor(((burst * intervalUs) - (wouldTat - nowUs)) / intervalUs), 0)
+return {1, remaining, 0, 0}
+`
+
 type redisGCRALimiter struct {
 	client RedisLimiterClient
 	clock  Clock
@@ -50,6 +80,15 @@ func newRedisGCRALimiterWithClock(client RedisLimiterClient, clock Clock) Limite
 }
 
 func (l *redisGCRALimiter) Allow(ctx context.Context, key string, policy PolicyPreset) (AdmissionDecision, error) {
+	return l.eval(ctx, key, policy, luaRedisGCRARateLimitScript)
+}
+
+// Peek reports what Allow would decide without advancing GCRA state.
+func (l *redisGCRALimiter) Peek(ctx context.Context, key string, policy PolicyPreset) (AdmissionDecision, error) {
+	return l.eval(ctx, key, policy, luaRedisGCRAPeekScript)
+}
+
+func (l *redisGCRALimiter) eval(ctx context.Context, key string, policy PolicyPreset, script string) (AdmissionDecision, error) {
 	if l == nil || l.client == nil {
 		return AdmissionDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}, nil
 	}
@@ -64,7 +103,7 @@ func (l *redisGCRALimiter) Allow(ctx context.Context, key string, policy PolicyP
 	}
 
 	nowUs := l.clock.Now().UTC().UnixNano() / 1000
-	result, err := l.client.Eval(ctx, luaRedisGCRARateLimitScript, []string{key}, intervalUs, burst, nowUs, ttlMs).Result()
+	result, err := l.client.Eval(ctx, script, []string{key}, intervalUs, burst, nowUs, ttlMs).Result()
 	if err != nil {
 		return AdmissionDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}, fmt.Errorf("execute redis gcra limiter: %w", err)
 	}
