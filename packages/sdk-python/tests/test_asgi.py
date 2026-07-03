@@ -11,7 +11,7 @@ from rateguard.types import RateLimitOptions, TokenBudgetOptions
 
 @pytest.mark.asyncio
 async def test_fastapi_asgi_middleware_returns_429_on_rate_limit() -> None:
-    guard = RateGuard(preset="dev", rate_limit=RateLimitOptions(requests_per_second=1, burst=0, window_ms=60_000))
+    guard = RateGuard(preset="dev", rate_limit=RateLimitOptions(requests_per_second=1, burst=1, window_ms=60_000))
     app = FastAPI()
     app.add_middleware(guard.asgi_middleware)
 

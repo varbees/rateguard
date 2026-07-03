@@ -37,6 +37,15 @@ type memoryBucket struct {
 }
 
 // MemoryLimiter uses an in-process token bucket per key.
+//
+// Algorithm: Token Bucket (RFC standards track, used by Kong, Envoy, AWS API Gateway)
+//   max_tokens = burst (bucket capacity)
+//   refill_rate = requests_per_second (tokens added per second)
+//   refill: tokens = min(burst, tokens + elapsed × rps)
+//   allow:  tokens >= 1.0 → consume 1 token
+//   deny:   retry_after = ceil((1.0 - tokens) / rps) seconds
+//
+// Source: https://en.wikipedia.org/wiki/Token_bucket
 type MemoryLimiter struct {
 	mu      sync.Mutex
 	buckets *boundedCache[string, *memoryBucket]

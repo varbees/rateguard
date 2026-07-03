@@ -7,11 +7,11 @@ const clock = {
 };
 
 describe('RateLimiter', () => {
-  it('allows under the local limit and denies when exceeded', async () => {
+  it('allows under the limit and denies when exceeded (token bucket)', async () => {
     const limiter = new RateLimiter({ clock, capacity: 50_000 });
     const options = {
       requestsPerSecond: 1,
-      burst: 0,
+      burst: 1,
       windowMs: 60_000,
       remoteRateLimitEndpoint: '',
       apiKey: 'test',

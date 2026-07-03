@@ -11,7 +11,7 @@ def test_wsgi_middleware_returns_429_on_rate_limit() -> None:
         start_response("200 OK", [("Content-Type", "text/plain")])
         return [b"ok"]
 
-    guard = RateGuard(preset="dev", rate_limit=RateLimitOptions(requests_per_second=1, burst=0, window_ms=60_000))
+    guard = RateGuard(preset="dev", rate_limit=RateLimitOptions(requests_per_second=1, burst=1, window_ms=60_000))
     middleware = RateGuardMiddleware(app, guard=guard.runtime)
     environ = {"REQUEST_METHOD": "GET", "PATH_INFO": "/hello"}
     statuses: list[str] = []

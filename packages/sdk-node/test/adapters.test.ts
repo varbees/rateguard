@@ -12,7 +12,7 @@ describe('adapters', () => {
   it('express middleware allows under limit and returns 429 with Retry-After when exceeded', async () => {
     const guard = new RateGuard({
       preset: 'dev',
-      rateLimit: { requestsPerSecond: 1, burst: 0, windowMs: 60_000 },
+      rateLimit: { requestsPerSecond: 1, burst: 1, windowMs: 60_000 },
     });
     const middleware = guard.middleware();
     const req: ExpressLikeRequest = {
@@ -105,7 +105,7 @@ describe('adapters', () => {
     const fastify = new FakeFastify();
     await rateguardPlugin(fastify, {
       preset: 'dev',
-      rateLimit: { requestsPerSecond: 1, burst: 0, windowMs: 60_000 },
+      rateLimit: { requestsPerSecond: 1, burst: 1, windowMs: 60_000 },
     });
 
     expect(fastify.hooks.onRequest).toHaveLength(1);

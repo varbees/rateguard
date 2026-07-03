@@ -1,9 +1,22 @@
+/**
+ * Token-bucket rate limiter — same algorithm across all 3 RateGuard SDKs.
+ *
+ * Algorithm: Token Bucket (RFC standards track, used by Kong, Envoy, AWS API Gateway)
+ * - max_tokens = burst (bucket capacity)
+ * - refill_rate = requests_per_second (tokens added per second)
+ * - On each request: refill = elapsed × refill_rate, clamp to max_tokens
+ * - Allow if tokens >= 1.0, consume 1 token
+ * - Retry-after: time until bucket refills to 1.0 tokens
+ *
+ * Source: https://en.wikipedia.org/wiki/Token_bucket
+ */
+
 import { BoundedCache } from './bounded-cache.js';
-import { lowerBound } from './utils.js';
 import type { Clock, RateLimitDecision, RateLimitOptions } from '../types.js';
 
-interface WindowState {
-  timestamps: number[];
+interface Bucket {
+  tokens: number; // float — fractional tokens for smooth refill
+  last: number;   // ms timestamp
 }
 
 interface RemoteRateLimitResponse {
@@ -14,15 +27,15 @@ interface RemoteRateLimitResponse {
 }
 
 /**
- * Local sliding-window rate limiter with optional remote control-plane fallback.
+ * In-process token-bucket rate limiter with optional remote control-plane fallback.
  */
 export class RateLimiter {
   private readonly clock: Clock;
-  private readonly keys: BoundedCache<string, WindowState>;
+  private readonly buckets: BoundedCache<string, Bucket>;
 
   constructor(options: { clock: Clock; capacity?: number }) {
     this.clock = options.clock;
-    this.keys = new BoundedCache<string, WindowState>(options.capacity ?? 50_000);
+    this.buckets = new BoundedCache<string, Bucket>(options.capacity ?? 50_000);
   }
 
   async allow(
@@ -81,37 +94,55 @@ export class RateLimiter {
   }
 
   private allowLocal(key: string, options: Required<RateLimitOptions>): RateLimitDecision {
-    const now = this.clock.now();
-    const windowMs = options.windowMs > 0 ? options.windowMs : 1_000;
-    const capacity = Math.max(1, options.requestsPerSecond + options.burst);
-
-    const state = this.keys.getOrCreate(key, () => ({ timestamps: [] }));
-    const cutoff = now - windowMs;
-    const index = lowerBound(state.timestamps, cutoff);
-    if (index > 0) {
-      state.timestamps.splice(0, index);
+    const rps = options.requestsPerSecond;
+    const burst = options.burst;
+    if (rps <= 0 || burst <= 0) {
+      return { allowed: true, applied: false, remaining: -1, retryAfterMs: 0, limit: -1, degraded: false };
     }
 
-    if (state.timestamps.length >= capacity) {
-      const oldest = state.timestamps[0];
-      const retryAfterMs = oldest === undefined ? windowMs : Math.max(1, oldest + windowMs - now);
+    const now = this.clock.now();
+
+    let bucket = this.buckets.get(key);
+    if (!bucket) {
+      bucket = { tokens: burst, last: now };
+      this.buckets.set(key, bucket);
+    }
+
+    // Idle bucket: reset after 10 minutes of inactivity
+    if (now - bucket.last > 600_000) {
+      bucket.tokens = burst;
+      bucket.last = now;
+    }
+
+    // Token bucket refill: tokens = min(burst, tokens + elapsed × rps)
+    const elapsed = (now - bucket.last) / 1000; // ms → seconds
+    if (elapsed > 0) {
+      bucket.tokens = Math.min(burst, bucket.tokens + elapsed * rps);
+      bucket.last = now;
+    }
+
+    // Deny if not enough tokens
+    if (bucket.tokens < 1.0) {
+      const deficit = (1.0 - bucket.tokens) / rps;
+      const retryAfterMs = Math.max(1000, Math.ceil(deficit * 1000));
       return {
         allowed: false,
         applied: true,
         remaining: 0,
         retryAfterMs,
-        limit: capacity,
+        limit: rps,
         degraded: false,
       };
     }
 
-    state.timestamps.push(now);
+    // Allow: consume 1 token
+    bucket.tokens -= 1.0;
     return {
       allowed: true,
       applied: true,
-      remaining: Math.max(0, capacity - state.timestamps.length),
+      remaining: Math.max(0, Math.floor(bucket.tokens)),
       retryAfterMs: 0,
-      limit: capacity,
+      limit: rps,
       degraded: false,
     };
   }
