@@ -44,6 +44,14 @@ class BoundedCache(Generic[K, V]):
         with self._lock:
             self._cache.pop(key, None)
 
+    def values(self) -> list[V]:
+        with self._lock:
+            return list(self._cache.values())
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._cache)
+
     def _evict_if_needed(self) -> None:
         while len(self._cache) > self._maxsize:
             self._cache.popitem(last=False)

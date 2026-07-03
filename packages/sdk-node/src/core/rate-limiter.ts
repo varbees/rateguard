@@ -93,6 +93,55 @@ export class RateLimiter {
     }
   }
 
+  /**
+   * Reports what allow() would decide right now WITHOUT consuming a token.
+   * Pre-flight queries (MCP tools, dashboards) must use peek, never allow.
+   */
+  peek(key: string, options: Required<RateLimitOptions>): RateLimitDecision {
+    const rps = options.requestsPerSecond;
+    const burst = options.burst;
+    if (rps <= 0 || burst <= 0) {
+      return { allowed: true, applied: false, remaining: -1, retryAfterMs: 0, limit: -1, degraded: false };
+    }
+
+    const now = this.clock.now();
+    const bucket = this.buckets.get(key);
+    if (!bucket) {
+      return { allowed: true, applied: true, remaining: burst, retryAfterMs: 0, limit: rps, degraded: false };
+    }
+
+    let tokens = bucket.tokens;
+    if (now - bucket.last > 600_000) {
+      tokens = burst;
+    } else {
+      const elapsed = (now - bucket.last) / 1000;
+      if (elapsed > 0) {
+        tokens = Math.min(burst, tokens + elapsed * rps);
+      }
+    }
+
+    if (tokens < 1.0) {
+      const deficit = (1.0 - tokens) / rps;
+      return {
+        allowed: false,
+        applied: true,
+        remaining: 0,
+        retryAfterMs: Math.max(1000, Math.ceil(deficit * 1000)),
+        limit: rps,
+        degraded: false,
+      };
+    }
+
+    return {
+      allowed: true,
+      applied: true,
+      remaining: Math.max(0, Math.floor(tokens)),
+      retryAfterMs: 0,
+      limit: rps,
+      degraded: false,
+    };
+  }
+
   private allowLocal(key: string, options: Required<RateLimitOptions>): RateLimitDecision {
     const rps = options.requestsPerSecond;
     const burst = options.burst;

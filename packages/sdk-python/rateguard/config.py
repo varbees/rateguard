@@ -39,6 +39,12 @@ def normalize_preset(preset: str | None) -> PresetName:
             return "llm-heavy"
         case "strict-upstream-protection":
             return "strict-upstream-protection"
+        case "streaming-llm" | "streaming" | "llm-stream":
+            return "streaming-llm"
+        case "agent-orchestrator" | "agent" | "multi-agent" | "orchestrator":
+            return "agent-orchestrator"
+        case "mcp-server" | "mcp":
+            return "mcp-server"
         case _:
             return "dev"
 
@@ -64,6 +70,12 @@ def preset_policy(preset: str | None) -> PolicyPreset:
             return PolicyPreset("llm-heavy", 500, 1_000, 0, 5_000_000, 25_000_000, 5_000_000, 250_000_000, 250_000, 2_500_000, 250_000_000, "soft-stop", True, True, True, True, True, 90)
         case "strict-upstream-protection":
             return PolicyPreset("strict-upstream-protection", 50, 75, 5, 500_000, 1_000_000, 500_000, 2_000_000, 5_000, 20_000, 2_000_000, "hard-stop", True, False, True, True, True, 14)
+        case "streaming-llm":
+            return PolicyPreset("streaming-llm", 200, 500, 0, 2_000_000, 5_000_000, 2_000_000, 500_000_000, 500_000, 5_000_000, 500_000_000, "soft-stop", True, True, True, True, True, 90)
+        case "agent-orchestrator":
+            return PolicyPreset("agent-orchestrator", 500, 1_000, 0, 10_000_000, 50_000_000, 10_000_000, 1_000_000_000, 1_000_000, 10_000_000, 1_000_000_000, "soft-stop", True, True, True, True, True, 180)
+        case "mcp-server":
+            return PolicyPreset("mcp-server", 30, 60, 0, 500_000, 1_000_000, 500_000, 50_000_000, 50_000, 500_000, 50_000_000, "hard-stop", True, False, True, True, True, 30)
         case _:
             return PolicyPreset("dev", 10, 20, 3, 100_000, 1_000_000, 100_000, 100_000, 1_000, 10_000, 100_000, "hard-stop", False, False, False, False, True, 7)
 
@@ -122,6 +134,11 @@ def normalize_circuit_breaker_options(options: CircuitBreakerOptions | None) -> 
         half_open_successes_required=int(half_open_successes_required) if half_open_successes_required is not None and half_open_successes_required > 0 else 2,
         sample_size=int(sample_size) if sample_size is not None and sample_size > 0 else 100,
     )
+
+
+def known_presets() -> list[PresetName]:
+    """Return the canonical preset names in display order."""
+    return ["dev", "standard", "high-throughput", "streaming-llm", "agent-orchestrator", "llm-heavy", "mcp-server", "strict-upstream-protection"]
 
 
 def derive_ws_url(control_plane_url: str | None) -> str | None:

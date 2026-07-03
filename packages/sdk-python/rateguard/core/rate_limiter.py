@@ -51,6 +51,40 @@ class RateLimiter:
     async def allow_async(self, key: str, options: RateLimitOptions, **kwargs: object) -> RateLimitDecision:
         return self.allow(key, options)
 
+    def peek(self, key: str, options: RateLimitOptions) -> RateLimitDecision:
+        """Report what allow() would decide right now WITHOUT consuming a token.
+
+        Pre-flight queries (MCP tools, dashboards) must use peek, never allow.
+        Never creates bucket state for unseen keys.
+        """
+        rps = options.requests_per_second or 0
+        burst = options.burst or 0
+        if rps <= 0 or burst <= 0:
+            return RateLimitDecision(True, False, -1, 0, -1, False)
+
+        now = self._clock.now()  # ms
+
+        with self._lock:
+            bucket = self._buckets.get(key)
+
+        if bucket is None:
+            return RateLimitDecision(True, True, burst, 0, rps, False)
+
+        tokens = bucket.tokens
+        if now - bucket.last > 600_000:
+            tokens = float(burst)
+        else:
+            elapsed = (now - bucket.last) / 1000.0
+            if elapsed > 0:
+                tokens = min(float(burst), tokens + elapsed * float(rps))
+
+        if tokens < 1.0:
+            deficit = 1.0 - tokens
+            retry_ms = max(1000, int(ceil(deficit / float(rps)) * 1000))
+            return RateLimitDecision(False, True, 0, retry_ms, rps, False)
+
+        return RateLimitDecision(True, True, max(0, int(tokens)), 0, rps, False)
+
     def _allow_token_bucket(self, key: str, rps: int, burst: int) -> RateLimitDecision:
         """Check if a request is allowed under the token bucket.
 

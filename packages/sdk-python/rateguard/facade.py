@@ -19,6 +19,7 @@ from .types import (
 if TYPE_CHECKING:
     from .adapters.asgi import ASGIApp
     from .adapters.wsgi import WSGIApp
+    from .core.mcp import LoopDetector, MCPTool, MCPToolResult
     from .core.token_budget import TokenBudgetManager
 
 
@@ -84,6 +85,30 @@ class RateGuard:
             clock=clock,
         )
         self.runtime = RateGuardRuntime(self.options)
+        self._mcp_tools: list["MCPTool"] | None = None
+        self._loop_detector: "LoopDetector | None" = None
+
+    @property
+    def loop_detector(self) -> "LoopDetector":
+        from .core.mcp import LoopDetector
+
+        if self._loop_detector is None:
+            self._loop_detector = LoopDetector()
+        return self._loop_detector
+
+    def mcp_tools(self) -> list["MCPTool"]:
+        """MCP tool set for agent pre-flight queries. Peek semantics — never consumes budget."""
+        from .core.mcp import create_mcp_tools
+
+        if self._mcp_tools is None:
+            self._mcp_tools = create_mcp_tools(self.runtime, self.loop_detector)
+        return self._mcp_tools
+
+    def mcp_call(self, tool_name: str, args: dict | None = None) -> "MCPToolResult":
+        """Execute an MCP tool by name and wrap the result as MCP content."""
+        from .core.mcp import mcp_call
+
+        return mcp_call(self.mcp_tools(), tool_name, args)
 
     @property
     def asgi_middleware(self) -> type:

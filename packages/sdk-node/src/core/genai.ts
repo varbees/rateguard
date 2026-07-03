@@ -2,7 +2,7 @@
  * GenAI OpenTelemetry observability — matching Go SDK implementation.
  *
  * Emits gen_ai.* spans for every LLM call passing through RateGuard.
- * Token counting, cost estimation (28 models priced), streaming chunk telemetry,
+ * Token counting, cost estimation (14 models priced, verified), streaming chunk telemetry,
  * budget exhaustion + rate limit hit counters.
  *
  * OpenTelemetry GenAI semantic conventions v1.29.0 (2026)
@@ -18,6 +18,14 @@ export interface GenAICall {
   totalTokens: number;
   streaming: boolean;
   streamChunks: number;
+  /** TTFT — time to first token/chunk (ms) */
+  timeToFirstChunkMs: number;
+  /** TPOT — average time per output chunk (ms) */
+  timePerOutputChunkMs: number;
+  /** OTel gen_ai.conversation.id */
+  conversationId?: string;
+  /** OTel gen_ai.response.id */
+  responseId?: string;
   estimatedCostUSD: number;
   rateLimitApplied: boolean;
   tokenBudgetApplied: boolean;
@@ -33,10 +41,10 @@ const MODEL_PRICING_2026: Record<string, { prompt: number; completion: number }>
   'gpt-4o-mini':         { prompt: 0.00015, completion: 0.0006 },
   'gpt-4.1':             { prompt: 0.002,   completion: 0.008 },
   'gpt-4.1-mini':        { prompt: 0.0001,  completion: 0.0004 },
-  'o3':                  { prompt: 0.010,   completion: 0.040 },
+  'o3':                  { prompt: 0.002,   completion: 0.008 },
   'o4-mini':             { prompt: 0.0011,  completion: 0.0044 },
   // Anthropic
-  'claude-opus-4-5':     { prompt: 0.015,   completion: 0.075 },
+  'claude-opus-4-5':     { prompt: 0.005,   completion: 0.025 },
   'claude-sonnet-4':     { prompt: 0.003,   completion: 0.015 },
   'claude-haiku-3.5':    { prompt: 0.0008,  completion: 0.004 },
   // Google
@@ -62,34 +70,62 @@ export function pricedModels(): string[] {
 
 // ── OpenTelemetry attribute builders ──
 
+/** Span name per OTel GenAI semantic conventions: "{operation} {model}". */
+export function genaiSpanName(call: GenAICall): string {
+  const operation = call.operation || 'chat';
+  return call.model ? `${operation} ${call.model}` : operation;
+}
+
+/** Maps an error to a low-cardinality error.type per OTel semantic conventions.
+ *  Full messages are high-cardinality and break error filtering in backends. */
+export function classifyErrorType(error: Error): string {
+  return error.name || 'Error';
+}
+
 /** Build OTel attributes for GenAI span start. */
 export function genaiSpanAttributes(call: GenAICall): Record<string, string | number | boolean> {
-  return {
-    'gen_ai.system': call.provider,
+  const result: Record<string, string | number | boolean> = {
+    'gen_ai.provider.name': call.provider,
     'gen_ai.request.model': call.model,
-    'gen_ai.operation.name': call.operation,
-    'gen_ai.request.is_stream': call.streaming,
+    'gen_ai.operation.name': call.operation || 'chat',
+    'rateguard.request.is_stream': call.streaming,
     'rateguard.rate_limit.applied': call.rateLimitApplied,
     'rateguard.token_budget.applied': call.tokenBudgetApplied,
     'rateguard.circuit_breaker.state': call.circuitBreakerState,
   };
+  if (call.conversationId) {
+    result['gen_ai.conversation.id'] = call.conversationId;
+  }
+  return result;
 }
 
-/** Build OTel attributes for GenAI span end (with token counts). */
-export function genaiSpanEndAttributes(call: GenAICall, latencySeconds: number): Record<string, string | number | boolean> {
+/** Build OTel attributes for GenAI span end (with token counts).
+ *  If error is provided, adds error.type per OTel semantic conventions. */
+export function genaiSpanEndAttributes(call: GenAICall, latencySeconds: number, error?: Error): Record<string, string | number | boolean> {
   const attrs: Record<string, string | number | boolean> = {
-    'gen_ai.usage.prompt_tokens': call.promptTokens,
-    'gen_ai.usage.completion_tokens': call.completionTokens,
-    'gen_ai.usage.total_tokens': call.totalTokens,
-    'gen_ai.usage.cost_usd': call.estimatedCostUSD,
-    'gen_ai.latency_seconds': latencySeconds,
-    'gen_ai.request.is_stream': call.streaming,
+    'gen_ai.usage.input_tokens': call.promptTokens,
+    'gen_ai.usage.output_tokens': call.completionTokens,
+    'rateguard.usage.total_tokens': call.totalTokens,
+    'rateguard.usage.cost_usd': call.estimatedCostUSD,
+    'rateguard.request.is_stream': call.streaming,
   };
   if (call.streaming) {
-    attrs['gen_ai.stream.chunks'] = call.streamChunks;
+    attrs['rateguard.stream.chunks'] = call.streamChunks;
+  }
+  if (call.streaming && call.timeToFirstChunkMs > 0) {
+    attrs['gen_ai.client.operation.time_to_first_chunk'] = call.timeToFirstChunkMs;
+  }
+  if (call.streaming && call.timePerOutputChunkMs > 0) {
+    attrs['gen_ai.client.operation.time_per_output_chunk'] = call.timePerOutputChunkMs;
   }
   if (call.tokenBudgetApplied) {
     attrs['rateguard.token_budget.remaining'] = call.tokenBudgetRemaining;
+  }
+  if (error) {
+    attrs['error.type'] = classifyErrorType(error);
+  }
+  if (call.responseId) {
+    attrs['gen_ai.response.id'] = call.responseId;
   }
   return attrs;
 }

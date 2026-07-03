@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Awaitable, Callable, Literal, Mapping, Protocol, Sequence, TypeAlias
 
-PresetName = Literal["dev", "standard", "high-throughput", "llm-heavy", "strict-upstream-protection"]
+PresetName = Literal["dev", "standard", "high-throughput", "llm-heavy", "strict-upstream-protection", "streaming-llm", "agent-orchestrator", "mcp-server"]
 TokenBudgetMode = Literal["hard-stop", "soft-stop"]
 CircuitBreakerState = Literal["closed", "open", "half-open"]
 RateGuardEventType = Literal[

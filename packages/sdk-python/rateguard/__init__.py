@@ -5,9 +5,30 @@ __version__ = "0.1.0"
 from .adapters.asgi import RateGuardMiddleware as ASGIRateGuardMiddleware
 from .adapters.decorators import rate_limited, token_budget
 from .adapters.wsgi import RateGuardMiddleware as WSGIRateGuardMiddleware
-from .config import normalize_preset, normalize_token_budget_mode, preset_policy, resolve_rateguard_options
+from .config import known_presets, normalize_preset, normalize_token_budget_mode, preset_policy, resolve_rateguard_options
 from .core.circuit_breaker import CircuitBreaker
 from .core.event_emitter import ConsoleEventEmitter, WebSocketEventEmitter
+from .core.genai import GenAICall, estimate_cost, genai_span_attributes, genai_span_end_attributes, priced_models
+from .core.guardrails import (
+    Guardrail,
+    GuardrailChain,
+    GuardrailViolation,
+    MaxLengthGuardrail,
+    PIIGuardrail,
+    PromptInjectionGuardrail,
+    TokenLimitGuardrail,
+    standard_guardrails,
+    strict_guardrails,
+)
+from .core.mcp import LoopDetector, MCPTool, MCPToolResult, create_mcp_tools, mcp_call
+from .core.prometheus import prometheus_text
+from .core.provider_chain import (
+    ProviderChain,
+    ProviderEntry,
+    budget_provider_chain,
+    default_provider_chain,
+    quality_provider_chain,
+)
 from .core.rate_limiter import RateLimiter
 from .core.token_budget import TokenBudgetManager
 from .exceptions import BudgetExceeded, RateGuardException
@@ -57,6 +78,7 @@ __all__ = [
     "TokenBudgetManager",
     "rate_limited",
     "token_budget",
+    "known_presets",
     "normalize_preset",
     "normalize_token_budget_mode",
     "preset_policy",
@@ -84,4 +106,34 @@ __all__ = [
     "TokenBudgetMode",
     "TokenBudgetOptions",
     "TokenUsage",
+    # GenAI observability
+    "GenAICall",
+    "estimate_cost",
+    "genai_span_attributes",
+    "genai_span_end_attributes",
+    "priced_models",
+    # Guardrails
+    "Guardrail",
+    "GuardrailChain",
+    "GuardrailViolation",
+    "MaxLengthGuardrail",
+    "PIIGuardrail",
+    "PromptInjectionGuardrail",
+    "TokenLimitGuardrail",
+    "standard_guardrails",
+    "strict_guardrails",
+    # MCP + loop detection
+    "LoopDetector",
+    "MCPTool",
+    "MCPToolResult",
+    "create_mcp_tools",
+    "mcp_call",
+    # Prometheus
+    "prometheus_text",
+    # Provider chain
+    "ProviderChain",
+    "ProviderEntry",
+    "budget_provider_chain",
+    "default_provider_chain",
+    "quality_provider_chain",
 ]

@@ -36,6 +36,10 @@ export class BoundedCache<K extends {}, V extends {}> {
     return this.cache.size;
   }
 
+  values(): Generator<V> {
+    return this.cache.values() as Generator<V>;
+  }
+
   /**
    * Retrieve a value or initialize it once.
    */
