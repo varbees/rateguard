@@ -1,0 +1,63 @@
+# RateGuard — AI-Native Rate Limiting SDK
+> Go, Node.js, Python middleware. Token budgets, GenAI OTel, circuit breakers, guardrails. No proxy needed.
+
+## Quick Start
+
+### Go
+```go
+import rateguard "github.com/varbees/rateguard/packages/sdk-go"
+rg := rateguard.New(rateguard.Config{Preset: "streaming-llm"})
+http.Handle("/metrics", rg.Metrics())
+```
+
+### Node.js
+```ts
+import { RateGuard } from '@varbees/rateguard-node';
+const rg = new RateGuard({ preset: 'streaming-llm' });
+```
+
+### Python
+```python
+from rateguard import RateGuard
+rg = RateGuard(preset="streaming-llm")
+```
+
+## Architecture
+RateGuard is MIDDLEWARE (runs inside your app), not a proxy or gateway. Three SDKs, identical behavior across Go/Node/Python.
+
+## Core Algorithm (all 3 SDKs)
+Token Bucket (RFC standard, same as Kong/Envoy/AWS): `tokens = min(burst, tokens + elapsed × rps)`
+
+## 8 Presets
+| Preset | RPS | Tokens/hr | Mode |
+|---|---|---|---|
+| dev | 10 | 1K | hard-stop |
+| standard | 100 | 10K | hard-stop |
+| high-throughput | 1000 | 100K | hard-stop |
+| streaming-llm | 200 | 500K | soft-stop |
+| agent-orchestrator | 500 | 1M | soft-stop |
+| llm-heavy | 500 | 250K | soft-stop |
+| mcp-server | 30 | 50K | hard-stop |
+| strict-upstream-protection | 50 | 5K | hard-stop |
+
+## Features
+- Token budgets (hour/day/month, hard-stop or soft-stop)
+- Circuit breakers (closed → open → half-open)
+- GenAI OTel: gen_ai.* spans, 28-model pricing, cost estimation, streaming chunk tracking
+- Provider chain: auto-fallback (OpenAI → Anthropic → Google)
+- Content guardrails: PII detection, prompt injection (5 vectors), token/length limits
+- Prometheus /metrics endpoint (stdlib only, zero deps)
+- Events/webhooks for every request
+
+## Tests
+All 3 SDKs: `go test ./...` (23/23), `bun run test` (22/22), `pytest -q` (18/18)
+
+## Docs
+- AGENTS.md: full agent contract with architecture, domain types, rules, commands
+- ARCHITECTURE.md: positioning vs Datadog/Kong/Cloudflare
+- docs/API_REFERENCE.md: all config, adapters, provider chain, guardrails
+- docs/GENAI_OBSERVABILITY.md: OTel integration, model pricing, streaming
+- docs/RELEASE_NOTES.md: changelog
+
+## vs Competition
+Nobody else combines multi-language SDKs + LLM token budgets + GenAI OTel + circuit breakers + guardrails in one package.

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/varbees/rateguard/config.schema.json",
+  "title": "RateGuard Configuration",
+  "description": "Configuration schema for the RateGuard AI-native rate limiting SDK. Valid across Go, Node.js, and Python SDKs.",
+  "type": "object",
+  "properties": {
+    "preset": {
+      "type": "string",
+      "enum": ["dev", "standard", "high-throughput", "streaming-llm", "agent-orchestrator", "llm-heavy", "mcp-server", "strict-upstream-protection"],
+      "default": "standard",
+      "description": "Preset name or alias. Aliases: free→dev, starter→standard, pro→high-throughput, business/enterprise→llm-heavy, streaming→streaming-llm, agent/multi-agent→agent-orchestrator, mcp→mcp-server"
+    },
+    "requestsPerSecond": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Override preset RPS. 0 means use preset value."
+    },
+    "burst": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Override preset burst capacity. 0 means use preset value."
+    },
+    "tokenBudgetPerHour": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "LLM token budget per hour. 0 means no hourly limit."
+    },
+    "tokenBudgetPerDay": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tokenBudgetPerMonth": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tokenBudgetMode": {
+      "type": "string",
+      "enum": ["hard-stop", "soft-stop"],
+      "default": "hard-stop",
+      "description": "hard-stop: reject when budget exhausted. soft-stop: queue requests."
+    },
+    "serviceName": {
+      "type": "string",
+      "description": "OpenTelemetry service name for spans and metrics."
+    },
+    "otlpCollectorEndpoint": {
+      "type": "string",
+      "format": "uri",
+      "description": "OTLP gRPC collector endpoint for traces and metrics."
+    },
+    "circuitBreaker": {
+      "type": "object",
+      "properties": {
+        "errorRateThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5,
+          "description": "Error rate that triggers circuit open (0.0-1.0)."
+        },
+        "openTimeout": {
+          "type": "string",
+          "format": "duration",
+          "default": "60s",
+          "description": "How long the circuit stays open before half-open probe."
+        },
+        "halfOpenSuccessesRequired": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2,
+          "description": "Successes needed to close circuit from half-open."
+        },
+        "sampleSize": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 100,
+          "description": "Rolling window size for error rate calculation."
+        }
+      }
+    },
+    "tenantId": {
+      "type": "string",
+      "description": "Multi-tenant identifier for rate limit key scoping."
+    },
+    "routeId": {
+      "type": "string",
+      "description": "Route identifier for per-endpoint rate limiting."
+    },
+    "upstreamId": {
+      "type": "string",
+      "description": "Upstream service identifier for circuit breaker scoping."
+    },
+    "provider": {
+      "type": "string",
+      "description": "LLM provider name for token budget key scoping."
+    },
+    "model": {
+      "type": "string",
+      "description": "LLM model name for cost estimation and budget scoping."
+    },
+    "eventEndpoint": {
+      "type": "string",
+      "format": "uri",
+      "description": "HTTP endpoint to POST rate limit events."
+    }
+  },
+  "examples": [
+    {
+      "preset": "streaming-llm",
+      "serviceName": "my-llm-service",
+      "otlpCollectorEndpoint": "localhost:4317"
+    },
+    {
+      "preset": "agent-orchestrator",
+      "provider": "openai",
+      "model": "gpt-4o",
+      "circuitBreaker": {"errorRateThreshold": 0.3}
+    },
+    {
+      "preset": "mcp-server",
+      "tenantId": "org-123",
+      "routeId": "/tools/search"
+    }
+  ]
+}
