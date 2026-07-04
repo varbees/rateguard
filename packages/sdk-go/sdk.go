@@ -21,18 +21,19 @@ const defaultMaxBufferedResponseBytes = 1 << 20 // 1 MiB
 
 // SDK is the top-level middleware entrypoint.
 type SDK struct {
-	cfg     Config
-	policy  PolicyPreset
-	limiter Limiter
-	breaker *circuitBreaker
-	tokens  *tokenBudgetManager
-	extract TokenUsageExtractor
-	waiter  BudgetWaiter
-	otel    *observability
-	emitter EventEmitter
-	clock   Clock
-	metrics atomicMetrics
-	loops   *LoopDetector
+	cfg      Config
+	policy   PolicyPreset
+	limiter  Limiter
+	adaptive *AdaptiveLimiter
+	breaker  *circuitBreaker
+	tokens   *tokenBudgetManager
+	extract  TokenUsageExtractor
+	waiter   BudgetWaiter
+	otel     *observability
+	emitter  EventEmitter
+	clock    Clock
+	metrics  atomicMetrics
+	loops    *LoopDetector
 }
 
 // New constructs a new SDK instance with sensible defaults.
@@ -75,7 +76,16 @@ func New(cfg Config) *SDK {
 	case cfg.RedisClient != nil:
 		limiter = newRedisGCRALimiterWithClock(cfg.RedisClient, clock)
 	default:
-		limiter = newMemoryLimiterWithClock(clock, defaultMemoryLimiterCacheCapacity)
+		// Lock-free sharded limiter: decision-parity with MemoryLimiter,
+		// ~2× faster on a hot key and ~3.4× across many keys under
+		// parallel load (see sharded_limiter_test.go benchmarks).
+		limiter = newShardedLimiterWithClock(clock, defaultMemoryLimiterCacheCapacity)
+	}
+
+	var adaptive *AdaptiveLimiter
+	if cfg.AdaptiveRateLimit && !cfg.DisableRateLimit {
+		adaptive = newAdaptiveLimiterWithClock(limiter, cfg.Adaptive, clock)
+		limiter = adaptive
 	}
 
 	var emitter EventEmitter
@@ -105,17 +115,18 @@ func New(cfg Config) *SDK {
 	}
 
 	return &SDK{
-		cfg:     cfg,
-		policy:  policy,
-		limiter: limiter,
-		breaker: newCircuitBreaker(clock, cfg.CircuitBreaker),
-		tokens:  newTokenBudgetManager(clock),
-		extract: extractor,
-		waiter:  waiter,
-		otel:    otel,
-		emitter: emitter,
-		clock:   clock,
-		loops:   NewLoopDetector(cfg.LoopMaxDepth),
+		cfg:      cfg,
+		policy:   policy,
+		limiter:  limiter,
+		adaptive: adaptive,
+		breaker:  newCircuitBreaker(clock, cfg.CircuitBreaker),
+		tokens:   newTokenBudgetManager(clock),
+		extract:  extractor,
+		waiter:   waiter,
+		otel:     otel,
+		emitter:  emitter,
+		clock:    clock,
+		loops:    NewLoopDetector(cfg.LoopMaxDepth),
 	}
 }
 
@@ -249,6 +260,11 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 	}
 
 	status := recorder.statusCode()
+	if s.adaptive != nil {
+		// Same signal the breaker learns from — the adaptive limiter tunes
+		// the effective rate limit before the breaker would have to trip.
+		s.adaptive.RecordOutcome(status < http.StatusInternalServerError)
+	}
 	finalBreakerDecision := s.breaker.RecordOutcome(status < http.StatusInternalServerError)
 	if breakerDecision.State != CircuitBreakerOpen && finalBreakerDecision.State == CircuitBreakerOpen {
 		s.metrics.circuitBreakerTrips.Add(1)

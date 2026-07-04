@@ -72,6 +72,16 @@ type Config struct {
 	// than the cap simply skip body-based extraction.
 	MaxBufferedResponseBytes int
 
+	// AdaptiveRateLimit auto-tunes the effective rate limit from observed
+	// upstream outcomes: healthy traffic grows the limit additively, error
+	// rates above target cut it multiplicatively — before the circuit
+	// breaker has to trip. The configured policy stays the anchor; see
+	// AdaptiveOptions for bounds.
+	AdaptiveRateLimit bool
+	// Adaptive overrides the adaptive control loop defaults. Ignored unless
+	// AdaptiveRateLimit is true.
+	Adaptive AdaptiveOptions
+
 	EventEmitter        EventEmitter
 	EventEndpoint       string
 	HTTPClient          *http.Client
