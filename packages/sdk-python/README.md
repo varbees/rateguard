@@ -77,10 +77,23 @@ app.wsgi_app = RateGuardMiddleware(app.wsgi_app, guard=rg.runtime)
 
 | Key | Type | Default |
 | --- | --- | --- |
-| `preset` | `dev` / `standard` / `high-throughput` / `llm-heavy` / `strict-upstream-protection` | `dev` |
+| `preset` | `dev` / `standard` / `high-throughput` / `streaming-llm` / `agent-orchestrator` / `llm-heavy` / `mcp-server` / `strict-upstream-protection` | `dev` |
 | `hard_stop` | `bool` | `True` |
 | `monthly_limit` | `int` | preset-derived |
 | `soft_stop_at` | `float` | `0.8` |
+
+## Outbound LLM Tracking
+
+```python
+from openai import OpenAI, AsyncOpenAI
+from rateguard import RateGuard
+
+rg = RateGuard(preset="streaming-llm")
+client = OpenAI(http_client=rg.wrap_httpx_client())
+aclient = AsyncOpenAI(http_client=rg.wrap_httpx_async_client())
+```
+
+`rg.mcp_tools()` and `rg.mcp_call()` expose the five pre-flight MCP tools for agent frameworks. Guardrails, loop detection, GenAI attribute helpers, and Prometheus exposition helpers are exported for app-level wiring.
 
 ## Docs
 

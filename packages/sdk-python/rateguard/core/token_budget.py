@@ -83,17 +83,17 @@ class TokenBudgetManager:
         with self._lock:
             return self._check_locked(key, options or self._limits)
 
-    def reserve(self, key: str, options: TokenBudgetOptions | None = None) -> _TokenBudgetReservationResult:
+    def reserve(self, key: str, options: TokenBudgetOptions | None = None, estimate: int = 0) -> _TokenBudgetReservationResult:
         with self._lock:
-            return self._reserve_locked(key, options or self._limits)
+            return self._reserve_locked(key, options or self._limits, estimate)
 
     async def check_async(self, key: str, options: TokenBudgetOptions | None = None) -> TokenBudgetDecision:
         async with self._async_lock:
             return self._check_locked(key, options or self._limits)
 
-    async def reserve_async(self, key: str, options: TokenBudgetOptions | None = None) -> _TokenBudgetReservationResult:
+    async def reserve_async(self, key: str, options: TokenBudgetOptions | None = None, estimate: int = 0) -> _TokenBudgetReservationResult:
         async with self._async_lock:
-            return self._reserve_locked(key, options or self._limits)
+            return self._reserve_locked(key, options or self._limits, estimate)
 
     def record(self, key: str, tokens: int) -> None:
         if tokens <= 0:
@@ -181,21 +181,29 @@ class TokenBudgetManager:
             return TokenBudgetDecision(False, True, False, 0, int(usage["retry_after_ms"]), active["limit"], active["window"], False)
         return TokenBudgetDecision(True, active["limit"] > 0, False, max(0, active["limit"] - active["used"]) if active["limit"] > 0 else -1, 0, active["limit"], active["window"], warning)
 
-    def _reserve_locked(self, key: str, options: TokenBudgetOptions) -> _TokenBudgetReservationResult:
+    def _reserve_locked(self, key: str, options: TokenBudgetOptions, estimate: int = 0) -> _TokenBudgetReservationResult:
+        # estimate bounds the reservation: zero reserves the entire remaining
+        # budget (never overshoots, but serializes concurrent requests on the
+        # same key); a positive estimate reserves min(estimate, remaining) so
+        # concurrent requests can proceed. Usage is reconciled on commit.
         decision = self._check_locked(key, options)
         if not decision.allowed or not decision.applied or options.mode != "hard-stop" or decision.remaining <= 0:
             return _TokenBudgetReservationResult(decision)
 
+        reserved = decision.remaining
+        if 0 < estimate < reserved:
+            reserved = estimate
+
         state = self._states.get_or_create(key, self._new_state)
         state.next_reservation_id += 1
         reservation_id = str(state.next_reservation_id)
-        state.reservations[reservation_id] = _TokenBudgetRecord(self._clock.now(), decision.remaining)
+        state.reservations[reservation_id] = _TokenBudgetRecord(self._clock.now(), reserved)
         return _TokenBudgetReservationResult(
             TokenBudgetDecision(
                 decision.allowed,
                 decision.applied,
                 decision.queued,
-                0,
+                decision.remaining - reserved,
                 decision.retry_after_ms,
                 decision.limit,
                 decision.window,

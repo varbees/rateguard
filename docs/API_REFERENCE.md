@@ -77,11 +77,11 @@ http.Handle("/metrics", rg.Metrics())
 // Express
 app.use(rg.middleware());
 // Fastify
-fastify.addHook('onRequest', rg.fastifyMiddleware());
+await rg.fastify()(fastify);
 // Hono
-app.use('*', rg.honoMiddleware());
-// Next.js
-export const middleware = rg.nextMiddleware();
+app.use('*', rg.hono());
+// Next.js route handler
+export const POST = rg.withRateGuard(async (request) => Response.json({ ok: true }));
 ```
 
 ### Python
@@ -91,7 +91,9 @@ app.add_middleware(rg.asgi_middleware)
 # Flask / Django (WSGI)
 app.wsgi_app = rg.wsgi_middleware(app.wsgi_app)
 # Decorator
-@rg.limit("standard")
+from rateguard import rate_limited
+
+@rate_limited(preset="standard")
 async def my_endpoint(request): ...
 ```
 
@@ -133,7 +135,7 @@ client = OpenAI(http_client=rg.wrap_httpx_client())   # httpx imported lazily
 Semantics:
 - **enforce** (default): exhausted budgets / open breakers synthesize provider-native 429/503 responses with `Retry-After` and `X-RateGuard-Synthesized: true` — your SDK's retry logic handles them natively. **observe**: never blocks, only meters.
 - Budget scope: `{tenant}:{provider}:{model}:outbound`, reserve → commit actual usage. Calls pass while any budget remains; the final call may overshoot (actual usage is only known post-response), then everything blocks until the window rolls.
-- Fallback: OpenAI-compatible endpoints only (same request schema). Credentials never transfer across providers; chain entries follow the OpenAI-SDK convention (baseURL owns the version prefix). Responses carry `X-RateGuard-Fallback: true`.
+- Fallback: OpenAI-compatible endpoints only (same request schema). Credentials never transfer across providers; chain entries follow the OpenAI-SDK convention (baseURL owns the version prefix). Retargeted responses carry `X-RateGuard-Fallback: true`.
 - Streaming: SSE bytes pass through untouched; usage extracted from a bounded side-scan (OpenAI `usage:null` intermediates and Anthropic split usage handled).
 
 ## MCP Tools (agent pre-flight)
@@ -231,7 +233,7 @@ if v := chain.Check(prompt); v != nil {
 }
 ```
 
-Or let the middleware run the chain against every request body (Go):
+Or let the Go middleware run the chain against every request body:
 
 ```go
 rg := rateguard.New(rateguard.Config{

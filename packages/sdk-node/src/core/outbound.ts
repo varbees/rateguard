@@ -37,7 +37,11 @@ export interface WrapFetchOptions {
   mode?: OutboundMode;
   /** Fallback providers, tried in order on 429/5xx/breaker-open. OpenAI-compatible only. */
   chain?: ProviderEntry[];
-  /** Bounds the per-call hard-stop budget reservation. */
+  /**
+   * Bounds the per-call hard-stop budget reservation. Defaults to 4096 —
+   * reserving the whole remaining budget per call would serialize
+   * concurrent agents. Negative = strict reserve-all semantics.
+   */
   estimatedTokens?: number;
   /** Skip the outbound per-provider request limiter. */
   disableRateLimit?: boolean;
@@ -48,6 +52,7 @@ export interface WrapFetchOptions {
 const MAX_EXTRACT_BYTES = 1 << 20; // 1 MiB cap on JSON usage extraction
 const MAX_SSE_LINE_BYTES = 256 << 10;
 const MAX_SSE_CANDIDATES = 8;
+const DEFAULT_OUTBOUND_ESTIMATED_TOKENS = 4096; // typical chat-call upper bound
 
 // OpenAI-schema hosts (suffix matching on the path covers Groq's /openai/v1/,
 // Cohere's /compatibility/v1/, DashScope's /compatible-mode/v1/, ...).
@@ -181,6 +186,8 @@ function isProviderFailure(status: number): boolean {
 export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions = {}): typeof fetch {
   const baseFetch = options.fetch ?? globalThis.fetch;
   const mode = options.mode ?? 'enforce';
+  const rawEstimate = options.estimatedTokens ?? DEFAULT_OUTBOUND_ESTIMATED_TOKENS;
+  const estimatedTokens = rawEstimate < 0 ? 0 : rawEstimate; // negative = strict reserve-all
   const breakers = new Map<string, CircuitBreaker>();
 
   const breakerFor = (provider: string): CircuitBreaker => {
@@ -279,7 +286,7 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     }
 
     const budgetKey = `${runtime.config.tenantId}:${call.provider}:${call.model || 'default'}:outbound`;
-    const reservation = runtime.tokenBudget.reserve(budgetKey, runtime.config.tokenBudget);
+    const reservation = runtime.tokenBudget.reserve(budgetKey, runtime.config.tokenBudget, estimatedTokens);
     if (reservation.decision.applied && !reservation.decision.allowed && enforce) {
       return synthesizedResponse(429, 'token_budget_exceeded', `rateguard: outbound token budget exhausted for ${call.provider}`, reservation.decision.retryAfterMs);
     }

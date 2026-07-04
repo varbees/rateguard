@@ -50,7 +50,10 @@ type OutboundOptions struct {
 	// Entries are tried in order when a provider fails (429/5xx/breaker open).
 	Chain *ProviderChain
 	// EstimatedTokens bounds the per-call hard-stop budget reservation.
-	// Zero falls back to Config.EstimatedTokensPerRequest.
+	// Zero falls back to Config.EstimatedTokensPerRequest, then to 4096 —
+	// reserving the entire remaining budget per call would serialize
+	// concurrent agents. Set negative for strict reserve-all semantics
+	// (guaranteed never to overshoot, one in-flight call per budget key).
 	EstimatedTokens int64
 	// DisableRateLimit skips the outbound per-provider request limiter
 	// (budgets and breakers still apply).
@@ -61,6 +64,7 @@ const (
 	outboundMaxBufferedRequestBytes = 10 << 20 // 10 MiB: beyond this, no fallback/model sniffing
 	sseHeadBufferBytes              = 16 << 10 // Anthropic puts input tokens in message_start
 	sseTailBufferBytes              = 64 << 10 // final chunks carry output/total usage
+	defaultOutboundEstimatedTokens  = 4096     // typical chat-call upper bound
 )
 
 // outboundCall is what provider detection learned about a request.
@@ -96,6 +100,12 @@ func (s *SDK) Transport(next http.RoundTripper, opts ...OutboundOptions) http.Ro
 	}
 	if options.EstimatedTokens == 0 {
 		options.EstimatedTokens = s.cfg.EstimatedTokensPerRequest
+	}
+	if options.EstimatedTokens == 0 {
+		options.EstimatedTokens = defaultOutboundEstimatedTokens
+	}
+	if options.EstimatedTokens < 0 {
+		options.EstimatedTokens = 0 // strict: reserve the entire remaining budget
 	}
 	return &genaiTransport{
 		next:     next,

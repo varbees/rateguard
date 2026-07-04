@@ -11,7 +11,7 @@ RateGuard is MIDDLEWARE (runs inside your app process)
   NOT a gateway (Kong, Tyk, Apigee)
   NOT a library (express-rate-limit is JS-only)
 
-Three SDKs, identical behavior:
+Three SDKs, same core behavior with idiomatic language surfaces:
   packages/sdk-go/     → Go (net/http, chi) — reference implementation
   packages/sdk-node/   → Node (Express, Fastify, Hono, Next) — mirrors Go
   packages/sdk-python/ → Python (ASGI, WSGI, FastAPI, Flask) — mirrors Go
@@ -35,10 +35,10 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | LLM token budgets (hr/day/mo) | ✅ | ✅ | ✅ | `token_budget.go` |
 | Estimate-based budget reservations | ✅ | — | — | `token_budget.go` |
 | Circuit breakers | ✅ | ✅ | ✅ | `circuit_breaker.go` |
-| GenAI OTel observability (semconv span names, input/output tokens, error.type classes) | ✅ | ✅ | ✅ | `genai_observability.go` |
+| GenAI OTel helpers (semconv span names, input/output tokens, error.type classes) | ✅ | ✅ | ✅ | `genai_observability.go` |
 | Public GenAI API (StartGenAICall/GenAISpan, TTFT/TPOT) | ✅ | — | — | Same file |
-| 14-model pricing (verified) | ✅ | ✅ | ✅ | Same file |
-| Prometheus /metrics (live runtime counters) | ✅ | ✅ | ✅ | `prometheus.go` |
+| 12-model pricing table | ✅ | ✅ | ✅ | Same file |
+| Prometheus exposition | ✅ endpoint | ✅ helpers | ✅ helpers | `prometheus.go` |
 | Provider chain (routing decisions) | ✅ | ✅ | ✅ | `provider_chain.go` |
 | Content guardrails (PII, injection) | ✅ | ✅ | ✅ | `guardrails.go` |
 | Guardrails wired into middleware (422) | ✅ | — | — | `sdk.go` |
@@ -69,7 +69,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
   "agent-orchestrator":     {"rps": 500,  "burst": 1000, "tokens_hr": "1M",    "mode": "soft-stop"},
   "llm-heavy":              {"rps": 500,  "burst": 1000, "tokens_hr": "250K",  "mode": "soft-stop"},
   "mcp-server":             {"rps": 30,   "burst": 60,   "tokens_hr": "50K"},
-  "strict-upstream-protect": {"rps": 50,  "burst": 75,   "tokens_hr": "5K"}
+  "strict-upstream-protection": {"rps": 50,  "burst": 75,   "tokens_hr": "5K"}
 }
 ```
 

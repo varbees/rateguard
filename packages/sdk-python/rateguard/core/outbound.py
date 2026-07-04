@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 _MAX_EXTRACT_BYTES = 1 << 20  # 1 MiB cap on JSON usage extraction
 _MAX_SSE_CANDIDATES = 8
 _MAX_SSE_LINE_BYTES = 256 << 10
+_DEFAULT_OUTBOUND_ESTIMATED_TOKENS = 4096  # typical chat-call upper bound
 
 # OpenAI-schema hosts (path-suffix matching covers Groq's /openai/v1/,
 # Cohere's /compatibility/v1/, DashScope's /compatible-mode/v1/, ...).
@@ -188,11 +189,17 @@ class _OutboundCore:
         mode: str = "enforce",
         chain: list[FallbackProvider] | None = None,
         disable_rate_limit: bool = False,
+        estimated_tokens: int = 0,
     ) -> None:
         self.runtime = runtime
         self.mode = mode if mode in ("enforce", "observe") else "enforce"
         self.chain = chain or []
         self.disable_rate_limit = disable_rate_limit
+        # Zero → sane default; reserving the whole remaining budget per call
+        # would serialize concurrent agents. Negative → strict reserve-all.
+        if estimated_tokens == 0:
+            estimated_tokens = _DEFAULT_OUTBOUND_ESTIMATED_TOKENS
+        self.estimated_tokens = max(estimated_tokens, 0)
         self._breakers: dict[str, CircuitBreaker] = {}
 
     @property
@@ -211,7 +218,9 @@ class _OutboundCore:
         return f"{self.runtime.config.tenant_id}:{call.provider}:{model}:outbound"
 
     def reserve(self, call: OutboundCall) -> Any:
-        return self.runtime.token_budget.reserve(self.budget_key(call), self.runtime.config.token_budget)
+        return self.runtime.token_budget.reserve(
+            self.budget_key(call), self.runtime.config.token_budget, self.estimated_tokens
+        )
 
     def finish(self, call: OutboundCall, reservation_id: str | None, usage: "TokenUsage | None") -> None:
         key = self.budget_key(call)
@@ -266,6 +275,7 @@ def create_httpx_transport(
     mode: str = "enforce",
     chain: list[FallbackProvider] | None = None,
     disable_rate_limit: bool = False,
+    estimated_tokens: int = 0,
     transport: Any = None,
 ) -> Any:
     """Build a sync httpx transport with outbound GenAI tracking.
@@ -283,7 +293,7 @@ def create_httpx_transport(
             "Anthropic SDKs already depend on it): pip install httpx"
         ) from exc
 
-    core = _OutboundCore(runtime, mode=mode, chain=chain, disable_rate_limit=disable_rate_limit)
+    core = _OutboundCore(runtime, mode=mode, chain=chain, disable_rate_limit=disable_rate_limit, estimated_tokens=estimated_tokens)
     inner = transport or httpx.HTTPTransport()
 
     def synthesized(request: Any, status: int, code: str, message: str, retry_after_ms: int) -> Any:
@@ -439,6 +449,7 @@ def create_httpx_async_transport(
     mode: str = "enforce",
     chain: list[FallbackProvider] | None = None,
     disable_rate_limit: bool = False,
+    estimated_tokens: int = 0,
     transport: Any = None,
 ) -> Any:
     """Build an async httpx transport with outbound GenAI tracking.
@@ -458,7 +469,7 @@ def create_httpx_async_transport(
             "Anthropic SDKs already depend on it): pip install httpx"
         ) from exc
 
-    core = _OutboundCore(runtime, mode=mode, chain=chain, disable_rate_limit=disable_rate_limit)
+    core = _OutboundCore(runtime, mode=mode, chain=chain, disable_rate_limit=disable_rate_limit, estimated_tokens=estimated_tokens)
     inner = transport or httpx.AsyncHTTPTransport()
 
     def synthesized(request: Any, status: int, code: str, message: str, retry_after_ms: int) -> Any:

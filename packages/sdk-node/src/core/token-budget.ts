@@ -45,10 +45,22 @@ export class TokenBudgetManager {
     return decisionFromUsage(usage, options);
   }
 
-  reserve(key: string, options: Required<TokenBudgetOptions>): TokenBudgetReservation {
+  /**
+   * Reserve budget for one in-flight request. `estimate` bounds the
+   * reservation: zero (default) reserves the entire remaining budget —
+   * never overshoots, but serializes concurrent requests on the same key.
+   * A positive estimate reserves min(estimate, remaining) so concurrent
+   * requests can proceed; actual usage is reconciled on commit.
+   */
+  reserve(key: string, options: Required<TokenBudgetOptions>, estimate = 0): TokenBudgetReservation {
     const decision = this.check(key, options);
     if (!decision.allowed || !decision.applied || options.mode !== 'hard-stop' || decision.remaining <= 0) {
       return { decision };
+    }
+
+    let reserved = decision.remaining;
+    if (estimate > 0 && estimate < reserved) {
+      reserved = estimate;
     }
 
     const state = this.state(key);
@@ -56,13 +68,13 @@ export class TokenBudgetManager {
     const reservationId = String(state.nextReservationId);
     state.reservations.set(reservationId, {
       at: this.clock.now(),
-      tokens: decision.remaining,
+      tokens: reserved,
     });
 
     return {
       decision: {
         ...decision,
-        remaining: 0,
+        remaining: decision.remaining - reserved,
       },
       reservationId,
     };

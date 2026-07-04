@@ -85,14 +85,14 @@ that gap — features are now real, tested through the public surface, and demoa
   Redis read-only Lua, noop). MCP pre-flight queries no longer consume the caller's
   budget (they previously called `Allow`, burning a token per query), and the
   breaker query no longer claims the half-open probe slot.
-- **Prometheus runtime counters wired**: `/metrics` now reports live
+- **Prometheus runtime counters wired (Go)**: `/metrics` now reports live
   `rateguard_requests_total`, rate limit hits, budget exhaustion, breaker trips,
   tokens consumed, and loop detector stats (counters previously existed but were
   never incremented or rendered).
 - **GenAI OTel public API (Go)** 🆕: `StartGenAICall` → `GenAISpan.End` with
   automatic cost estimation and TTFT/TPOT from `RecordChunk()`. The observer was
   previously unreachable dead code.
-- **GenAI semconv corrections (all 3 SDKs)**: span names are now
+- **GenAI semconv corrections (all 3 SDKs)**: span/attribute helpers now use
   `{operation} {model}`; `gen_ai.usage.input_tokens`/`output_tokens` replace the
   deprecated prompt/completion names; `error.type` is a low-cardinality class, not
   the full error message; RateGuard-specific attributes moved to `rateguard.*`.
@@ -111,9 +111,8 @@ that gap — features are now real, tested through the public surface, and demoa
   longer buffered whole in memory.
 - **IETF `RateLimit-*` headers (Go)**: standard `RateLimit-Limit/Remaining/Reset`
   emitted alongside `X-RateGuard-*` (draft-ietf-httpapi-ratelimit-headers).
-- **Pricing corrections (all 3 SDKs)**: Claude Opus 4.5 → $5/$25 per MTok, o3 →
-  $2/$8 per MTok, verified against provider pricing pages. Table is 14 models —
-  earlier docs claiming 28 were wrong.
+- **Pricing corrections (all 3 SDKs)**: Claude Opus 4.5 → $5/$25 per MTok.
+  Table is 12 configured models — earlier docs claiming 28 were wrong.
 - **Provider chain honesty**: documented as a routing-decision helper (the app
   performs the call); `Weight` is now assigned from chain position (was
   accidentally the length of the provider name).
@@ -124,9 +123,9 @@ that drive every advertised feature through the public surface.
 ## Earlier July 4, 2026 work (v0.2.0-dev)
 
 ### GenAI Observability 🆕
-- OpenTelemetry `gen_ai.*` semantic conventions (v1.29.0) for Go, Node.js, and Python.
-- **OTel compliance fixes (July 4):** `gen_ai.system` → `gen_ai.provider.name`, `error.type` on error spans, TTFT/TPOT streaming latency histograms, `gen_ai.conversation.id` / `gen_ai.response.id` span attributes.
-- 14-model pricing table, verified against provider pricing pages (OpenAI, Anthropic, Google, Llama, DeepSeek).
+- OpenTelemetry `gen_ai.*` semantic-convention helpers (v1.29.0) for Go, Node.js, and Python; Go also exposes the public span API.
+- **OTel compliance fixes (July 4):** `gen_ai.system` → `gen_ai.provider.name`, `error.type` on error spans, TTFT/TPOT streaming latency attributes, `gen_ai.conversation.id` / `gen_ai.response.id` span attributes.
+- 12-model pricing table for OpenAI, Anthropic, Google, Llama, and DeepSeek families.
 - `estimateCost()` across all 3 SDKs. Unknown models return $0.00 — never fabricate costs.
 - Streaming chunk telemetry via `RecordStreamChunk()`.
 
@@ -154,7 +153,7 @@ that drive every advertised feature through the public surface.
 - Available in Go, Node.js, and Python with identical patterns.
 
 ### Prometheus Metrics 🆕
-- `Metrics()` handler serving Prometheus exposition format. Zero dependencies, stdlib only.
+- Go `Metrics()` handler serves Prometheus exposition format. Node/Python expose text helpers for app-mounted endpoints.
 - Exposes: rate limit config, token budget config, circuit breaker state, SDK version/info.
 
 ### Docs
@@ -164,14 +163,14 @@ that drive every advertised feature through the public surface.
 - Updated `ARCHITECTURE.md` with positioning vs Datadog/Kong/Cloudflare.
 
 ### Cross-Language Parity
-All new features ship in Go, Node.js, and Python with identical behavior:
+Core algorithms and library surfaces ship across Go, Node.js, and Python; middleware wiring is called out where it is language-specific:
 - Token bucket rate limiting ✅
 - LLM token budgets ✅
 - Circuit breakers ✅
-- GenAI OTel observability ✅
+- GenAI OTel helpers ✅; public span API ✅ Go
 - Provider chain ✅
-- Content guardrails ✅
-- 8 presets ✅ (Go + Node), ✅ Go + Node (Python: presets in config)
+- Content guardrails ✅; middleware 422 wiring ✅ Go
+- 8 presets ✅
 
 ---
 

@@ -81,6 +81,6 @@ RateGuard is the transparent window into your API internals. One line of code, a
 - Need: Redis Cluster with slot-aware key routing
 - Fallback: local limiter when Redis is partitioned
 
-### 4. Prometheus metrics endpoint ✅ DONE
-- `/metrics` endpoint with all RateGuard counters in Prometheus format
-- Zero new dependencies — stdlib only in Go, matching Node and Python
+### 4. Prometheus exposition ✅ DONE
+- Go exposes a `/metrics` handler with live RateGuard counters in Prometheus format
+- Node and Python expose zero-dependency text-format helpers for apps to mount in their own HTTP layer

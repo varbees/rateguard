@@ -146,4 +146,4 @@ them — the pattern is universal in Go) inherits RateGuard automatically.
 | Enforcement | Synthesized provider-native 429/503 with `Retry-After` — SDK retry logic just works |
 | Fallback | OpenAI-compatible providers, credential-isolated |
 | Pre-flight queries | MCP tools (`get_token_budget`, `check_loop`, ...) — agents ask before they spend |
-| Metrics | Prometheus `/metrics`: outbound calls, fallbacks, tokens consumed |
+| Metrics | Go `/metrics` endpoint plus Node/Python Prometheus text helpers for app-mounted metrics |

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -49,17 +50,27 @@ export default function Page() {
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-[#f5f5f5]">
       {/* Header */}
-      <header className="border-b border-[#262626]">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <a href="https://antharmaya.com" className="text-sm text-[#737373] hover:text-[#f5f5f5] transition-colors">
-            Antharmaya Labs
-          </a>
-          <a
-            href="https://github.com/varbees/rateguard"
-            className="text-sm text-[#737373] hover:text-[#f5f5f5] transition-colors"
-          >
-            GitHub ↗
-          </a>
+      <header className="sticky top-0 z-50 border-b border-[#262626] bg-[#0a0a0a]/90 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <div className="flex items-baseline gap-3">
+            <Link href="/" className="text-[15px] font-bold tracking-tight">
+              RateGuard<span className="text-[#f59e0b]">.</span>
+            </Link>
+            <Link href="/docs" className="text-sm font-medium text-[#f5f5f5] hover:text-white transition-colors">
+              Docs
+            </Link>
+          </div>
+          <div className="flex items-center gap-6">
+            <a href="https://antharmaya.com" className="hidden sm:block text-sm text-[#737373] hover:text-[#f5f5f5] transition-colors">
+              Antharmaya Labs
+            </a>
+            <a
+              href="https://github.com/varbees/rateguard"
+              className="text-sm text-[#737373] hover:text-[#f5f5f5] transition-colors"
+            >
+              GitHub ↗
+            </a>
+          </div>
         </div>
       </header>
 
@@ -93,12 +104,12 @@ export default function Page() {
             View on GitHub
             <span className="text-sm">↗</span>
           </a>
-          <a
-            href="https://github.com/varbees/rateguard#quick-start"
+          <Link
+            href="/docs/quickstart"
             className="inline-flex items-center gap-2 px-5 py-3 border border-[#404040] rounded-lg font-medium hover:border-[#737373] transition-colors"
           >
-            Quick Start
-          </a>
+            Read the docs
+          </Link>
         </div>
         </div>
       </section>

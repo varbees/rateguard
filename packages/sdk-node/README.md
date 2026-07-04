@@ -50,8 +50,20 @@ export const POST = rg.withRateGuard(async (request) => {
 
 Rate limiting:
 
-- local mode uses an in-process sliding window per key
+- local mode uses an in-process token bucket per key
 - an optional remote endpoint can delegate rate decisions elsewhere
+
+Outbound LLM tracking:
+
+```ts
+import OpenAI from 'openai';
+import { RateGuard } from '@varbees/rateguard-node';
+
+const rg = new RateGuard({ preset: 'streaming-llm' });
+const client = new OpenAI({ fetch: rg.wrapFetch() });
+```
+
+`rg.mcpTools()` and `rg.mcpCall()` expose the five pre-flight MCP tools for agent frameworks. Guardrails, loop detection, GenAI attribute helpers, and Prometheus exposition helpers are exported for app-level wiring.
 
 ## Status
 

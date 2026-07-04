@@ -90,7 +90,7 @@ The local project-scoped PyPI token is stored in the ignored root file
 `.env.pypi`.
 
 ```bash
-cd /home/driftr/Desktop/bolting/rateguard-exp
+cd /home/driftr/Desktop/bolting/02-fast-cash/rateguard
 set -a
 source .env.pypi
 set +a

@@ -4,7 +4,7 @@
 
 RateGuard is middleware that makes every LLM call transparent. Drop it into your app and every token consumed, every rate limit hit, every circuit breaker trip becomes a traceable event — with zero infrastructure.
 
-Three SDKs, identical behavior, one API.
+Three SDKs, one architecture: the same core algorithms with idiomatic APIs for each language.
 
 ## Why RateGuard
 
@@ -20,15 +20,15 @@ Every other rate limiting tool was built for REST APIs. RateGuard was built for 
 | **Provider fallback** | Automatic failover across OpenAI-compatible providers (DeepSeek, Groq, Cerebras, vLLM, ...) on 429/5xx/breaker-open, with credential isolation. Honest scope: cross-schema fallback is impossible at the transport layer and not claimed. |
 | **Rate limiting** | Token bucket algorithm (RFC standard). Configurable per-tenant, per-route, per-provider. |
 | **Pre-flight queries** | `Peek` semantics everywhere: agents ask "can I make this call?" without consuming budget. |
-| **MCP server** | 5 MCP tools + zero-dependency stdio server (Go). Any MCP client — Claude Code, Cursor, custom agents — can query limits before calling. |
-| **Loop detection** | SHA-256 payload fingerprinting halts runaway agent loops. Wired into middleware via `X-Sequence-Depth`. |
+| **MCP tools** | 5 MCP tools in Go, Node, and Python. Go also ships a zero-dependency stdio server; Node/Python expose tool helpers for your MCP server framework. |
+| **Loop detection** | SHA-256 payload fingerprinting halts runaway agent loops. The primitive ships in all SDKs; Go middleware can enforce it via `X-Sequence-Depth`. |
 | **Token budgets** | Hourly, daily, monthly limits on LLM token consumption. Hard-stop or soft-stop (queue). Estimate-based reservations keep concurrency high. |
 | **Circuit breakers** | Per-provider on outbound, per-upstream on inbound. Closed → Open → Half-Open state machine. |
-| **GenAI observability** | OpenTelemetry `gen_ai.*` spans per semconv: `{operation} {model}` span names, input/output token attributes, low-cardinality `error.type`. |
-| **Content guardrails** | PII detection, prompt injection detection, token/length limits. Wired into middleware — violations return 422. |
-| **Prometheus metrics** | `/metrics` endpoint with live request/rate-limit/budget/breaker/loop/outbound counters. Zero deps. |
+| **GenAI observability** | Go emits OpenTelemetry `gen_ai.*` spans per semconv; Node/Python expose matching attribute builders and cost helpers. |
+| **Content guardrails** | PII detection, prompt injection detection, token/length limits. Go middleware can reject violations with 422; Node/Python expose the same guardrail chains for app-level wiring. |
+| **Prometheus metrics** | Go `/metrics` endpoint with live counters; Node/Python expose zero-dependency exposition helpers. |
 | **Streaming-aware** | SSE bytes pass through untouched while usage, TTFT, and TPOT are extracted on the side. Bounded memory, always. |
-| **14 models priced** | Verified against provider pricing pages. GPT-4o, o3, Claude Opus 4.5, Gemini 2.5, Llama, DeepSeek. Auto cost estimation. |
+| **12 models priced** | Pricing table for GPT-4o, GPT-4.1, Claude, Gemini, Llama, and DeepSeek families. Unknown models return `$0.00`; verify provider pages before release. |
 
 ## Guard the money, not just the door
 
@@ -50,7 +50,7 @@ const client = new OpenAI({ fetch: rg.wrapFetch() });
 client = OpenAI(http_client=rg.wrap_httpx_client())
 ```
 
-Every call through the wrapped client is budgeted, breaker-protected per provider, and metered with **real** token usage — including streaming (OpenAI `usage:null` intermediates and Anthropic's split `message_start`/`message_delta` shapes are handled correctly). 16 provider hosts detected out of the box, plus Azure OpenAI, Bedrock, Vertex, and any self-hosted OpenAI-compatible server.
+Every call through the wrapped client is budgeted, breaker-protected per provider, and metered with **real** token usage — including streaming (OpenAI `usage:null` intermediates and Anthropic's split `message_start`/`message_delta` shapes are handled correctly). Go also emits GenAI OTel spans from the outbound wrapper; Node/Python expose the same usage extraction and GenAI attribute/cost helpers for app-level tracing. 16 provider hosts detected out of the box, plus Azure OpenAI, Bedrock, Vertex, and any self-hosted OpenAI-compatible server.
 
 ## Quick Start
 
@@ -131,13 +131,13 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 | Zero infrastructure | ✅ Middleware | ✅ | ❌ Proxy required | ❌ Gateway |
 | In-process outbound spend tracking | ✅ Client wrapper | ❌ | ❌ Proxy only | ❌ |
 | Agent pre-flight queries (MCP) | ✅ 5 tools + stdio server | ❌ | ❌ | ❌ |
-| Agent loop detection | ✅ | ❌ | ❌ | ❌ |
+| Agent loop detection | ✅ Library/MCP; Go middleware | ❌ | ❌ | ❌ |
 | LLM token budgets | ✅ | ❌ | ✅ | ❌ |
 | GenAI OTel conventions | ✅ | ❌ | ❌ | ❌ |
 | Circuit breakers | ✅ | ❌ | ❌ | ❌ |
 | Content guardrails | ✅ | ❌ | ✅ | ❌ |
 | Provider chain | ✅ | ❌ | ✅ | ❌ |
-| Prometheus metrics | ✅ | ❌ | ❌ | ✅ |
+| Prometheus metrics | ✅ Go endpoint + helpers | ❌ | ❌ | ✅ |
 | Open source (MIT) | ✅ | ✅ | ✅ | Partial |
 
 ## Docs

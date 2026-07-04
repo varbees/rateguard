@@ -1,6 +1,6 @@
 # GenAI Observability
 
-RateGuard emits OpenTelemetry spans and metrics for every LLM call using the official GenAI semantic conventions. Span names follow the semconv format `{operation} {model}` (e.g. `chat gpt-4o`). Standard `gen_ai.*` attributes are used where the convention defines them; RateGuard-specific data lives under the `rateguard.*` namespace so the reserved namespace stays clean.
+RateGuard's Go SDK emits OpenTelemetry spans and metrics for LLM calls using the official GenAI semantic conventions. Node and Python expose matching semconv attribute builders and cost helpers so apps can wire the same data into their tracer. Span names follow the semconv format `{operation} {model}` (e.g. `chat gpt-4o`). Standard `gen_ai.*` attributes are used where the convention defines them; RateGuard-specific data lives under the `rateguard.*` namespace so the reserved namespace stays clean.
 
 ## What gets traced
 
@@ -49,12 +49,14 @@ Cost is estimated automatically from the pricing table when not provided. TTFT a
 
 ## Model pricing
 
-14 models priced, verified against provider public pricing pages (July 2026). Costs are approximate (USD per 1K tokens).
+12 models are configured in the SDK pricing table. Costs are approximate (USD per 1K tokens); re-check provider pricing pages before publishing a release.
 
 | Model | Prompt ($/1K) | Completion ($/1K) |
 |---|---|---|
 | GPT-4o | $0.0025 | $0.010 |
 | GPT-4o Mini | $0.00015 | $0.0006 |
+| GPT-4.1 | $0.002 | $0.008 |
+| GPT-4.1 Mini | $0.0001 | $0.0004 |
 | Claude Opus 4.5 | $0.005 | $0.025 |
 | Claude Sonnet 4 | $0.003 | $0.015 |
 | Claude Haiku 3.5 | $0.0008 | $0.004 |
@@ -75,7 +77,7 @@ rg := rateguard.New(rateguard.Config{
     ServiceName:           "my-llm-service",
     OTLPCollectorEndpoint: "localhost:4317",
 })
-// Spans automatically emitted on every LLM call through middleware
+// Go outbound wrappers and StartGenAICall emit spans from this configuration.
 ```
 
 ### Node.js
