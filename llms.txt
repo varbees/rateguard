@@ -67,7 +67,7 @@ Every limiter also implements Peek — a non-consuming pre-flight query.
 - Redis distributed limiter: atomic Lua GCRA, read-only peek script (Go)
 
 ## Tests
-All 3 SDKs green — 150 total: `go test ./...` (61 passing), `bun run test` (46 passing), `pytest -q` (43 passing)
+All 3 SDKs green — 155 total: `go test ./...` (61 passing), `bun run test` (46 passing), `pytest -q` (48 passing)
 
 ## Docs
 - AGENTS.md: full agent contract with architecture, domain types, rules, commands

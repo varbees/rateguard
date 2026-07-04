@@ -142,6 +142,7 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 
 ## Docs
 
+- [Framework Integrations](INTEGRATIONS.md) — LangGraph, OpenAI Agents SDK, Vercel AI SDK, Pydantic AI, one line each
 - [Architecture](ARCHITECTURE.md) — how RateGuard works, positioning vs Datadog/Kong/Cloudflare
 - [Release Notes](docs/RELEASE_NOTES.md)
 - [API Reference](docs/API_REFERENCE.md) — all presets, config options, middleware adapters

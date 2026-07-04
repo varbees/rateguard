@@ -52,7 +52,20 @@ Capabilities (identical across SDKs, verified by mirrored test suites):
 - Request-body passthrough for >10 MiB bodies read from an already-closed
   body. `req.GetBody` now set for HTTP/2 replays.
 
-Tests: **150 across the three SDKs** (Go 61, Node 46, Python 43) — every
+### Async transport + framework integrations 🆕
+- **Python async transport**: `create_httpx_async_transport` /
+  `rg.wrap_httpx_async_client()` — agent frameworks are async-first (the
+  OpenAI Agents SDK, Pydantic AI, and LangChain's async paths all run on
+  `httpx.AsyncClient`). Full parity with the sync transport, including
+  transparent SSE streaming and fallback. 5 async e2e tests.
+- **INTEGRATIONS.md**: one-line recipes verified against official docs —
+  OpenAI/Anthropic SDKs (Go/Node/Python), LangChain/LangGraph
+  (`http_client` + `http_async_client`), OpenAI Agents SDK
+  (`set_default_openai_client`), Pydantic AI, Vercel AI SDK
+  (`createOpenAI({fetch})`), Mastra. CrewAI documented honestly (no client
+  injection today — tracked upstream).
+
+Tests: **155 across the three SDKs** (Go 61, Node 46, Python 48) — every
 outbound scenario driven end-to-end against mock providers, including both
 real streaming shapes and fallback credential isolation.
 

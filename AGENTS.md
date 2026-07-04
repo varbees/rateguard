@@ -55,6 +55,8 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Provider fallback (OpenAI-compatible, credential-isolated) | ✅ | ✅ | ✅ | `outbound.go` |
 | Per-provider circuit breakers (outbound) | ✅ | ✅ | ✅ | `outbound.go` |
 | Provider detection (16 hosts + Azure/Bedrock/Vertex + self-hosted) | ✅ | ✅ | ✅ | `outbound.go` |
+| Async outbound transport (agent frameworks are async-first) | n/a | n/a | ✅ | `core/outbound.py` |
+| Framework integration recipes (INTEGRATIONS.md, doc-verified) | ✅ | ✅ | ✅ | `INTEGRATIONS.md` |
 
 ## 8 Presets
 
@@ -80,7 +82,7 @@ cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 # Node tests (46 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (43 passing)
+# Python tests (48 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Graphify (codebase to knowledge graph)
