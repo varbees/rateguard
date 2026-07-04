@@ -1,6 +1,8 @@
 package rateguard
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
 	"testing"
 )
 
@@ -8,8 +10,8 @@ func TestMCPTools(t *testing.T) {
 	sdk := New(Config{Preset: "dev"})
 
 	tools := sdk.MCPTools()
-	if len(tools) != 5 {
-		t.Fatalf("expected 5 MCP tools, got %d", len(tools))
+	if len(tools) != 7 {
+		t.Fatalf("expected 7 MCP tools, got %d", len(tools))
 	}
 
 	expected := map[string]bool{
@@ -18,6 +20,8 @@ func TestMCPTools(t *testing.T) {
 		"get_circuit_breaker_state": false,
 		"check_loop":                false,
 		"list_limits":               false,
+		"attest_budget":             false,
+		"verify_budget":             false,
 	}
 
 	for _, tool := range tools {
@@ -159,5 +163,223 @@ func TestMCPCall(t *testing.T) {
 	_, err = sdk.MCPCall("nonexistent", nil)
 	if err == nil {
 		t.Error("expected error for unknown tool")
+	}
+}
+
+func TestMCPAttestBudgetMintsRootToken(t *testing.T) {
+	sdk := New(Config{Preset: "dev"})
+	_, authorityPriv := genKey(t)
+
+	result, err := sdk.mcpAttestBudget(map[string]any{
+		"signing_key":        base64.StdEncoding.EncodeToString(authorityPriv),
+		"max_tokens":         float64(100000),
+		"max_depth":          float64(2),
+		"expires_in_seconds": float64(3600),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result["error"] != nil {
+		t.Fatalf("unexpected result error: %v", result["error"])
+	}
+	if result["token"] == nil || result["token"] == "" {
+		t.Fatal("expected a non-empty token")
+	}
+	if result["delegate_private_key"] == nil {
+		t.Fatal("expected a generated delegate_private_key when delegate_public_key was omitted")
+	}
+	if depth, _ := result["depth"].(int); depth != 1 {
+		t.Fatalf("expected depth 1 for a root token, got %v", result["depth"])
+	}
+}
+
+func TestMCPAttestBudgetRejectsMissingSigningKey(t *testing.T) {
+	sdk := New(Config{Preset: "dev"})
+	_, err := sdk.mcpAttestBudget(map[string]any{
+		"max_tokens":         float64(100),
+		"max_depth":          float64(1),
+		"expires_in_seconds": float64(60),
+	})
+	if err == nil {
+		t.Fatal("expected an error when signing_key is missing")
+	}
+}
+
+func TestMCPAttestBudgetDelegationNarrowsAndVerifies(t *testing.T) {
+	sdk := New(Config{Preset: "dev"})
+	authorityPub, authorityPriv := genKey(t)
+
+	root, err := sdk.mcpAttestBudget(map[string]any{
+		"signing_key":        base64.StdEncoding.EncodeToString(authorityPriv),
+		"max_tokens":         float64(100000),
+		"providers":          []any{"openai", "anthropic"},
+		"max_depth":          float64(2),
+		"expires_in_seconds": float64(3600),
+	})
+	if err != nil || root["error"] != nil {
+		t.Fatalf("mint root: err=%v result=%v", err, root)
+	}
+	rootPrivKey := root["delegate_private_key"].(string)
+
+	delegated, err := sdk.mcpAttestBudget(map[string]any{
+		"signing_key":        rootPrivKey,
+		"parent_token":       root["token"],
+		"max_tokens":         float64(1000),
+		"providers":          []any{"openai"},
+		"max_depth":          float64(0),
+		"expires_in_seconds": float64(60),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if delegated["error"] != nil {
+		t.Fatalf("unexpected delegation error: %v", delegated["error"])
+	}
+	if depth, _ := delegated["depth"].(int); depth != 2 {
+		t.Fatalf("expected a 2-block chain after delegation, got %v", delegated["depth"])
+	}
+
+	verify, err := sdk.mcpVerifyBudget(map[string]any{
+		"token":           delegated["token"],
+		"root_public_key": base64.StdEncoding.EncodeToString(authorityPub),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v, _ := verify["valid"].(bool); !v {
+		t.Fatalf("expected the delegated chain to verify, got %+v", verify)
+	}
+	grant, _ := verify["effective_grant"].(map[string]any)
+	if grant["max_tokens"] != int64(1000) {
+		t.Fatalf("expected effective_grant to reflect the narrowed leaf, got %+v", grant)
+	}
+}
+
+func TestMCPAttestBudgetRejectsWideningDelegation(t *testing.T) {
+	sdk := New(Config{Preset: "dev"})
+	_, authorityPriv := genKey(t)
+
+	root, err := sdk.mcpAttestBudget(map[string]any{
+		"signing_key":        base64.StdEncoding.EncodeToString(authorityPriv),
+		"max_tokens":         float64(1000),
+		"max_depth":          float64(2),
+		"expires_in_seconds": float64(3600),
+	})
+	if err != nil || root["error"] != nil {
+		t.Fatalf("mint root: err=%v result=%v", err, root)
+	}
+
+	delegated, err := sdk.mcpAttestBudget(map[string]any{
+		"signing_key":        root["delegate_private_key"],
+		"parent_token":       root["token"],
+		"max_tokens":         float64(999999), // wider than the parent's 1000
+		"max_depth":          float64(0),
+		"expires_in_seconds": float64(60),
+	})
+	if err != nil {
+		t.Fatalf("unexpected Go error (widening is an in-band result, not a Go error): %v", err)
+	}
+	if delegated["error"] == nil {
+		t.Fatal("expected an in-band error result for a widening delegation attempt")
+	}
+}
+
+func TestMCPVerifyBudgetRejectsWrongRootKey(t *testing.T) {
+	sdk := New(Config{Preset: "dev"})
+	_, authorityPriv := genKey(t)
+	wrongPub, _ := genKey(t)
+
+	root, err := sdk.mcpAttestBudget(map[string]any{
+		"signing_key":        base64.StdEncoding.EncodeToString(authorityPriv),
+		"max_tokens":         float64(1000),
+		"max_depth":          float64(1),
+		"expires_in_seconds": float64(3600),
+	})
+	if err != nil || root["error"] != nil {
+		t.Fatalf("mint root: err=%v result=%v", err, root)
+	}
+
+	verify, err := sdk.mcpVerifyBudget(map[string]any{
+		"token":           root["token"],
+		"root_public_key": base64.StdEncoding.EncodeToString(wrongPub),
+	})
+	if err != nil {
+		t.Fatalf("unexpected Go error: %v", err)
+	}
+	if v, _ := verify["valid"].(bool); v {
+		t.Fatal("expected verification to fail against the wrong root public key")
+	}
+}
+
+func TestMCPVerifyBudgetWithProofOfPossession(t *testing.T) {
+	sdk := New(Config{Preset: "dev"})
+	authorityPub, authorityPriv := genKey(t)
+
+	root, err := sdk.mcpAttestBudget(map[string]any{
+		"signing_key":        base64.StdEncoding.EncodeToString(authorityPriv),
+		"max_tokens":         float64(1000),
+		"max_depth":          float64(1),
+		"expires_in_seconds": float64(3600),
+	})
+	if err != nil || root["error"] != nil {
+		t.Fatalf("mint root: err=%v result=%v", err, root)
+	}
+
+	token, err := ParseBudgetToken(root["token"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	delegatePrivBytes, err := base64.StdEncoding.DecodeString(root["delegate_private_key"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := Sign(token, ed25519.PrivateKey(delegatePrivBytes), []byte("nonce-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	verify, err := sdk.mcpVerifyBudget(map[string]any{
+		"token":           root["token"],
+		"root_public_key": base64.StdEncoding.EncodeToString(authorityPub),
+		"context":         "nonce-1",
+		"signature":       base64.StdEncoding.EncodeToString(sig),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v, _ := verify["valid"].(bool); !v {
+		t.Fatalf("expected valid presentation, got %+v", verify)
+	}
+	if pop, _ := verify["proof_of_possession_verified"].(bool); !pop {
+		t.Fatal("expected proof_of_possession_verified to be true when context+signature verify")
+	}
+}
+
+func TestMCPVerifyBudgetWithoutProofDoesNotClaimIt(t *testing.T) {
+	sdk := New(Config{Preset: "dev"})
+	authorityPub, authorityPriv := genKey(t)
+
+	root, err := sdk.mcpAttestBudget(map[string]any{
+		"signing_key":        base64.StdEncoding.EncodeToString(authorityPriv),
+		"max_tokens":         float64(1000),
+		"max_depth":          float64(1),
+		"expires_in_seconds": float64(3600),
+	})
+	if err != nil || root["error"] != nil {
+		t.Fatalf("mint root: err=%v result=%v", err, root)
+	}
+
+	verify, err := sdk.mcpVerifyBudget(map[string]any{
+		"token":           root["token"],
+		"root_public_key": base64.StdEncoding.EncodeToString(authorityPub),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if v, _ := verify["valid"].(bool); !v {
+		t.Fatalf("expected the chain itself to be valid, got %+v", verify)
+	}
+	if pop, _ := verify["proof_of_possession_verified"].(bool); pop {
+		t.Fatal("proof_of_possession_verified must be false when no context/signature were supplied")
 	}
 }

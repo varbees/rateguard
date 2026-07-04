@@ -59,8 +59,8 @@ func TestMCPServerHandshakeAndToolsList(t *testing.T) {
 		t.Fatalf("tools/list response missing result: %v", responses[1])
 	}
 	tools, ok := listResult["tools"].([]any)
-	if !ok || len(tools) != 5 {
-		t.Fatalf("tools/list should return 5 tools, got %v", listResult["tools"])
+	if !ok || len(tools) != 7 {
+		t.Fatalf("tools/list should return 7 tools, got %v", listResult["tools"])
 	}
 }
 
