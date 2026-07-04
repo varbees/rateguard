@@ -431,3 +431,178 @@ def create_httpx_transport(
             inner.close()
 
     return _GuardedTransport()
+
+
+def create_httpx_async_transport(
+    runtime: "RateGuardRuntime",
+    *,
+    mode: str = "enforce",
+    chain: list[FallbackProvider] | None = None,
+    disable_rate_limit: bool = False,
+    transport: Any = None,
+) -> Any:
+    """Build an async httpx transport with outbound GenAI tracking.
+
+    Agent frameworks are async-first — the OpenAI Agents SDK, Pydantic AI,
+    and LangChain's async paths all run on httpx.AsyncClient:
+
+        transport = create_httpx_async_transport(rg.runtime)
+        client = httpx.AsyncClient(transport=transport)
+        set_default_openai_client(AsyncOpenAI(http_client=client))
+    """
+    try:
+        import httpx
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError(
+            "rateguard outbound tracking requires httpx (the OpenAI and "
+            "Anthropic SDKs already depend on it): pip install httpx"
+        ) from exc
+
+    core = _OutboundCore(runtime, mode=mode, chain=chain, disable_rate_limit=disable_rate_limit)
+    inner = transport or httpx.AsyncHTTPTransport()
+
+    def synthesized(request: Any, status: int, code: str, message: str, retry_after_ms: int) -> Any:
+        headers = {"content-type": "application/json", "x-rateguard-synthesized": "true"}
+        if retry_after_ms > 0:
+            headers["retry-after"] = format_retry_after_ms(retry_after_ms)
+        payload = json.dumps({"error": {"type": code, "message": message, "source": "rateguard"}})
+        return httpx.Response(status, headers=headers, content=payload.encode(), request=request)
+
+    class _AsyncScanningByteStream(httpx.AsyncByteStream):
+        """Passes chunks through unchanged while scanning SSE lines for usage."""
+
+        def __init__(self, source: Any, on_complete: Any) -> None:
+            self._source = source
+            self._on_complete = on_complete
+            self._buffer: list[str] = []
+            self._buffered_bytes = 0
+            self._done = False
+
+        async def __aiter__(self) -> Any:
+            async for chunk in self._source:
+                if self._buffered_bytes < _MAX_EXTRACT_BYTES:
+                    self._buffer.append(chunk.decode("utf-8", errors="replace"))
+                    self._buffered_bytes += len(chunk)
+                yield chunk
+            self._finish()
+
+        def _finish(self) -> None:
+            if self._done:
+                return
+            self._done = True
+            usage = _extract_sse_usage("".join(self._buffer)) if self._buffer else None
+            self._buffer = []
+            self._on_complete(usage)
+
+        async def aclose(self) -> None:
+            self._finish()
+            aclose = getattr(self._source, "aclose", None)
+            if aclose is not None:
+                await aclose()
+
+    class _GuardedAsyncTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: Any) -> Any:
+            call = detect_llm_call(request.url.host, request.url.path)
+            if call is None:
+                return await inner.handle_async_request(request)
+
+            body = await request.aread()
+            if call.model == "" and body:
+                call.model = _model_from_body(body)
+
+            return await self._execute(request, body, call, 0)
+
+        async def _execute(self, request: Any, body: bytes, call: OutboundCall, depth: int) -> Any:
+            breaker = core.breaker_for(call.provider)
+            breaker_decision = breaker.allow()
+            if not breaker_decision.allowed:
+                target = core.fallback_target(call, depth, body)
+                if target is not None:
+                    return await self._retarget(request, body, call, target, depth)
+                if core.enforce:
+                    return synthesized(request, 503, "circuit_open",
+                                       f"rateguard: circuit open for provider {call.provider}",
+                                       breaker_decision.retry_after_ms)
+
+            blocked, retry_after_ms = core.rate_limit_blocked(call)
+            if blocked and core.enforce:
+                return synthesized(request, 429, "rate_limit_exceeded",
+                                   f"rateguard: outbound rate limit for provider {call.provider}", retry_after_ms)
+
+            reservation = core.reserve(call)
+            if reservation.decision.applied and not reservation.decision.allowed and core.enforce:
+                return synthesized(request, 429, "token_budget_exceeded",
+                                   f"rateguard: outbound token budget exhausted for {call.provider}",
+                                   reservation.decision.retry_after_ms)
+
+            try:
+                response = await inner.handle_async_request(request)
+            except Exception:
+                breaker.record_outcome(False)
+                core.finish(call, reservation.reservation_id, None)
+                target = core.fallback_target(call, depth, body)
+                if target is not None:
+                    return await self._retarget(request, body, call, target, depth)
+                raise
+
+            if core.is_provider_failure(response.status_code):
+                breaker.record_outcome(False)
+                core.finish(call, reservation.reservation_id, None)
+                target = core.fallback_target(call, depth, body)
+                if target is not None:
+                    await response.aclose()
+                    return await self._retarget(request, body, call, target, depth)
+                return response
+
+            breaker.record_outcome(True)
+
+            content_type = response.headers.get("content-type", "")
+            if content_type.startswith("text/event-stream"):
+                scanning = _AsyncScanningByteStream(
+                    response.stream,
+                    lambda usage: core.finish(call, reservation.reservation_id, usage),
+                )
+                return httpx.Response(
+                    response.status_code,
+                    headers=response.headers,
+                    stream=scanning,
+                    request=request,
+                    extensions=response.extensions,
+                )
+
+            content = await response.aread()
+            usage: "TokenUsage | None" = None
+            if len(content) <= _MAX_EXTRACT_BYTES:
+                usage = extract_token_usage_from_text(content.decode("utf-8", errors="replace"))
+            core.finish(call, reservation.reservation_id, usage)
+            return response
+
+        async def _retarget(self, request: Any, body: bytes, call: OutboundCall, target: FallbackProvider, depth: int) -> Any:
+            url, new_body = core.retarget_url_and_body(target, call, body)
+            headers = dict(request.headers)
+            # Provider credentials never transfer across providers.
+            headers.pop("authorization", None)
+            headers.pop("x-api-key", None)
+            headers.pop("content-length", None)
+            headers.update(target.headers)
+            headers["x-rateguard-fallback-from"] = call.provider
+
+            next_request = httpx.Request(request.method, url, headers=headers, content=new_body)
+            next_call = OutboundCall(
+                provider=target.name,
+                model=target.model or call.model,
+                operation=call.operation,
+                compatible=True,
+                path_suffix=call.path_suffix,
+            )
+            response = await self._execute(next_request, new_body, next_call, depth + 1)
+            response.headers["x-rateguard-fallback"] = "true"
+            response.headers["x-rateguard-provider"] = target.name
+            return response
+
+        async def aclose(self) -> None:
+            aclose = getattr(inner, "aclose", None)
+            if aclose is not None:
+                await aclose()
+
+    return _GuardedAsyncTransport()

@@ -206,3 +206,94 @@ def test_wrap_httpx_client_facade():
     client = rg.wrap_httpx_client()
     assert isinstance(client, httpx.Client)
     client.close()
+
+
+# ── Async transport (agent frameworks are async-first) ──
+
+from rateguard.core.outbound import create_httpx_async_transport
+
+
+def make_async_client(rg: RateGuard, handler, **kwargs) -> httpx.AsyncClient:
+    transport = create_httpx_async_transport(rg.runtime, transport=httpx.MockTransport(handler), **kwargs)
+    return httpx.AsyncClient(transport=transport)
+
+
+@pytest.mark.anyio
+async def test_async_outbound_tracks_json_usage():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=openai_body("gpt-4o", 100, 50))
+
+    rg = RateGuard(preset="dev", token_budget=TokenBudgetOptions(hour_limit=10_000))
+    async with make_async_client(rg, handler) as client:
+        resp = await client.post("https://api.openai.com/v1/chat/completions", json={"model": "gpt-4o"})
+        assert resp.status_code == 200
+
+    key = f"{rg.runtime.config.tenant_id}:openai:gpt-4o:outbound"
+    assert rg.runtime.token_budget.usage(key, rg.runtime.config.token_budget)["hour"] == 150
+
+
+@pytest.mark.anyio
+async def test_async_outbound_sse_streaming():
+    sse = "\n".join([
+        'data: {"model":"gpt-4o","choices":[{"delta":{"content":"He"}}],"usage":null}',
+        "",
+        'data: {"model":"gpt-4o","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":25,"total_tokens":35}}',
+        "",
+        "data: [DONE]",
+        "",
+    ])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=sse.encode())
+
+    rg = RateGuard(preset="dev", token_budget=TokenBudgetOptions(hour_limit=10_000))
+    async with make_async_client(rg, handler) as client:
+        received = b""
+        async with client.stream("POST", "https://api.openai.com/v1/chat/completions", json={"model": "gpt-4o"}) as resp:
+            async for chunk in resp.aiter_bytes():
+                received += chunk
+
+    assert received == sse.encode(), "SSE bytes must pass through unchanged"
+    key = f"{rg.runtime.config.tenant_id}:openai:gpt-4o:outbound"
+    assert rg.runtime.token_budget.usage(key, rg.runtime.config.token_budget)["hour"] == 35
+
+
+@pytest.mark.anyio
+async def test_async_outbound_budget_blocks():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=openai_body("gpt-4o", 400, 100))
+
+    rg = RateGuard(preset="dev", token_budget=TokenBudgetOptions(hour_limit=600))
+    async with make_async_client(rg, handler) as client:
+        assert (await client.post("https://api.openai.com/v1/chat/completions", json={"model": "gpt-4o"})).status_code == 200
+        assert (await client.post("https://api.openai.com/v1/chat/completions", json={"model": "gpt-4o"})).status_code == 200
+        blocked = await client.post("https://api.openai.com/v1/chat/completions", json={"model": "gpt-4o"})
+        assert blocked.status_code == 429
+        assert blocked.headers.get("x-rateguard-synthesized") == "true"
+
+
+@pytest.mark.anyio
+async def test_async_outbound_fallback():
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content or b"{}")
+        if body.get("model") == "deepseek-chat":
+            return httpx.Response(200, json=openai_body("deepseek-chat", 10, 5))
+        return httpx.Response(429, json={"error": {"message": "rate limited"}})
+
+    rg = RateGuard(preset="dev")
+    async with make_async_client(
+        rg,
+        handler,
+        chain=[FallbackProvider(name="deepseek", base_url="https://api.deepseek.com/v1", model="deepseek-chat")],
+    ) as client:
+        resp = await client.post("https://api.openai.com/v1/chat/completions", json={"model": "gpt-4o"})
+        assert resp.status_code == 200
+        assert resp.headers.get("x-rateguard-fallback") == "true"
+
+
+@pytest.mark.anyio
+async def test_wrap_httpx_async_client_facade():
+    rg = RateGuard(preset="dev")
+    client = rg.wrap_httpx_async_client()
+    assert isinstance(client, httpx.AsyncClient)
+    await client.aclose()

@@ -141,6 +141,35 @@ class RateGuard:
             base_url=client.base_url,
         )
 
+    def httpx_async_transport(self, **kwargs) -> object:
+        """Async httpx transport with outbound GenAI tracking.
+
+        client = httpx.AsyncClient(transport=rg.httpx_async_transport())
+        set_default_openai_client(AsyncOpenAI(http_client=client))
+        """
+        from .core.outbound import create_httpx_async_transport
+
+        return create_httpx_async_transport(self.runtime, **kwargs)
+
+    def wrap_httpx_async_client(self, client: object = None, **kwargs) -> object:
+        """Return an httpx.AsyncClient whose transport tracks outbound LLM calls.
+
+        Agent frameworks are async-first — pass the result to AsyncOpenAI /
+        AsyncAnthropic, LangChain's http_async_client, Pydantic AI providers,
+        or the OpenAI Agents SDK's set_default_openai_client.
+        """
+        import httpx  # lazy — not a hard dependency
+
+        transport = self.httpx_async_transport(**kwargs)
+        if client is None:
+            return httpx.AsyncClient(transport=transport)
+        return httpx.AsyncClient(
+            transport=transport,
+            headers=client.headers,
+            timeout=client.timeout,
+            base_url=client.base_url,
+        )
+
     @property
     def asgi_middleware(self) -> type:
         from .adapters.asgi import RateGuardMiddleware as Middleware
