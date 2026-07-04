@@ -117,5 +117,8 @@
   "115": ".Hijack",
   "116": "layout.tsx",
   "117": "postcss.config.mjs",
-  "118": "open-next.config.ts"
+  "118": "open-next.config.ts",
+  "119": "peerDependencies",
+  "120": "routeId",
+  "121": "page.tsx"
 }

@@ -1,16 +1,16 @@
 # Graph Report - rateguard  (2026-07-04)
 
 ## Corpus Check
-- 129 files · ~59,627 words
+- 130 files · ~61,315 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1667 nodes · 3085 edges · 119 communities (104 shown, 15 thin omitted)
-- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 201 edges (avg confidence: 0.74)
+- 1699 nodes · 3142 edges · 122 communities (106 shown, 16 thin omitted)
+- Extraction: 93% EXTRACTED · 7% INFERRED · 0% AMBIGUOUS · INFERRED: 208 edges (avg confidence: 0.74)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `528512c7`
+- Built from commit: `29deceba`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -131,22 +131,23 @@
 - [[_COMMUNITY_tenantId|tenantId]]
 - [[_COMMUNITY_.Hijack|.Hijack]]
 - [[_COMMUNITY_postcss.config.mjs|postcss.config.mjs]]
+- [[_COMMUNITY_peerDependencies|peerDependencies]]
+- [[_COMMUNITY_routeId|routeId]]
+- [[_COMMUNITY_page.tsx|page.tsx]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `New()` - 52 edges
-2. `RateGuard` - 36 edges
+2. `RateGuard` - 38 edges
 3. `SDK` - 32 edges
 4. `RateGuardRuntime` - 30 edges
 5. `LoopDetector` - 25 edges
 6. `BudgetFacade` - 22 edges
 7. `RateGuardRuntime` - 21 edges
 8. `CircuitBreaker` - 21 edges
-9. `BoundedCache` - 20 edges
-10. `TokenBudgetOptions` - 18 edges
+9. `TokenBudgetOptions` - 21 edges
+10. `BoundedCache` - 20 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `test_loop_detector_enforces_max_depth()` --calls--> `LoopDetector`  [INFERRED]
-  packages/sdk-python/tests/test_mcp.py → packages/sdk-python/rateguard/core/mcp.py
 - `newBoundedCache()` --calls--> `New()`  [INFERRED]
   packages/sdk-go/bounded_cache.go → packages/sdk-go/sdk.go
 - `New()` --calls--> `newCircuitBreaker()`  [INFERRED]
@@ -155,6 +156,8 @@
   packages/sdk-go/circuit_breaker_test.go → packages/sdk-go/sdk.go
 - `New()` --calls--> `NewHTTPEventEmitter()`  [INFERRED]
   packages/sdk-go/sdk.go → packages/sdk-go/events.go
+- `newObservability()` --calls--> `newGenAIObserver()`  [INFERRED]
+  packages/sdk-go/observability.go → packages/sdk-go/genai_observability.go
 
 ## Import Cycles
 - None detected.
@@ -163,7 +166,7 @@
 - **RateGuard SDK Suite** — packages_sdk_go, packages_sdk_node, packages_sdk_python [EXTRACTED 1.00]
 - **Core Middleware Features** — rate_limiting, token_budgets, circuit_breakers [EXTRACTED 1.00]
 
-## Communities (119 total, 15 thin omitted)
+## Communities (122 total, 16 thin omitted)
 
 ### Community 0 - "SDK"
 Cohesion: 0.12
@@ -171,39 +174,39 @@ Nodes (12): Buffer, ResponseWriter, WriteGuardrailReject(), ceilDurationSeconds(
 
 ### Community 1 - "FixedClock"
 Cohesion: 0.09
-Nodes (16): CircuitBreaker, _OutcomeRing, _positive_int(), CircuitBreakerDecision, CircuitBreakerOptions, CircuitBreakerState, Clock, Rolling-window circuit breaker with half-open probes. (+8 more)
+Nodes (24): LogCaptureFixture, CircuitBreaker, _OutcomeRing, _positive_int(), CircuitBreakerDecision, CircuitBreakerOptions, CircuitBreakerState, Clock (+16 more)
 
 ### Community 2 - "rate-limiter.ts"
-Cohesion: 0.21
-Nodes (9): Bucket, isRemoteRateLimitResponse(), RateLimiter, RemoteRateLimitResponse, remoteUnavailable(), Clock, RateLimitDecision, RateLimitOptions (+1 more)
+Cohesion: 0.13
+Nodes (9): BoundedCache, Bucket, isRemoteRateLimitResponse(), RateLimiter, RemoteRateLimitResponse, remoteUnavailable(), RateLimitDecision, RateLimitOptions (+1 more)
 
 ### Community 3 - "config.py"
-Cohesion: 0.18
-Nodes (17): PresetName, known_presets(), normalize_circuit_breaker_options(), normalize_preset(), normalize_token_budget_mode(), preset_policy(), CircuitBreakerOptions, Clock (+9 more)
+Cohesion: 0.09
+Nodes (36): P, PresetName, rate_limited(), token_budget(), derive_ws_url(), known_presets(), normalize_circuit_breaker_options(), normalize_preset() (+28 more)
 
 ### Community 4 - "MemoryLimiter"
-Cohesion: 0.05
-Nodes (46): GuardrailChain, T, TestMemoryLimiterEvictsLeastRecentlyUsedKeys(), TestMemoryLimiterUsesInjectedClock(), TestTokenBudgetManagerEvictsLeastRecentlyUsedKeys(), BudgetWaiter, CircuitBreakerOptions, Client (+38 more)
+Cohesion: 0.06
+Nodes (44): GuardrailChain, T, TestMemoryLimiterEvictsLeastRecentlyUsedKeys(), TestMemoryLimiterUsesInjectedClock(), TestTokenBudgetManagerEvictsLeastRecentlyUsedKeys(), BudgetWaiter, CircuitBreakerOptions, Client (+36 more)
 
 ### Community 5 - "adapters.test.ts"
 Cohesion: 0.07
 Nodes (27): dependencies, next, @opennextjs/cloudflare, react, react-dom, devDependencies, eslint, eslint-config-next (+19 more)
 
 ### Community 6 - "utils.py"
-Cohesion: 0.10
-Nodes (35): AdapterRequestContextInput, JsonObject, HeadersLike, build_request_context(), RequestContext, ResolvedRateGuardOptions, _extract_sse_usage(), Collect usage-bearing data lines (bounded) and merge them. (+27 more)
+Cohesion: 0.08
+Nodes (44): asRecord(), extractTokenUsageFromHeaders(), extractTokenUsageFromText(), extractTokenUsageFromValue(), firstNumber(), firstString(), isJsonValue(), JsonObject (+36 more)
 
 ### Community 7 - "_common.py"
 Cohesion: 0.12
-Nodes (16): ExcInfo, AdmissionErrorCode, denial_asgi_headers(), denial_body(), denial_headers(), denial_payload(), HeaderValue, RateGuardOptions (+8 more)
+Nodes (23): ExcInfo, AdmissionErrorCode, build_request_context(), denial_asgi_headers(), denial_body(), denial_headers(), denial_payload(), RequestContext (+15 more)
 
 ### Community 8 - "circuitBreaker"
 Cohesion: 0.13
 Nodes (15): Clock, Duration, Mutex, Time, newCircuitBreaker(), Duration, T, Time (+7 more)
 
 ### Community 9 - "express.ts"
-Cohesion: 0.05
-Nodes (36): AdapterPayload, DenialErrorCode, denialHeaders, denialPayload, JsonPrimitive, JsonValue, buildRequestContext(), buildSnapshot() (+28 more)
+Cohesion: 0.16
+Nodes (10): buildRequestContext(), buildSnapshot(), ExpressEncoding, ExpressEndArgs, ExpressResponseChunk, ExpressWriteArgs, ExpressWriteCallback, hashPath() (+2 more)
 
 ### Community 10 - "build_backend.py"
 Cohesion: 0.16
@@ -211,7 +214,7 @@ Nodes (23): _add_sdist_bytes(), _add_sdist_file(), build_editable(), build_sdist
 
 ### Community 11 - "RequestContext"
 Cohesion: 0.16
-Nodes (17): ASGIApp, CompletionObservation, Future, RateGuardOptions, RateGuardRuntime, build_event_envelope(), RateGuardEventPayload, _await_emit() (+9 more)
+Nodes (18): ASGIApp, CompletionObservation, Future, RateGuardEventType, RateGuardOptions, RateGuardRuntime, build_event_envelope(), RateGuardEventPayload (+10 more)
 
 ### Community 12 - "observability"
 Cohesion: 0.09
@@ -222,12 +225,12 @@ Cohesion: 0.14
 Nodes (16): KeyValue, Context, Duration, Float64Histogram, Header, Int64Counter, MeterProvider, Span (+8 more)
 
 ### Community 14 - "BoundedCache"
-Cohesion: 0.17
-Nodes (10): _Bucket, Clock, RateLimitDecision, RateLimitOptions, RateLimiter, In-process token-bucket rate limiter with bounded cache.      All 3 RateGuard SD, Report what allow() would decide right now WITHOUT consuming a token.          P, Check if a request is allowed under the token bucket.          Formula: tokens = (+2 more)
+Cohesion: 0.19
+Nodes (8): buildEventEnvelope(), ConsoleEventEmitter, ControlPlaneEventEmitter, WebSocketCtor, toJson(), EventEmitterLike, RateGuardEventEnvelope, ResolvedRateGuardOptions
 
 ### Community 15 - "__init__.py"
-Cohesion: 0.18
-Nodes (22): create_mcp_tools(), mcp_call(), MCPTool, MCPToolResult, MCP (Model Context Protocol) Tools + Loop Detector — Agent-Native Rate Limit Awa, A tool that AI agents can call via the Model Context Protocol., Standard MCP tool response: a list of content blocks., Build the RateGuard MCP tool set bound to a runtime.      Agents call these tool (+14 more)
+Cohesion: 0.27
+Nodes (9): Token-bucket rate limiter — same algorithm across all 3 RateGuard SDKs.  Algorit, CircuitBreakerDecision, Clock, CompletionObservation, PreflightDecision, RateGuardEventPayload, RateLimitDecision, RateLimitOptions (+1 more)
 
 ### Community 16 - "New"
 Cohesion: 0.18
@@ -238,40 +241,44 @@ Cohesion: 0.11
 Nodes (17): compilerOptions, esModuleInterop, exactOptionalPropertyTypes, forceConsistentCasingInFileNames, lib, module, moduleResolution, noUncheckedIndexedAccess (+9 more)
 
 ### Community 18 - "types.ts"
-Cohesion: 0.14
-Nodes (19): buildEventEnvelope(), ConsoleEventEmitter, ControlPlaneEventEmitter, createEventEmitter(), WebSocketCtor, toJson(), RateGuardRuntime, CircuitBreakerState (+11 more)
+Cohesion: 0.25
+Nodes (11): systemClock, createEventEmitter(), RateGuardRuntime, CircuitBreakerState, CompletionObservation, PreflightDecision, RateGuardEventPayload, RequestContext (+3 more)
 
 ### Community 19 - "guardrails.go"
 Cohesion: 0.17
 Nodes (16): RWMutex, MaxLengthGuardrail(), NewGuardrailChain(), NewPIIGuardrail(), NewPromptInjectionGuardrail(), NewTokenLimitGuardrail(), StandardGuardrails(), StrictGuardrails() (+8 more)
 
 ### Community 20 - "events.go"
-Cohesion: 0.10
-Nodes (22): Request, T, TestHTTPEventEmitterReturnsBodyDrainErrors(), TestHTTPEventEmitterSerializesEnvelope(), Client, Context, Header, Time (+14 more)
+Cohesion: 0.09
+Nodes (24): Time, Request, T, TestHTTPEventEmitterReturnsBodyDrainErrors(), TestHTTPEventEmitterSerializesEnvelope(), Client, Context, Header (+16 more)
 
 ### Community 21 - "package.json"
 Cohesion: 0.12
 Nodes (15): bugs, url, dependencies, lru-cache, description, files, homepage, keywords (+7 more)
 
+### Community 22 - "AdapterPayload"
+Cohesion: 0.17
+Nodes (3): AdapterPayload, HonoLikeContext, FakeExpressResponse
+
 ### Community 23 - "CircuitBreaker"
-Cohesion: 0.22
-Nodes (6): CircuitBreaker, OutcomeRing, positiveInteger(), CircuitBreakerDecision, CircuitBreakerOptions, clock
+Cohesion: 0.18
+Nodes (7): CircuitBreaker, OutcomeRing, positiveInteger(), CircuitBreakerDecision, CircuitBreakerOptions, Clock, clock
 
 ### Community 24 - "RateGuard"
 Cohesion: 0.05
-Nodes (46): LogCaptureFixture, RateGuard, MCP tool set for agent pre-flight queries. Peek semantics — never consumes budge, Execute an MCP tool by name and wrap the result as MCP content., Sync httpx transport with outbound GenAI tracking.          client = httpx.Clien, Return an httpx.Client whose transport tracks outbound LLM calls.          Budge, User-facing SDK facade., TokenBudgetOptions (+38 more)
+Nodes (49): AsyncClient, BudgetFacade, CircuitBreakerOptions, Clock, EventEmitterLike, RateGuardRuntime, RateLimitOptions, RequestContext (+41 more)
 
 ### Community 25 - "RateGuardMiddleware"
 Cohesion: 0.29
 Nodes (6): ASGIReceive, ASGIScope, ASGISend, HeaderValue, RequestContext, RateGuardMiddleware
 
 ### Community 26 - "Config"
-Cohesion: 0.11
-Nodes (16): peerDependencies, express, fastify, hono, next, buildAdapterRequestContext(), snapshotFromResponse(), buildRequestContext() (+8 more)
+Cohesion: 0.15
+Nodes (14): AdapterRequestContextInput, buildAdapterRequestContext(), DenialErrorCode, JsonPrimitive, JsonValue, snapshotFromResponse(), buildRequestContext(), HonoLikeRequest (+6 more)
 
 ### Community 27 - "config.ts"
-Cohesion: 0.23
-Nodes (10): defaultClock, deriveWsUrl(), knownPresets(), normalizeCircuitBreakerOptions(), normalizePreset(), normalizeTokenBudgetMode(), presetPolicy(), resolveRateGuardOptions() (+2 more)
+Cohesion: 0.25
+Nodes (9): defaultClock, deriveWsUrl(), knownPresets(), normalizeCircuitBreakerOptions(), normalizePreset(), normalizeTokenBudgetMode(), presetPolicy(), resolveRateGuardOptions() (+1 more)
 
 ### Community 28 - "errorRateThreshold"
 Cohesion: 0.08
@@ -286,28 +293,28 @@ Cohesion: 0.13
 Nodes (8): Guardrail, GuardrailChain, GuardrailViolation, INJECTION_PATTERNS, MaxLengthGuardrail, PIIGuardrail, PromptInjectionGuardrail, TokenLimitGuardrail
 
 ### Community 31 - "BudgetFacade"
-Cohesion: 0.35
-Nodes (3): BudgetFacade, TokenBudgetDecision, High-level token-budget API for callers that key budgets by user or tenant.
+Cohesion: 0.19
+Nodes (10): buildRequestContext(), FastifyLikeInstance, FastifyLikeRequest, FastifyState, rateguardPlugin(), stateKey, ExpressEndArgs, ExpressResponseChunk (+2 more)
 
 ### Community 32 - "RateGuardException"
-Cohesion: 0.20
-Nodes (10): Exception, P, rate_limited(), token_budget(), BudgetExceeded, _format_retry_after_iso(), RateGuardException, Human-readable token-budget rejection. (+2 more)
+Cohesion: 0.24
+Nodes (6): Exception, BudgetExceeded, _format_retry_after_iso(), RateGuardException, Human-readable token-budget rejection., RateGuard request rejection exception.
 
 ### Community 33 - "genaiObserver"
 Cohesion: 0.24
 Nodes (19): HandlerFunc, Client, Request, SDK, T, openAIJSONHandler(), TestDetectLLMCallMatrix(), TestOutboundAnthropicStreamingUsage() (+11 more)
 
 ### Community 34 - "utils.ts"
-Cohesion: 0.11
-Nodes (22): detectLLMCall(), googleModelFromPath(), OPENAI_COMPATIBLE_HOSTS, OutboundCall, OutboundMode, scanSSEStream(), asRecord(), extractTokenUsageFromHeaders() (+14 more)
+Cohesion: 0.12
+Nodes (14): detectLLMCall(), googleModelFromPath(), OPENAI_COMPATIBLE_HOSTS, OutboundCall, OutboundMode, scanSSEStream(), wrapFetch(), WrapFetchOptions (+6 more)
 
 ### Community 35 - "RateGuard Middleware"
 Cohesion: 0.14
 Nodes (14): Go SDK, Node SDK, Python SDK, Agents: ask before you call, Docs, Guard the money, not just the door, License, Packages (+6 more)
 
 ### Community 36 - "event_emitter.py"
-Cohesion: 0.24
-Nodes (8): derive_ws_url(), ConsoleEventEmitter, create_event_emitter(), EventEmitterLike, ResolvedRateGuardOptions, WebSocketEventEmitter, RateGuardEvent, test_derive_ws_url_rejects_invalid_control_plane_url()
+Cohesion: 0.22
+Nodes (5): denialHeaders, ExpressLikeResponse, writeAdmissionHeaders(), writeDeniedResponse(), formatRetryAfterMs()
 
 ### Community 37 - "provider_chain.go"
 Cohesion: 0.26
@@ -339,7 +346,7 @@ Nodes (12): 10. GitHub Release, 11. Post-release, 1. Preflight, 2. Verify Go, 3.
 
 ### Community 44 - ".__init__"
 Cohesion: 0.18
-Nodes (8): CircuitBreakerOptions, Clock, EventEmitterLike, RateGuardRuntime, RateLimitOptions, RequestContext, _request_context_from_object(), TokenBudgetOptions
+Nodes (10): Anthropic SDK, Framework Integrations, Go, Mastra, Node / TypeScript, openai-go / anthropic-sdk-go, OpenAI SDK, Vercel AI SDK (+2 more)
 
 ### Community 45 - "scripts"
 Cohesion: 0.25
@@ -374,8 +381,8 @@ Cohesion: 0.17
 Nodes (15): classify_error_type(), estimate_cost(), genai_span_attributes(), genai_span_end_attributes(), genai_span_name(), GenAICall, priced_models(), Exception (+7 more)
 
 ### Community 58 - "RateGuard API Reference"
-Cohesion: 0.17
-Nodes (12): Configuration (Go), Events, Go — serve over MCP stdio (zero dependencies), Guardrails, Loop Detection, MCP Tools (agent pre-flight), Node, Presets (+4 more)
+Cohesion: 0.10
+Nodes (20): Configuration (Go), Events, Go, Go, Go — serve over MCP stdio (zero dependencies), Guardrails, Loop Detection, MCP Tools (agent pre-flight) (+12 more)
 
 ### Community 59 - "RateGuard — AI Agent Contract"
 Cohesion: 0.20
@@ -394,8 +401,8 @@ Cohesion: 0.29
 Nodes (7): Handler, Int64, ResponseWriter, SDK, promGauge(), writePrometheusMetrics(), atomicMetrics
 
 ### Community 65 - "provider-chain.ts"
-Cohesion: 0.12
-Nodes (15): createMCPTools(), FingerprintEntry, mcpCall(), MCPTool, MCPToolResult, wrapFetch(), WrapFetchOptions, budgetProviderChain() (+7 more)
+Cohesion: 0.20
+Nodes (7): createMCPTools(), FingerprintEntry, mcpCall(), MCPTool, MCPToolResult, RateGuard, RateGuardOptions
 
 ### Community 66 - "Unreleased (v0.2.0-dev) — July 4, 2026"
 Cohesion: 0.22
@@ -411,15 +418,15 @@ Nodes (6): description, examples, $id, $schema, title, type
 
 ### Community 69 - "properties"
 Cohesion: 0.20
-Nodes (10): properties, routeId, tokenBudgetPerDay, tokenBudgetPerMonth, description, type, minimum, type (+2 more)
+Nodes (10): description, type, properties, model, tokenBudgetPerDay, tokenBudgetPerMonth, minimum, type (+2 more)
 
 ### Community 70 - "genai.ts"
 Cohesion: 0.25
 Nodes (4): classifyErrorType(), GenAICall, genaiSpanEndAttributes(), MODEL_PRICING_2026
 
 ### Community 71 - "README.md"
-Cohesion: 0.17
-Nodes (7): Earlier July 4, 2026 (late-night wiring release), Everything advertised is now reachable 🔌, Extractor correctness fixes (all 3 SDKs), Fixed from the first outbound draft, Guard the money, not just the door 💸, Release Notes, Unreleased (v0.2.0-dev) — July 4, 2026 (outbound transport, all 3 SDKs)
+Cohesion: 0.25
+Nodes (3): Earlier July 4, 2026 (late-night wiring release), Everything advertised is now reachable 🔌, Release Notes
 
 ### Community 72 - "v0.1.0"
 Cohesion: 0.33
@@ -498,8 +505,8 @@ Cohesion: 0.67
 Nodes (3): upstreamId, description, type
 
 ### Community 96 - "LoopDetector"
-Cohesion: 0.08
-Nodes (15): BoundedCache, K, V, Small thread-safe LRU cache for hot-path state., _FingerprintEntry, LoopDetector, Any, Fingerprint and check in one call. (+7 more)
+Cohesion: 0.06
+Nodes (24): BoundedCache, K, V, Small thread-safe LRU cache for hot-path state., _FingerprintEntry, LoopDetector, Any, Fingerprint and check in one call. (+16 more)
 
 ### Community 97 - "Fingerprint"
 Cohesion: 0.08
@@ -518,12 +525,12 @@ Cohesion: 0.23
 Nodes (14): Key, Metrics, checkIntAttr(), checkStringAttr(), T, Time, metricDataByName(), metricHasCountValue() (+6 more)
 
 ### Community 101 - "middleware_test.go"
-Cohesion: 0.50
-Nodes (4): Go, Middleware Adapters, Node.js, Python
+Cohesion: 0.24
+Nodes (9): create_mcp_tools(), mcp_call(), MCPTool, MCPToolResult, MCP (Model Context Protocol) Tools + Loop Detector — Agent-Native Rate Limit Awa, A tool that AI agents can call via the Model Context Protocol., Standard MCP tool response: a list of content blocks., Build the RateGuard MCP tool set bound to a runtime.      Agents call these tool (+1 more)
 
 ### Community 103 - "New"
-Cohesion: 0.67
-Nodes (3): description, type, model
+Cohesion: 0.33
+Nodes (4): denialPayload, FastifyLikeReply, writeDeniedReply(), FakeFastifyReply
 
 ### Community 104 - "SDK"
 Cohesion: 0.20
@@ -538,28 +545,24 @@ Cohesion: 0.29
 Nodes (6): CircuitBreakerState, Context, Request, Time, tokenBudgetDecision, TokenUsage
 
 ### Community 107 - "New"
-Cohesion: 0.47
-Nodes (9): T, TestMCPCall(), TestMCPCheckLoop(), TestMCPGetCircuitBreakerState(), TestMCPGetRateLimitState(), TestMCPGetRateLimitStateDoesNotConsume(), TestMCPListLimits(), TestMCPTools() (+1 more)
+Cohesion: 0.24
+Nodes (17): T, TestMCPCall(), TestMCPCheckLoop(), TestMCPGetCircuitBreakerState(), TestMCPGetRateLimitState(), TestMCPGetRateLimitStateDoesNotConsume(), TestMCPListLimits(), TestMCPTools() (+9 more)
 
 ### Community 108 - "outbound.py"
-Cohesion: 0.24
-Nodes (8): create_httpx_transport(), detect_llm_call(), _google_model_from_path(), Outbound GenAI transport — matching Go's outbound.go and Node's outbound.ts.  In, Build a sync httpx transport with outbound GenAI tracking.      Usage:         t, Classify an outbound request. Returns None for non-LLM traffic., format_retry_after_ms(), test_detect_llm_call_matrix()
-
-### Community 109 - "wiring_test.go"
-Cohesion: 0.39
-Nodes (8): T, TestMetricsExposeRuntimeCounters(), TestMiddlewareGuardrails(), TestMiddlewareLoopDetection(), TestMiddlewareLoopDetectionMaxDepth(), TestMiddlewareStandardRateLimitHeaders(), TestReserveWithEstimateAllowsConcurrency(), TestResponseRecorderCapsBuffering()
+Cohesion: 0.11
+Nodes (20): create_httpx_async_transport(), create_httpx_transport(), detect_llm_call(), _extract_sse_usage(), FallbackProvider, _google_model_from_path(), OutboundCall, _OutboundCore (+12 more)
 
 ### Community 110 - "runMCPSession"
 Cohesion: 0.54
 Nodes (7): SDK, T, runMCPSession(), TestMCPServerHandshakeAndToolsList(), TestMCPServerToolErrorInBand(), TestMCPServerToolsCall(), TestMCPServerUnknownMethod()
 
 ### Community 111 - "prometheus.py"
-Cohesion: 0.40
-Nodes (4): prometheus_text(), PolicyPreset, Prometheus /metrics endpoint — zero dependencies, stdlib only.  Exposes RateGuar, Generate Prometheus exposition format text for RateGuard metrics.
+Cohesion: 0.29
+Nodes (7): Anthropic SDK, CrewAI — honest status, LangChain / LangGraph, OpenAI Agents SDK, OpenAI SDK, Pydantic AI, Python (async-first — agent frameworks run on `httpx.AsyncClient`)
 
 ### Community 112 - "Outbound GenAI Transport"
-Cohesion: 0.50
-Nodes (4): Go, Node, Outbound GenAI Transport, Python
+Cohesion: 0.40
+Nodes (5): Async transport + framework integrations 🆕, Extractor correctness fixes (all 3 SDKs), Fixed from the first outbound draft, Guard the money, not just the door 💸, Unreleased (v0.2.0-dev) — July 4, 2026 (outbound transport, all 3 SDKs)
 
 ### Community 113 - "provider"
 Cohesion: 0.67
@@ -569,20 +572,28 @@ Nodes (3): provider, description, type
 Cohesion: 0.67
 Nodes (3): tenantId, description, type
 
+### Community 119 - "peerDependencies"
+Cohesion: 0.40
+Nodes (5): peerDependencies, express, fastify, hono, next
+
+### Community 120 - "routeId"
+Cohesion: 0.67
+Nodes (3): routeId, description, type
+
 ## Knowledge Gaps
-- **348 isolated node(s):** `$schema`, `$id`, `title`, `description`, `type` (+343 more)
+- **362 isolated node(s):** `$schema`, `$id`, `title`, `description`, `type` (+357 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **16 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `TokenBudgetMode` connect `MemoryLimiter` to `config.py`, `types.ts`, `config.ts`?**
-  _High betweenness centrality (0.287) - this node is a cross-community bridge._
+  _High betweenness centrality (0.302) - this node is a cross-community bridge._
 - **Why does `Config` connect `MemoryLimiter` to `SDK`, `New`, `fastify.ts`?**
-  _High betweenness centrality (0.281) - this node is a cross-community bridge._
-- **Why does `New()` connect `New` to `SDK`, `Fingerprint`, `genaiObserver`, `redis_limiter_test.go`, `observability_test.go`, `MemoryLimiter`, `circuitBreaker`, `EventEnvelope`, `SDK`, `fastify.ts`, `runMCPSession`, `wiring_test.go`, `New`, `.Hijack`, `events.go`?**
-  _High betweenness centrality (0.237) - this node is a cross-community bridge._
+  _High betweenness centrality (0.282) - this node is a cross-community bridge._
+- **Why does `New()` connect `New` to `SDK`, `Fingerprint`, `genaiObserver`, `redis_limiter_test.go`, `observability_test.go`, `MemoryLimiter`, `circuitBreaker`, `EventEnvelope`, `SDK`, `fastify.ts`, `runMCPSession`, `New`, `.Hijack`, `events.go`?**
+  _High betweenness centrality (0.236) - this node is a cross-community bridge._
 - **Are the 48 inferred relationships involving `New()` (e.g. with `newBoundedCache()` and `TestHTTPMiddlewareRejectsWhenCircuitOpen()`) actually correct?**
   _`New()` has 48 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 22 inferred relationships involving `RateGuard` (e.g. with `RateGuardException` and `RateGuardRuntime`) actually correct?**
