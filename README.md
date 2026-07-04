@@ -29,6 +29,8 @@ Every other rate limiting tool was built for REST APIs. RateGuard was built for 
 | **Prometheus metrics** | Go `/metrics` endpoint with live counters; Node/Python expose zero-dependency exposition helpers. |
 | **Streaming-aware** | SSE bytes pass through untouched while usage, TTFT, and TPOT are extracted on the side. Bounded memory, always. |
 | **12 models priced** | Pricing table for GPT-4o, GPT-4.1, Claude, Gemini, Llama, and DeepSeek families. Unknown models return `$0.00`; verify provider pages before release. |
+| **Adaptive rate limiting** (Go) | Opt-in AIMD controller auto-tunes the effective limit from observed upstream error rate — grows on healthy traffic, cuts before the circuit breaker has to trip. |
+| **Semantic caching** (Go) | Bring your own `Embedder` (OpenAI/Cohere/Voyage embeddings, a local model — anything). A cosine-similarity hit skips the network call, breaker, and budget entirely. Streaming requests always bypass it. |
 
 ## Guard the money, not just the door
 

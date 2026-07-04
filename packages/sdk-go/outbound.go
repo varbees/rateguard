@@ -58,6 +58,12 @@ type OutboundOptions struct {
 	// DisableRateLimit skips the outbound per-provider request limiter
 	// (budgets and breakers still apply).
 	DisableRateLimit bool
+	// SemanticCache enables semantic response caching for this transport.
+	// nil (default) disables it entirely — no embedding calls, no memory
+	// overhead. A hit skips the network call, the rate limiter, the circuit
+	// breaker, and the token budget entirely: it is a real dollar saved, not
+	// just a faster response. Streaming requests always bypass the cache.
+	SemanticCache *SemanticCacheOptions
 }
 
 const (
@@ -77,9 +83,10 @@ type outboundCall struct {
 }
 
 type genaiTransport struct {
-	next http.RoundTripper
-	sdk  *SDK
-	opts OutboundOptions
+	next  http.RoundTripper
+	sdk   *SDK
+	opts  OutboundOptions
+	cache *semanticCache
 
 	mu       sync.Mutex
 	breakers map[string]*circuitBreaker
@@ -107,10 +114,17 @@ func (s *SDK) Transport(next http.RoundTripper, opts ...OutboundOptions) http.Ro
 	if options.EstimatedTokens < 0 {
 		options.EstimatedTokens = 0 // strict: reserve the entire remaining budget
 	}
+
+	var cache *semanticCache
+	if options.SemanticCache != nil && options.SemanticCache.Embedder != nil {
+		cache = newSemanticCache(*options.SemanticCache, s.clock)
+	}
+
 	return &genaiTransport{
 		next:     next,
 		sdk:      s,
 		opts:     options,
+		cache:    cache,
 		breakers: make(map[string]*circuitBreaker),
 	}
 }
@@ -173,7 +187,81 @@ func (t *genaiTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		call.Model = modelFromRequestBody(body)
 	}
 
+	if t.cache != nil && !isStreamingRequestBody(body) {
+		return t.executeWithCache(req, body, call)
+	}
+
 	return t.execute(req, body, call, 0)
+}
+
+// executeWithCache checks the semantic cache before making the real call and
+// stores a fresh successful response afterward. A hit bypasses execute
+// entirely — no breaker check, no rate limit, no token budget, no network
+// call, because the whole point is that nothing was actually spent.
+func (t *genaiTransport) executeWithCache(req *http.Request, body []byte, call *outboundCall) (*http.Response, error) {
+	scope := call.Provider + ":" + nonEmpty(call.Model, "default")
+	prompt := promptTextFromRequestBody(body)
+	if prompt == "" {
+		return t.execute(req, body, call, 0)
+	}
+
+	embedding, err := t.cache.embed(req.Context(), prompt)
+	if err != nil || len(embedding) == 0 {
+		// Embedding failure degrades to a real call — caching is a cost
+		// optimization, never a reason to fail the request.
+		return t.execute(req, body, call, 0)
+	}
+
+	if cached, ok := t.cache.lookup(scope, embedding); ok {
+		t.sdk.metrics.semanticCacheHits.Add(1)
+		return cachedResponseToHTTP(req, cached), nil
+	}
+	t.sdk.metrics.semanticCacheMisses.Add(1)
+
+	resp, err := t.execute(req, body, call, 0)
+	if err != nil || resp == nil || resp.StatusCode != http.StatusOK || isSSEResponse(resp) {
+		return resp, err
+	}
+	if resp.Header.Get("X-RateGuard-Synthesized") == "true" {
+		return resp, err // a rejection we synthesized ourselves — never cache it
+	}
+
+	buffered, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if readErr != nil {
+		// Body already consumed by the read attempt; nothing left to hand
+		// back. This path is only reachable on an I/O error, not normally.
+		return nil, fmt.Errorf("rateguard: read response for semantic cache: %w", readErr)
+	}
+
+	t.cache.store(scope, embedding, cachedLLMResponse{
+		statusCode: resp.StatusCode,
+		header:     resp.Header.Clone(),
+		body:       buffered,
+	})
+	resp.Body = io.NopCloser(bytes.NewReader(buffered))
+	return resp, nil
+}
+
+// cachedResponseToHTTP replays a cached response, marked so callers and
+// observability can tell it apart from a live provider call.
+func cachedResponseToHTTP(req *http.Request, cached cachedLLMResponse) *http.Response {
+	header := cached.header.Clone()
+	if header == nil {
+		header = http.Header{}
+	}
+	header.Set("X-RateGuard-Cache", "hit")
+	return &http.Response{
+		StatusCode:    cached.statusCode,
+		Status:        fmt.Sprintf("%d %s", cached.statusCode, http.StatusText(cached.statusCode)),
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Header:        header,
+		Body:          io.NopCloser(bytes.NewReader(cached.body)),
+		ContentLength: int64(len(cached.body)),
+		Request:       req,
+	}
 }
 
 // execute performs the call against the current provider, falling back

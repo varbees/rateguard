@@ -55,6 +55,9 @@ type Config struct {
     LoopDetection        bool            // agent loop detection via X-Sequence-Depth header
     LoopMaxDepth         int             // max agent sequence depth (default 50)
     MaxBufferedResponseBytes int         // cap response buffering for token extraction (default 1 MiB)
+
+    AdaptiveRateLimit    bool            // opt-in AIMD auto-tuning (Go) — see Adaptive Rate Limiting
+    Adaptive             AdaptiveOptions // controller tuning; zero value = documented defaults
 }
 ```
 
@@ -137,6 +140,72 @@ Semantics:
 - Budget scope: `{tenant}:{provider}:{model}:outbound`, reserve → commit actual usage. Calls pass while any budget remains; the final call may overshoot (actual usage is only known post-response), then everything blocks until the window rolls.
 - Fallback: OpenAI-compatible endpoints only (same request schema). Credentials never transfer across providers; chain entries follow the OpenAI-SDK convention (baseURL owns the version prefix). Retargeted responses carry `X-RateGuard-Fallback: true`.
 - Streaming: SSE bytes pass through untouched; usage extracted from a bounded side-scan (OpenAI `usage:null` intermediates and Anthropic split usage handled).
+
+## Semantic Caching (Go)
+
+Cache LLM responses by meaning, not exact text — a prompt that means the same thing as one already
+answered can skip the network call, the circuit breaker, and the token budget entirely.
+
+RateGuard does not bundle an embedding model — that would mean shipping (or requiring) an ONNX
+runtime, a hosted embeddings dependency, or a Python sidecar, exactly the kind of infrastructure
+RateGuard's "zero infrastructure, zero added attack surface" positioning exists to avoid. Instead,
+`Embedder` is a one-method interface: bring the OpenAI/Cohere/Voyage embeddings API, a local
+sentence-transformer binding, or anything else that turns text into a vector.
+
+```go
+type Embedder interface {
+    Embed(ctx context.Context, text string) ([]float32, error)
+}
+
+client := rg.WrapClient(&http.Client{}, rateguard.OutboundOptions{
+    SemanticCache: &rateguard.SemanticCacheOptions{
+        Embedder:            myEmbedder,       // required — no default
+        SimilarityThreshold: 0.92,             // default 0.92
+        TTL:                 time.Hour,        // default 1h
+        MaxEntriesPerScope:  500,              // default 500, oldest-first eviction
+    },
+})
+```
+
+Semantics:
+- Scoped per `{provider}:{model}` — a cache entry for `openai:gpt-4o` never serves a
+  `anthropic:claude-opus-4-5` request, even with an identical prompt.
+- A hit is marked with `X-RateGuard-Cache: hit` on the response so callers and observability can
+  tell it apart from a live call.
+- **Streaming requests are never cached** (`"stream": true` in the body bypasses the cache
+  entirely, both lookup and store) — replaying a cached body as a fabricated SSE stream would
+  misrepresent TTFT/TPOT to the caller.
+- Only successful (HTTP 200), non-synthesized responses are stored — a provider error or a
+  RateGuard-synthesized 429/503 rejection is never cached.
+- An `Embedder` error degrades to a real call; caching is a cost optimization, never a reason to
+  fail a request.
+- Prompt extraction understands OpenAI- and Anthropic-shaped chat bodies (`messages[].content` as
+  a string or as typed parts, plus Anthropic's top-level `system` field); non-text parts
+  (images, audio) are ignored for embedding purposes.
+
+## Adaptive Rate Limiting (Go)
+
+Static rate limits are a guess. `AdaptiveLimiter` wraps the configured limiter and auto-tunes the
+effective policy from the same success/failure signal the circuit breaker already observes — an
+AIMD controller (the same shape TCP congestion control uses): additive growth on healthy traffic,
+multiplicative cut once the error-rate EMA crosses 80% of the target, so the limiter sheds load
+*before* the breaker has to trip.
+
+```go
+rg := rateguard.New(rateguard.Config{
+    Preset:            "llm-heavy",
+    AdaptiveRateLimit: true,
+    Adaptive: rateguard.AdaptiveOptions{
+        TargetErrorRate: 0.05, // default
+        MinFactor:       0.25, // floor: 25% of configured policy
+        MaxFactor:       2.0,  // ceiling: 200% of configured policy
+    },
+})
+```
+
+The configured policy (preset or explicit RPS/burst) is always the anchor — the controller scales
+it within `[MinFactor, MaxFactor]`, never replaces it. `Peek` scales identically to `Allow`, so
+agent pre-flight answers stay honest while the limit is being adjusted.
 
 ## MCP Tools (agent pre-flight)
 

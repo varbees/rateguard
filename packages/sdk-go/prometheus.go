@@ -90,6 +90,8 @@ type atomicMetrics struct {
 	tokensConsumed       atomic.Int64
 	outboundCalls        atomic.Int64
 	outboundFallbacks    atomic.Int64
+	semanticCacheHits    atomic.Int64
+	semanticCacheMisses  atomic.Int64
 }
 
 func (m *atomicMetrics) prometheusText() string {
@@ -114,7 +116,13 @@ func (m *atomicMetrics) prometheusText() string {
 			"rateguard_outbound_calls_total %d\n"+
 			"# HELP rateguard_outbound_fallbacks_total Provider fallback events\n"+
 			"# TYPE rateguard_outbound_fallbacks_total counter\n"+
-			"rateguard_outbound_fallbacks_total %d\n",
+			"rateguard_outbound_fallbacks_total %d\n"+
+			"# HELP rateguard_semantic_cache_hits_total Outbound calls served from the semantic cache\n"+
+			"# TYPE rateguard_semantic_cache_hits_total counter\n"+
+			"rateguard_semantic_cache_hits_total %d\n"+
+			"# HELP rateguard_semantic_cache_misses_total Outbound calls that missed the semantic cache\n"+
+			"# TYPE rateguard_semantic_cache_misses_total counter\n"+
+			"rateguard_semantic_cache_misses_total %d\n",
 		m.totalRequests.Load(),
 		m.rateLimitHits.Load(),
 		m.tokenBudgetExhausted.Load(),
@@ -122,5 +130,7 @@ func (m *atomicMetrics) prometheusText() string {
 		m.tokensConsumed.Load(),
 		m.outboundCalls.Load(),
 		m.outboundFallbacks.Load(),
+		m.semanticCacheHits.Load(),
+		m.semanticCacheMisses.Load(),
 	)
 }
