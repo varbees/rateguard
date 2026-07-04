@@ -1,0 +1,36 @@
+[build-system]
+requires = []
+build-backend = "build_backend"
+backend-path = ["."]
+
+[project]
+name = "varbees-rateguard"
+version = "0.1.0"
+description = "Python middleware SDK for RateGuard"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/varbees/rateguard/tree/main/packages/sdk-python"
+Repository = "https://github.com/varbees/rateguard"
+Issues = "https://github.com/varbees/rateguard/issues"
+
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.100.0", "starlette>=0.27.0"]
+flask = ["flask>=2.0.0"]
+django = ["django>=4.0"]
+dev = ["pytest", "pytest-asyncio", "httpx", "anyio", "mypy", "openai", "anthropic"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_any_generics = true
+no_implicit_optional = true
+show_error_codes = true

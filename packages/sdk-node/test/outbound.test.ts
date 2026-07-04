@@ -1,0 +1,211 @@
+import { describe, it, expect } from 'vitest';
+
+import { RateGuard } from '../src/index.js';
+import { detectLLMCall } from '../src/core/outbound.js';
+
+// Mirrors Go's outbound_test.go: the wrapper must track real usage, block on
+// exhausted budgets, fall back across OpenAI-compatible providers, and leave
+// non-LLM traffic and streamed bytes untouched.
+
+const openAIBody = (model: string, prompt: number, completion: number): string =>
+  JSON.stringify({
+    id: 'cmpl-1',
+    model,
+    choices: [{ message: { content: 'hi' } }],
+    usage: { prompt_tokens: prompt, completion_tokens: completion, total_tokens: prompt + completion },
+  });
+
+const jsonResponse = (body: string): Response =>
+  new Response(body, { status: 200, headers: { 'content-type': 'application/json' } });
+
+describe('detectLLMCall', () => {
+  it('classifies the provider matrix like the Go SDK', () => {
+    const cases: Array<[string, string, boolean]> = [
+      ['https://api.openai.com/v1/chat/completions', 'openai', true],
+      ['https://api.anthropic.com/v1/messages', 'anthropic', false],
+      ['https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', 'google', true],
+      ['https://myres.openai.azure.com/openai/deployments/gpt4o/chat/completions', 'azure_openai', true],
+      ['https://bedrock-runtime.us-east-1.amazonaws.com/model/meta.llama3-70b/invoke', 'aws_bedrock', false],
+      ['https://api.groq.com/openai/v1/chat/completions', 'groq', true],
+      ['https://my-vllm.internal:8000/v1/chat/completions', 'my-vllm.internal', true],
+    ];
+    for (const [url, provider, compatible] of cases) {
+      const call = detectLLMCall(new URL(url));
+      expect(call, url).toBeDefined();
+      expect(call!.provider, url).toBe(provider);
+      expect(call!.compatible, url).toBe(compatible);
+    }
+    expect(detectLLMCall(new URL('https://api.stripe.com/v1/charges'))).toBeUndefined();
+  });
+});
+
+describe('wrapFetch', () => {
+  it('tracks real JSON usage into the token budget', async () => {
+    const rg = new RateGuard({ preset: 'dev', tokenBudget: { hourLimit: 10_000 } });
+    const wrapped = rg.wrapFetch({
+      fetch: (async () => jsonResponse(openAIBody('gpt-4o', 100, 50))) as typeof fetch,
+    });
+
+    const resp = await wrapped('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'gpt-4o', messages: [] }),
+    });
+    expect(resp.status).toBe(200);
+    const body = await resp.text();
+    expect(body).toContain('"total_tokens":150');
+
+    const budgetKey = `${rg.runtime.config.tenantId}:openai:gpt-4o:outbound`;
+    const usage = rg.runtime.tokenBudget.usage(budgetKey, rg.runtime.config.tokenBudget);
+    expect(usage.hour).toBe(150);
+  });
+
+  it('extracts usage from OpenAI-style SSE with usage:null intermediates', async () => {
+    const sse = [
+      'data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{"content":"He"}}],"usage":null}',
+      '',
+      'data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{"content":"llo"}}],"usage":null}',
+      '',
+      'data: {"id":"c1","model":"gpt-4o","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":25,"total_tokens":35}}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+
+    const rg = new RateGuard({ preset: 'dev', tokenBudget: { hourLimit: 10_000 } });
+    const wrapped = rg.wrapFetch({
+      fetch: (async () =>
+        new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } })) as typeof fetch,
+    });
+
+    const resp = await wrapped('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'gpt-4o', stream: true }),
+    });
+
+    // Caller receives the exact SSE payload.
+    const received = await resp.text();
+    expect(received).toBe(sse);
+
+    // Scan side settles asynchronously.
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const budgetKey = `${rg.runtime.config.tenantId}:openai:gpt-4o:outbound`;
+    const usage = rg.runtime.tokenBudget.usage(budgetKey, rg.runtime.config.tokenBudget);
+    expect(usage.hour).toBe(35);
+  });
+
+  it('merges Anthropic split usage with max semantics', async () => {
+    const sse = [
+      'event: message_start',
+      'data: {"type":"message_start","message":{"id":"m1","model":"claude-sonnet-4","usage":{"input_tokens":42,"output_tokens":1}}}',
+      '',
+      'event: message_delta',
+      'data: {"type":"message_delta","usage":{"output_tokens":88}}',
+      '',
+    ].join('\n');
+
+    const rg = new RateGuard({ preset: 'dev', tokenBudget: { hourLimit: 10_000 } });
+    const wrapped = rg.wrapFetch({
+      fetch: (async () =>
+        new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } })) as typeof fetch,
+    });
+
+    const resp = await wrapped('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'claude-sonnet-4', stream: true }),
+    });
+    await resp.text();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const budgetKey = `${rg.runtime.config.tenantId}:anthropic:claude-sonnet-4:outbound`;
+    const usage = rg.runtime.tokenBudget.usage(budgetKey, rg.runtime.config.tokenBudget);
+    // 42 input + max(1, 88) output = 130 — summing would give 131.
+    expect(usage.hour).toBe(130);
+  });
+
+  it('blocks with a synthesized 429 when the budget is exhausted', async () => {
+    const rg = new RateGuard({ preset: 'dev', tokenBudget: { hourLimit: 600 } });
+    const wrapped = rg.wrapFetch({
+      fetch: (async () => jsonResponse(openAIBody('gpt-4o', 400, 100))) as typeof fetch,
+    });
+
+    const send = () =>
+      wrapped('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4o' }),
+      });
+
+    expect((await send()).status).toBe(200);
+    expect((await send()).status).toBe(200); // 100 of 600 remains
+    const blocked = await send(); // used 1000 of 600 — exhausted
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get('x-rateguard-synthesized')).toBe('true');
+  });
+
+  it('observe mode never blocks but still meters', async () => {
+    const rg = new RateGuard({ preset: 'dev', tokenBudget: { hourLimit: 100 } });
+    const wrapped = rg.wrapFetch({
+      mode: 'observe',
+      fetch: (async () => jsonResponse(openAIBody('gpt-4o', 400, 100))) as typeof fetch,
+    });
+
+    for (let i = 0; i < 3; i++) {
+      const resp = await wrapped('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4o' }),
+      });
+      expect(resp.status).toBe(200);
+    }
+    const budgetKey = `${rg.runtime.config.tenantId}:openai:gpt-4o:outbound`;
+    expect(rg.runtime.tokenBudget.usage(budgetKey, rg.runtime.config.tokenBudget).hour).toBe(1500);
+  });
+
+  it('falls back to the next OpenAI-compatible provider on 429', async () => {
+    const seen: Array<{ url: string; auth: string | null; model: string }> = [];
+    const mockFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = typeof init?.body === 'string' ? init.body : '';
+      const headers = new Headers(init?.headers);
+      seen.push({ url, auth: headers.get('authorization'), model: JSON.parse(body || '{}').model ?? '' });
+      if (body.includes('deepseek-chat')) {
+        return jsonResponse(openAIBody('deepseek-chat', 10, 5));
+      }
+      return new Response('{"error":{"message":"rate limited"}}', { status: 429 });
+    }) as typeof fetch;
+
+    const rg = new RateGuard({ preset: 'dev' });
+    const wrapped = rg.wrapFetch({
+      fetch: mockFetch,
+      chain: [
+        { name: 'deepseek', model: 'deepseek-chat', baseURL: 'https://api.deepseek.com/v1', headers: { Authorization: 'Bearer fallback-key' }, weight: 0 },
+      ],
+    });
+
+    const resp = await wrapped('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer primary-key' },
+      body: JSON.stringify({ model: 'gpt-4o', messages: [] }),
+    });
+
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('x-rateguard-fallback')).toBe('true');
+    expect(seen).toHaveLength(2);
+    expect(seen[1]!.url).toBe('https://api.deepseek.com/v1/chat/completions');
+    expect(seen[1]!.auth).toBe('Bearer fallback-key');
+    expect(seen[1]!.model).toBe('deepseek-chat');
+  });
+
+  it('passes non-LLM traffic through untouched', async () => {
+    let baseCalls = 0;
+    const rg = new RateGuard({ preset: 'dev' });
+    const wrapped = rg.wrapFetch({
+      fetch: (async () => {
+        baseCalls++;
+        return new Response('plain');
+      }) as typeof fetch,
+    });
+
+    const resp = await wrapped('https://example.com/healthz');
+    expect(await resp.text()).toBe('plain');
+    expect(baseCalls).toBe(1);
+  });
+});
