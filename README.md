@@ -16,18 +16,41 @@ Every other rate limiting tool was built for REST APIs. RateGuard was built for 
 
 | Capability | What it means |
 |---|---|
+| **Outbound spend tracking** | Wrap the HTTP client your LLM SDK already uses (`http.Client`/`fetch`/`httpx`). Real token usage from every provider response — JSON and SSE streaming — metered into budgets. |
+| **Provider fallback** | Automatic failover across OpenAI-compatible providers (DeepSeek, Groq, Cerebras, vLLM, ...) on 429/5xx/breaker-open, with credential isolation. Honest scope: cross-schema fallback is impossible at the transport layer and not claimed. |
 | **Rate limiting** | Token bucket algorithm (RFC standard). Configurable per-tenant, per-route, per-provider. |
 | **Pre-flight queries** | `Peek` semantics everywhere: agents ask "can I make this call?" without consuming budget. |
 | **MCP server** | 5 MCP tools + zero-dependency stdio server (Go). Any MCP client — Claude Code, Cursor, custom agents — can query limits before calling. |
 | **Loop detection** | SHA-256 payload fingerprinting halts runaway agent loops. Wired into middleware via `X-Sequence-Depth`. |
 | **Token budgets** | Hourly, daily, monthly limits on LLM token consumption. Hard-stop or soft-stop (queue). Estimate-based reservations keep concurrency high. |
-| **Circuit breakers** | Automatic upstream protection. Closed → Open → Half-Open state machine. |
+| **Circuit breakers** | Per-provider on outbound, per-upstream on inbound. Closed → Open → Half-Open state machine. |
 | **GenAI observability** | OpenTelemetry `gen_ai.*` spans per semconv: `{operation} {model}` span names, input/output token attributes, low-cardinality `error.type`. |
-| **Provider chain** | Fallback routing decisions when a provider fails. Your app performs the call; the chain picks the next provider. |
 | **Content guardrails** | PII detection, prompt injection detection, token/length limits. Wired into middleware — violations return 422. |
-| **Prometheus metrics** | `/metrics` endpoint with live request/rate-limit/budget/breaker/loop counters. Zero deps. |
-| **Streaming-aware** | Tracks SSE chunks, TTFT, and TPOT for streaming LLM calls. Response buffering capped at 1 MiB. |
+| **Prometheus metrics** | `/metrics` endpoint with live request/rate-limit/budget/breaker/loop/outbound counters. Zero deps. |
+| **Streaming-aware** | SSE bytes pass through untouched while usage, TTFT, and TPOT are extracted on the side. Bounded memory, always. |
 | **14 models priced** | Verified against provider pricing pages. GPT-4o, o3, Claude Opus 4.5, Gemini 2.5, Llama, DeepSeek. Auto cost estimation. |
+
+## Guard the money, not just the door
+
+Inbound middleware protects your API. But real LLM spend happens on **outbound** calls — and RateGuard rides the HTTP client your LLM SDK already uses. Not a proxy. Not a new service. No YAML, no Redis, no new attack surface.
+
+```go
+// Go — one line
+client := rg.WrapClient(&http.Client{})
+openai := openai.NewClient(option.WithHTTPClient(client))
+```
+
+```ts
+// Node — one line
+const client = new OpenAI({ fetch: rg.wrapFetch() });
+```
+
+```python
+# Python — one line (OpenAI + Anthropic SDKs run on httpx)
+client = OpenAI(http_client=rg.wrap_httpx_client())
+```
+
+Every call through the wrapped client is budgeted, breaker-protected per provider, and metered with **real** token usage — including streaming (OpenAI `usage:null` intermediates and Anthropic's split `message_start`/`message_delta` shapes are handled correctly). 16 provider hosts detected out of the box, plus Azure OpenAI, Bedrock, Vertex, and any self-hosted OpenAI-compatible server.
 
 ## Quick Start
 
@@ -106,6 +129,7 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 |---|---|---|---|---|
 | Multi-language | ✅ Go+Node+Python | ❌ JS only | ❌ Python only | ❌ |
 | Zero infrastructure | ✅ Middleware | ✅ | ❌ Proxy required | ❌ Gateway |
+| In-process outbound spend tracking | ✅ Client wrapper | ❌ | ❌ Proxy only | ❌ |
 | Agent pre-flight queries (MCP) | ✅ 5 tools + stdio server | ❌ | ❌ | ❌ |
 | Agent loop detection | ✅ | ❌ | ❌ | ❌ |
 | LLM token budgets | ✅ | ❌ | ✅ | ❌ |

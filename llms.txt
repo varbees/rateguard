@@ -1,5 +1,12 @@
 # RateGuard — AI-Native Rate Limiting SDK
-> Go, Node.js, Python middleware. Pre-flight rate limit queries for AI agents (MCP), token budgets, GenAI OTel, circuit breakers, loop detection, guardrails. No proxy needed.
+> Go, Node.js, Python middleware. Outbound LLM spend tracking (wrap your SDK's HTTP client), pre-flight rate limit queries for AI agents (MCP), token budgets, GenAI OTel, circuit breakers, provider fallback, loop detection, guardrails. No proxy needed.
+
+## Outbound spend tracking (the headline)
+Wrap the HTTP client your LLM SDK already uses — real token usage (JSON + SSE streaming) metered into budgets, per-provider circuit breakers, OpenAI-compatible fallback:
+- Go: `client := rg.WrapClient(&http.Client{})` → `openai.NewClient(option.WithHTTPClient(client))`
+- Node: `new OpenAI({ fetch: rg.wrapFetch() })`
+- Python: `OpenAI(http_client=rg.wrap_httpx_client())` (httpx lazy import, zero runtime deps kept)
+Detects 16 OpenAI-compatible hosts + Anthropic, Gemini, Vertex, Azure OpenAI, AWS Bedrock, self-hosted vLLM/llama.cpp. Enforce mode synthesizes provider-native 429/503 (SDK retry logic just works); observe mode only meters.
 
 ## Quick Start
 
@@ -60,7 +67,7 @@ Every limiter also implements Peek — a non-consuming pre-flight query.
 - Redis distributed limiter: atomic Lua GCRA, read-only peek script (Go)
 
 ## Tests
-All 3 SDKs green: `go test ./...` (51 passing), `bun run test` (38 passing), `pytest -q` (34 passing)
+All 3 SDKs green — 150 total: `go test ./...` (61 passing), `bun run test` (46 passing), `pytest -q` (43 passing)
 
 ## Docs
 - AGENTS.md: full agent contract with architecture, domain types, rules, commands

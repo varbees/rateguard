@@ -95,6 +95,47 @@ app.wsgi_app = rg.wsgi_middleware(app.wsgi_app)
 async def my_endpoint(request): ...
 ```
 
+## Outbound GenAI Transport
+
+Wrap the HTTP client your LLM SDK already uses. Every LLM call is budgeted, breaker-protected per provider, and metered with real token usage (JSON and SSE streaming).
+
+### Go
+```go
+rg := rateguard.New(rateguard.Config{Preset: "llm-heavy", TokenBudgetPerHour: 1_000_000})
+client := rg.WrapClient(&http.Client{})                  // or rg.Transport(next, opts)
+openai := openai.NewClient(option.WithHTTPClient(client))
+
+// With fallback across OpenAI-compatible providers:
+client = rg.WrapClient(nil, rateguard.OutboundOptions{
+    Chain: rateguard.NewProviderChain(
+        rateguard.Provider("openai", "gpt-4o", "https://api.openai.com/v1"),
+        rateguard.ProviderEntry{Name: "deepseek", Model: "deepseek-chat",
+            BaseURL: "https://api.deepseek.com/v1",
+            Headers: map[string]string{"Authorization": "Bearer " + deepseekKey}},
+    ),
+})
+```
+
+### Node
+```ts
+const rg = new RateGuard({ preset: 'llm-heavy' });
+const client = new OpenAI({ fetch: rg.wrapFetch() });
+// Options: { mode: 'enforce' | 'observe', chain: ProviderEntry[], fetch }
+```
+
+### Python
+```python
+rg = RateGuard(preset="llm-heavy")
+client = OpenAI(http_client=rg.wrap_httpx_client())   # httpx imported lazily
+# Advanced: create_httpx_transport(rg.runtime, mode="observe", chain=[FallbackProvider(...)])
+```
+
+Semantics:
+- **enforce** (default): exhausted budgets / open breakers synthesize provider-native 429/503 responses with `Retry-After` and `X-RateGuard-Synthesized: true` — your SDK's retry logic handles them natively. **observe**: never blocks, only meters.
+- Budget scope: `{tenant}:{provider}:{model}:outbound`, reserve → commit actual usage. Calls pass while any budget remains; the final call may overshoot (actual usage is only known post-response), then everything blocks until the window rolls.
+- Fallback: OpenAI-compatible endpoints only (same request schema). Credentials never transfer across providers; chain entries follow the OpenAI-SDK convention (baseURL owns the version prefix). Responses carry `X-RateGuard-Fallback: true`.
+- Streaming: SSE bytes pass through untouched; usage extracted from a bounded side-scan (OpenAI `usage:null` intermediates and Anthropic split usage handled).
+
 ## MCP Tools (agent pre-flight)
 
 Five tools, identical across Go/Node/Python. All use **peek semantics** — querying never consumes budget.

@@ -50,6 +50,11 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Loop detection (SHA-256, max-depth, LRU-bounded) | ✅ | ✅ | ✅ | `loop_detector.go` |
 | Loop detection wired into middleware (X-Sequence-Depth) | ✅ | — | — | `sdk.go` |
 | IETF RateLimit-* response headers | ✅ | — | — | `sdk.go` |
+| Outbound GenAI transport (WrapClient/wrapFetch/httpx) | ✅ | ✅ | ✅ | `outbound.go` |
+| SSE streaming usage extraction (transparent tee) | ✅ | ✅ | ✅ | `sse_usage.go` |
+| Provider fallback (OpenAI-compatible, credential-isolated) | ✅ | ✅ | ✅ | `outbound.go` |
+| Per-provider circuit breakers (outbound) | ✅ | ✅ | ✅ | `outbound.go` |
+| Provider detection (16 hosts + Azure/Bedrock/Vertex + self-hosted) | ✅ | ✅ | ✅ | `outbound.go` |
 
 ## 8 Presets
 
@@ -69,13 +74,13 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (51 passing incl. subtests)
+# Go tests (61 passing incl. subtests)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (38 passing)
+# Node tests (46 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (34 passing)
+# Python tests (43 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Graphify (codebase to knowledge graph)
@@ -97,6 +102,8 @@ opensrc path github.com/varbees/rateguard/packages/sdk-go
 8. **Model pricing must be verifiable.** Every price in the pricing table must be checkable against the provider's public pricing page as of the commit date.
 9. **A feature isn't done until it's wired.** A module that exists but isn't exported from the package entry point, isn't reachable through the middleware/facade, or isn't exercised by a test that drives the public surface is NOT a feature — don't mark it ✅ or document it as shipped. (July 2026 audit found MCP tools, guardrails, loop detection, GenAI OTel, and Prometheus counters all existed as files but were unreachable by users.)
 10. **Pre-flight queries must never consume.** Anything advertised as a "check before you call" (MCP tools, dashboards) must use Peek/read-only paths — never `Allow()`, which consumes a token, and never `breaker.Allow()`, which claims the half-open probe.
+11. **Transports must be byte-transparent.** The outbound wrapper delivers the exact bytes the provider sent — never rewrite line endings, never buffer a stream whole, never alter framing. Usage extraction happens on a bounded side-scan (see `sse_usage.go`).
+12. **Streaming usage events must be decoded individually and merged with MAX semantics.** OpenAI sends `"usage":null` in every intermediate chunk; Anthropic splits input (message_start) from output (message_delta) and repeats fields. Concatenating chunks or summing fields double-counts — all three SDKs merge per-event maxima.
 
 ## Domain types
 
