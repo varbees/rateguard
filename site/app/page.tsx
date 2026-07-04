@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://rateguard.antharmaya.com"),
   title: "RateGuard — AI-Native Rate Limiting Middleware",
   description:
     "The first agent-native rate limiting SDK. Go, Node, Python. MCP tools for pre-flight queries. Outbound transport tracking. Loop detection. Open source (MIT).",
@@ -11,12 +12,21 @@ export const metadata: Metadata = {
       "Multi-language middleware that lets AI agents query their own rate limits before making API calls. No proxy, no latency, MIT license.",
     type: "website",
     siteName: "Antharmaya Labs",
+    images: [
+      {
+        url: "/og.png",
+        width: 1280,
+        height: 640,
+        alt: "RateGuard — AI agents that know their limits. Go, Node.js, Python. MIT.",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "RateGuard — AI Agents That Know Their Limits",
     description:
       "Multi-language AI-native rate limiting middleware. Go/Node/Python. MCP tools. MIT.",
+    images: ["/og.png"],
   },
   keywords: [
     "rate limiting",
@@ -54,7 +64,15 @@ export default function Page() {
       </header>
 
       {/* Hero */}
-      <section className="max-w-4xl mx-auto px-6 pt-24 pb-16">
+      <section className="relative max-w-4xl mx-auto px-6 pt-24 pb-16">
+        {/* Shield visualization: chaotic streams becoming measured amber pulses */}
+        <img
+          src="/hero.webp"
+          alt=""
+          aria-hidden
+          className="pointer-events-none absolute -right-48 -top-8 hidden w-[720px] max-w-none opacity-70 sm:block [mask-image:linear-gradient(to_left,black_25%,transparent_80%)]"
+        />
+        <div className="relative">
         <p className="text-sm text-[#737373] mb-4 tracking-wide uppercase">
           Antharmaya Labs · Open Source · MIT
         </p>
@@ -81,6 +99,7 @@ export default function Page() {
           >
             Quick Start
           </a>
+        </div>
         </div>
       </section>
 
