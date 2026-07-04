@@ -107,8 +107,8 @@ export default function Page() {
       <section className="max-w-4xl mx-auto px-6 pb-16">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 p-6 bg-[#171717] border border-[#262626] rounded-xl">
           {[
-            ["146", "Commits"],
-            ["123", "Tests"],
+            ["155", "Commits"],
+            ["155", "Tests"],
             ["3", "Languages"],
             ["MIT", "License"],
           ].map(([value, label]) => (
@@ -139,7 +139,7 @@ export default function Page() {
             },
             {
               title: "Multi-Language Parity",
-              desc: "Go, Node.js, Python — same token bucket algorithm, same APIs, same presets. Every feature claim has passing tests. 123 tests across three SDKs, all wired end-to-end.",
+              desc: "Go, Node.js, Python — same token bucket algorithm, same APIs, same presets. Every feature claim has passing tests. 155 tests across three SDKs, all wired end-to-end.",
             },
             {
               title: "Zero Infrastructure",
@@ -187,7 +187,7 @@ X-Sequence-Depth: 3 → SHA-256 fingerprint → halted`}</code>
         <div className="bg-[#171717] border border-[#262626] rounded-xl p-8 text-center">
           <h2 className="text-2xl font-bold mb-4">Open source. MIT license. Free forever.</h2>
           <p className="text-[#a3a3a3] mb-6 max-w-lg mx-auto">
-            Built by a solo founder in India. 146 commits, 123 tests, 3 languages. Every feature is wired and tested.
+            Built by a solo founder in India. 155 commits, 155 tests, 3 languages. Every feature is wired and tested.
           </p>
           <a
             href="https://github.com/varbees/rateguard"
