@@ -103,7 +103,5 @@
   "101": "middleware_test.go",
   "102": "LoopDetector",
   "103": "New",
-  "104": "SDK",
-  "105": "EventEnvelope",
-  "106": "fakeClock"
+  "105": "EventEnvelope"
 }
