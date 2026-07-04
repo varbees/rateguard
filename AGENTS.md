@@ -45,7 +45,11 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | 8 presets | ✅ | ✅ | ✅ | `presets.go` |
 | Redis distributed limiter (atomic Lua GCRA) | ✅ | ❌ | ❌ | `redis_limiter.go` |
 | Events/webhooks | ✅ | — | — | `events.go` |
-| MCP tools (5, peek semantics) | ✅ | ✅ | ✅ | `mcp.go` |
+| MCP tools (7: rate limit, budget, breaker, loop, list, attest, verify) | ✅ | ✅ | ✅ | `mcp.go` |
+| Lock-free sharded limiter (64-way, atomic CAS) | ✅ | — | — | `sharded_limiter.go` |
+| Adaptive rate limiting (AIMD controller) | ✅ | — | — | `adaptive.go` |
+| Semantic response caching (pluggable Embedder) | ✅ | — | — | `semantic_cache.go` |
+| Budget attestation (Ed25519 delegation chains) | ✅ | — | — | `budget_attestation.go` |
 | MCP stdio server (zero-dep JSON-RPC) | ✅ | — | — | `mcp_server.go` |
 | Loop detection (SHA-256, max-depth, LRU-bounded) | ✅ | ✅ | ✅ | `loop_detector.go` |
 | Loop detection wired into middleware (X-Sequence-Depth) | ✅ | — | — | `sdk.go` |
@@ -76,7 +80,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (61 passing incl. subtests)
+# Go tests (118 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
 # Node tests (46 passing)
