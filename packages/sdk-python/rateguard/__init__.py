@@ -21,6 +21,7 @@ from .core.guardrails import (
     strict_guardrails,
 )
 from .core.mcp import LoopDetector, MCPTool, MCPToolResult, create_mcp_tools, mcp_call
+from .core.outbound import FallbackProvider, OutboundCall, create_httpx_transport, detect_llm_call
 from .core.prometheus import prometheus_text
 from .core.provider_chain import (
     ProviderChain,
@@ -128,6 +129,11 @@ __all__ = [
     "MCPToolResult",
     "create_mcp_tools",
     "mcp_call",
+    # Outbound GenAI transport
+    "FallbackProvider",
+    "OutboundCall",
+    "create_httpx_transport",
+    "detect_llm_call",
     # Prometheus
     "prometheus_text",
     # Provider chain

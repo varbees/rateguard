@@ -10,6 +10,7 @@ export * from './core/mcp.js';
 export * from './core/guardrails.js';
 export * from './core/genai.js';
 export * from './core/prometheus.js';
+export * from './core/outbound.js';
 export {
   ProviderChain,
   defaultProviderChain,
@@ -24,6 +25,7 @@ export * from './adapters/next.js';
 
 import { RateGuardRuntime } from './runtime.js';
 import { createMCPTools, mcpCall, LoopDetector, type MCPTool, type MCPToolResult } from './core/mcp.js';
+import { wrapFetch, type WrapFetchOptions } from './core/outbound.js';
 import { middleware as expressMiddleware } from './adapters/express.js';
 import { rateguardPlugin } from './adapters/fastify.js';
 import { rateguard } from './adapters/hono.js';
@@ -54,6 +56,15 @@ export class RateGuard {
   /** Execute an MCP tool by name and wrap the result as MCP content. */
   mcpCall(toolName: string, args: Record<string, unknown> = {}): Promise<MCPToolResult> {
     return mcpCall(this.mcpTools(), toolName, args);
+  }
+
+  /**
+   * Wrap fetch with outbound GenAI tracking: budgets, per-provider circuit
+   * breakers, real token usage metering, optional provider fallback.
+   * Pass the result to any LLM SDK that accepts a custom fetch.
+   */
+  wrapFetch(options: WrapFetchOptions = {}): typeof fetch {
+    return wrapFetch(this.runtime, options);
   }
 
   middleware() {

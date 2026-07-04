@@ -116,13 +116,21 @@ function safeJsonParse(text: string): JsonValue | undefined {
 }
 
 function readObjectUsage(source: JsonObject): TokenUsage | undefined {
-  const usageSource = asRecord(source.usage) ?? asRecord(source.usageMetadata) ?? source;
-  const inputTokens = firstNumber(usageSource, ['input_tokens', 'prompt_tokens', 'promptTokenCount']);
-  const outputTokens = firstNumber(usageSource, ['output_tokens', 'completion_tokens', 'candidatesTokenCount']);
-  const totalTokens = firstNumber(usageSource, ['total_tokens', 'totalTokenCount']);
+  // Anthropic streaming nests usage under message (message_start events).
+  const nestedMessage = asRecord(source.message);
+  const usageSource =
+    asRecord(source.usage) ??
+    asRecord(nestedMessage?.usage) ??
+    asRecord(source.usageMetadata) ??
+    source;
+  // Aliases cover OpenAI (prompt/completion), Anthropic (input/output),
+  // AWS Bedrock Converse (inputTokens/outputTokens — camelCase), Google.
+  const inputTokens = firstNumber(usageSource, ['input_tokens', 'prompt_tokens', 'inputTokens', 'promptTokenCount']);
+  const outputTokens = firstNumber(usageSource, ['output_tokens', 'completion_tokens', 'outputTokens', 'candidatesTokenCount']);
+  const totalTokens = firstNumber(usageSource, ['total_tokens', 'totalTokens', 'totalTokenCount']);
 
   const provider = firstString(source, ['provider', 'x_provider', 'token_provider']);
-  const model = firstString(source, ['model', 'x_model', 'token_model']);
+  const model = firstString(source, ['model', 'x_model', 'token_model']) || (nestedMessage ? firstString(nestedMessage, ['model']) : '');
 
   if (inputTokens === 0 && outputTokens === 0 && totalTokens === 0) {
     return undefined;
@@ -171,12 +179,18 @@ function firstNumber(source: JsonObject, keys: readonly string[]): number {
 }
 
 function mergeUsage(base: TokenUsage, addition: TokenUsage): TokenUsage {
+  // Max semantics, matching the Go SDK: streaming providers repeat and
+  // refine usage across events (Anthropic message_start reports
+  // output_tokens:1, the final message_delta the real count). Summing
+  // would double-count.
+  const inputTokens = Math.max(base.inputTokens, addition.inputTokens);
+  const outputTokens = Math.max(base.outputTokens, addition.outputTokens);
   return {
     provider: base.provider || addition.provider,
     model: base.model || addition.model,
-    inputTokens: base.inputTokens + addition.inputTokens,
-    outputTokens: base.outputTokens + addition.outputTokens,
-    totalTokens: base.totalTokens + addition.totalTokens,
+    inputTokens,
+    outputTokens,
+    totalTokens: Math.max(base.totalTokens, addition.totalTokens, inputTokens + outputTokens),
   };
 }
 

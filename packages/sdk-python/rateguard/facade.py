@@ -110,6 +110,37 @@ class RateGuard:
 
         return mcp_call(self.mcp_tools(), tool_name, args)
 
+    def httpx_transport(self, **kwargs) -> object:
+        """Sync httpx transport with outbound GenAI tracking.
+
+        client = httpx.Client(transport=rg.httpx_transport())
+        openai = OpenAI(http_client=client)
+        """
+        from .core.outbound import create_httpx_transport
+
+        return create_httpx_transport(self.runtime, **kwargs)
+
+    def wrap_httpx_client(self, client: object = None, **kwargs) -> object:
+        """Return an httpx.Client whose transport tracks outbound LLM calls.
+
+        Budgets, per-provider circuit breakers, and real token usage metering
+        for every LLM API call — pass the result to any SDK that accepts a
+        custom http client (OpenAI, Anthropic, ...).
+        """
+        import httpx  # lazy — not a hard dependency
+
+        transport = self.httpx_transport(**kwargs)
+        if client is None:
+            return httpx.Client(transport=transport)
+        # httpx has no public transport setter; build a fresh client that
+        # carries over the caller's configuration.
+        return httpx.Client(
+            transport=transport,
+            headers=client.headers,
+            timeout=client.timeout,
+            base_url=client.base_url,
+        )
+
     @property
     def asgi_middleware(self) -> type:
         from .adapters.asgi import RateGuardMiddleware as Middleware

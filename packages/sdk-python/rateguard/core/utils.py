@@ -121,13 +121,11 @@ def extract_token_usage_from_text(text: str) -> TokenUsage | None:
 
 
 def merge_usage(base: TokenUsage, addition: TokenUsage) -> TokenUsage:
-    return TokenUsage(
-        provider=base.provider or addition.provider,
-        model=base.model or addition.model,
-        input_tokens=base.input_tokens + addition.input_tokens,
-        output_tokens=base.output_tokens + addition.output_tokens,
-        total_tokens=base.total_tokens + addition.total_tokens,
-    )
+    # Max semantics, matching Go/Node: streaming providers repeat and refine
+    # usage across events; summing would double-count.
+    from ..extractors.generic import merge_usage_max
+
+    return merge_usage_max(base, addition)
 
 
 def looks_like_json(text: str) -> bool:
