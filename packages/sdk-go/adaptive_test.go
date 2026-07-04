@@ -156,3 +156,23 @@ func TestSDKWiresAdaptiveLimiter(t *testing.T) {
 		t.Fatal("adaptive limiter must be opt-in")
 	}
 }
+
+func TestSDKAdaptiveRateLimitFactorReporting(t *testing.T) {
+	plain := New(Config{Preset: "standard"})
+	factor, rate, enabled := plain.AdaptiveRateLimitFactor()
+	if enabled {
+		t.Fatal("factor reporting must be disabled when AdaptiveRateLimit is not set")
+	}
+	if factor != 1.0 || rate != 0 {
+		t.Fatalf("disabled reporting should return neutral values, got factor=%v rate=%v", factor, rate)
+	}
+
+	adaptive := New(Config{Preset: "standard", AdaptiveRateLimit: true})
+	factor, _, enabled = adaptive.AdaptiveRateLimitFactor()
+	if !enabled {
+		t.Fatal("factor reporting must be enabled when AdaptiveRateLimit is set")
+	}
+	if factor != 1.0 {
+		t.Fatalf("a fresh adaptive limiter should start at factor 1.0, got %v", factor)
+	}
+}

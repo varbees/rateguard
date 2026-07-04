@@ -20,6 +20,7 @@ export const docsNav: DocSection[] = [
       { slug: "rate-limiting", title: "Rate limit your API" },
       { slug: "adaptive-rate-limiting", title: "Adaptive rate limiting" },
       { slug: "semantic-caching", title: "Semantic caching" },
+      { slug: "budget-attestation", title: "Budget attestation" },
       { slug: "token-budgets", title: "Token budgets" },
       { slug: "loop-detection", title: "Loop detection" },
       { slug: "provider-fallback", title: "Provider fallback" },

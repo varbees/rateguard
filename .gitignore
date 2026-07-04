@@ -15,6 +15,12 @@ bin/
 *.test
 *.out
 coverage.html
+# `go build ./...` from packages/sdk-go names example binaries after their
+# directory with no extension — ignore them explicitly by name.
+/packages/sdk-go/quickstart
+/packages/sdk-go/semantic-cache
+/packages/sdk-go/adaptive-rate-limit
+/packages/sdk-go/budget-attestation
 
 # Node
 node_modules/

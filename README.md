@@ -31,6 +31,7 @@ Every other rate limiting tool was built for REST APIs. RateGuard was built for 
 | **12 models priced** | Pricing table for GPT-4o, GPT-4.1, Claude, Gemini, Llama, and DeepSeek families. Unknown models return `$0.00`; verify provider pages before release. |
 | **Adaptive rate limiting** (Go) | Opt-in AIMD controller auto-tunes the effective limit from observed upstream error rate — grows on healthy traffic, cuts before the circuit breaker has to trip. |
 | **Semantic caching** (Go) | Bring your own `Embedder` (OpenAI/Cohere/Voyage embeddings, a local model — anything). A cosine-similarity hit skips the network call, breaker, and budget entirely. Streaming requests always bypass it. |
+| **Budget attestation** (Go) | Ed25519-signed delegation chains so one agent can hand a sub-agent a cryptographic budget that only narrows, never widens — no shared secret, verifiable end-to-end. RateGuard's own extension in the shape of the IETF Agent Identity Protocol draft, not a claim of AIP compliance. |
 
 ## Guard the money, not just the door
 
@@ -108,7 +109,7 @@ _ = rg.ServeMCP(ctx, os.Stdin, os.Stdout)
 { "mcpServers": { "rateguard": { "command": "your-app", "args": ["mcp"] } } }
 ```
 
-Five tools, identical across Go/Node/Python: `get_rate_limit_state`, `get_token_budget`, `get_circuit_breaker_state`, `check_loop`, `list_limits`.
+Five tools, identical across Go/Node/Python: `get_rate_limit_state`, `get_token_budget`, `get_circuit_breaker_state`, `check_loop`, `list_limits`. Go adds two more (`attest_budget`, `verify_budget`) for cryptographic budget delegation between agents — see [Budget Attestation](docs/API_REFERENCE.md#budget-attestation-go).
 
 ```go
 // Track any LLM call with OTel GenAI spans + automatic cost estimation
@@ -149,6 +150,8 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 - [Release Notes](docs/RELEASE_NOTES.md)
 - [API Reference](docs/API_REFERENCE.md) — all presets, config options, middleware adapters
 - [GenAI Observability](docs/GENAI_OBSERVABILITY.md) — OTel integration, model pricing, span attributes
+- [Runnable examples](packages/sdk-go/examples/) — `go run` demos, no API key needed: quickstart, semantic caching, adaptive rate limiting, budget attestation
+- Full docs site: [rateguard.antharmaya.com/docs](https://rateguard.antharmaya.com/docs)
 
 ## Verification
 

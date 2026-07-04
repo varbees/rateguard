@@ -143,6 +143,16 @@ func (s *SDK) Policy() PolicyPreset {
 	return s.policy
 }
 
+// AdaptiveRateLimitFactor reports the adaptive controller's current policy
+// scaling factor and error-rate EMA. enabled is false (factor 1.0, rate 0)
+// when Config.AdaptiveRateLimit was not set — there is nothing to observe.
+func (s *SDK) AdaptiveRateLimitFactor() (factor float64, errorRate float64, enabled bool) {
+	if s.adaptive == nil {
+		return 1.0, 0, false
+	}
+	return s.adaptive.Factor(), s.adaptive.ErrorRate(), true
+}
+
 // HTTPMiddleware wraps a net/http handler with in-process admission control.
 func (s *SDK) HTTPMiddleware(next http.Handler) http.Handler {
 	if next == nil {

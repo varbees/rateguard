@@ -245,6 +245,87 @@ tools = rg.mcp_tools()                             # list[MCPTool] for your MCP 
 result = rg.mcp_call("get_rate_limit_state", {"key": "tenant-1"})
 ```
 
+## Budget Attestation (Go)
+
+Multi-agent systems delegate: an orchestrator hands a sub-task to a tool-calling agent, which may
+hand a further sub-task to another agent, possibly across a process or trust boundary. Budget
+attestation gives that handoff an enforceable, cryptographic budget — a chain of Ed25519-signed
+blocks where each hop can only **narrow** what it received (less budget, fewer providers/models,
+less delegation depth, an earlier expiry), never widen it. This is RateGuard's own extension, in
+the shape the IETF Agent Identity Protocol draft (`draft-prakash-aip`,
+`draft-singla-agent-identity-protocol`) is standardizing around — not a claim of AIP compliance,
+since that spec is still draft-level.
+
+```go
+// Mint the root — authorityPrivateKey is the long-term key every verifier
+// must already trust out-of-band, the same way a TLS client trusts a CA
+// root certificate.
+root, holderKey, err := rateguard.NewRootBudgetToken(authorityPrivateKey, rateguard.AttestOptions{
+    Grant: rateguard.BudgetGrant{
+        MaxTokens: 100_000,
+        Providers: []string{"openai", "anthropic"},
+        MaxDepth:  3,
+        ExpiresAt: time.Now().Add(time.Hour),
+    },
+})
+
+// Delegate a narrower slice to a sub-agent. parentPrivateKey must match the
+// token's current holder key — proof the caller legitimately holds it, not
+// just read a copy of it.
+delegated, subAgentKey, err := rateguard.Attest(root, holderKey, rateguard.AttestOptions{
+    Grant: rateguard.BudgetGrant{
+        MaxTokens: 10_000,
+        Providers: []string{"openai"},
+        MaxDepth:  0, // may use it, may not delegate further
+        ExpiresAt: time.Now().Add(10 * time.Minute),
+    },
+})
+
+// The sub-agent proves possession by signing verifier-supplied context.
+sig, err := rateguard.Sign(delegated, subAgentKey, []byte("request-nonce"))
+grant, err := rateguard.VerifyPresentation(delegated, authorityPublicKey, []byte("request-nonce"), sig)
+```
+
+Semantics:
+- **Narrowing is enforced, not conventional**: `Attest` rejects a grant that widens any field
+  relative to its parent — a wider `MaxTokens`, a provider not in the parent's list, more
+  delegation depth, or a later expiry all fail with an explicit error.
+- **A token is data, not proof of possession.** Anyone who intercepts a serialized token can read
+  its terms (`VerifyChain`), but using it to authorize a call requires signing a verifier-supplied
+  context with the current holder's private key (`Sign` + `VerifyPresentation`) — a captured token
+  alone cannot be replayed against a different challenge.
+- **`DelegatePublicKey` is optional on `AttestOptions`.** Omit it and RateGuard generates a fresh
+  keypair, returning the private key for you to hand to the sub-agent you're spawning. Supply it
+  when the sub-agent already generated its own keypair and shared only the public half — its
+  private key then never transits through the delegator, the recommended pattern for longer chains.
+- **`Marshal`/`ParseBudgetToken`** round-trip a token as compact JSON text for MCP args, HTTP
+  headers, or a file handoff.
+- **Scope: single-hop delegation, verified end-to-end, is the primary target for v0.1.** The chain
+  design supports multiple hops because attenuation only works if it composes, but longer chains
+  are unproven in production here.
+
+### MCP tools
+
+```jsonc
+// attest_budget — mint a root or delegate further
+{
+  "signing_key": "<base64 Ed25519 private key>",
+  "parent_token": "<omit to mint a root token>",
+  "max_tokens": 10000, "providers": ["openai"], "max_depth": 0,
+  "expires_in_seconds": 600
+}
+// → { "token": "...", "delegate_private_key": "...", "delegate_public_key": "..." }
+
+// verify_budget — chain-only, or full presentation with context+signature
+{
+  "token": "...", "root_public_key": "<base64 Ed25519 public key>",
+  "context": "request-nonce", "signature": "<base64, from Sign>"
+}
+// → { "valid": true, "proof_of_possession_verified": true, "effective_grant": {...} }
+```
+
+Runnable end-to-end demo: [`examples/budget-attestation`](../packages/sdk-go/examples/budget-attestation/main.go).
+
 ## Loop Detection
 
 SHA-256 payload fingerprinting halts runaway agent loops. A loop is an identical fingerprint reappearing at a **higher** sequence depth; same-depth repeats are treated as retries. Depths beyond `LoopMaxDepth` (default 50) halt regardless. Fingerprint state is LRU-bounded (10K entries).
