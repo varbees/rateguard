@@ -122,10 +122,13 @@ func extractTokenUsageFromBody(body []byte) (TokenUsage, bool) {
 		usage.Provider = provider
 	}
 
+	// Field aliases cover OpenAI (prompt/completion), Anthropic (input/output),
+	// AWS Bedrock Converse (inputTokens/outputTokens — camelCase), and
+	// Google's *TokenCount names.
 	if data, ok := objectField(payload, "usage"); ok {
-		usage.InputTokens = firstNumber(data, "prompt_tokens", "input_tokens", "promptTokenCount")
-		usage.OutputTokens = firstNumber(data, "completion_tokens", "output_tokens", "candidatesTokenCount")
-		usage.TotalTokens = firstNumber(data, "total_tokens", "totalTokenCount")
+		usage.InputTokens = firstNumber(data, "prompt_tokens", "input_tokens", "inputTokens", "promptTokenCount")
+		usage.OutputTokens = firstNumber(data, "completion_tokens", "output_tokens", "outputTokens", "candidatesTokenCount")
+		usage.TotalTokens = firstNumber(data, "total_tokens", "totalTokens", "totalTokenCount")
 	}
 
 	if usage.TotalTokens == 0 {

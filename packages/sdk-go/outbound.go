@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -135,19 +136,27 @@ func (t *genaiTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Buffer the request body: needed for model detection and fallback retry.
 	var body []byte
 	if req.Body != nil {
-		read, err := io.ReadAll(io.LimitReader(req.Body, outboundMaxBufferedRequestBytes+1))
-		_ = req.Body.Close()
+		original := req.Body
+		read, err := io.ReadAll(io.LimitReader(original, outboundMaxBufferedRequestBytes+1))
 		if err != nil {
+			_ = original.Close()
 			return nil, fmt.Errorf("rateguard: buffer outbound request body: %w", err)
 		}
 		if len(read) > outboundMaxBufferedRequestBytes {
 			// Too large to buffer safely — pass through untracked rather
-			// than hold an unbounded copy in memory.
-			req.Body = io.NopCloser(io.MultiReader(bytes.NewReader(read), req.Body))
+			// than hold an unbounded copy in memory. The original body is
+			// still open; stitch the read prefix back on.
+			req.Body = readCloser{io.MultiReader(bytes.NewReader(read), original), original}
+			req.GetBody = nil
 			return t.next.RoundTrip(req)
 		}
+		_ = original.Close()
 		body = read
 		req.Body = io.NopCloser(bytes.NewReader(body))
+		bodyCopy := body
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(bodyCopy)), nil
+		}
 	}
 
 	if call.Model == "" && len(body) > 0 {
@@ -308,9 +317,17 @@ func (t *genaiTransport) retarget(req *http.Request, body []byte, call *outbound
 		}
 	}
 
+	// Fallback targets follow the OpenAI-SDK convention: BaseURL owns the
+	// version prefix (https://api.deepseek.com/v1) and we append only the
+	// canonical operation suffix — not the original full path.
+	suffix := "/chat/completions"
+	if strings.HasSuffix(call.PathSuffix, "/completions") && !strings.HasSuffix(call.PathSuffix, "/chat/completions") {
+		suffix = "/completions"
+	}
+
 	clone := req.Clone(req.Context())
 	baseURL := strings.TrimSuffix(target.BaseURL, "/")
-	parsed, err := http.NewRequest(clone.Method, baseURL+call.PathSuffix, bytes.NewReader(newBody))
+	parsed, err := http.NewRequest(clone.Method, baseURL+suffix, bytes.NewReader(newBody))
 	if err != nil {
 		return nil, fmt.Errorf("rateguard: build fallback request for %s: %w", target.Name, err)
 	}
@@ -344,17 +361,27 @@ func (t *genaiTransport) retarget(req *http.Request, body []byte, call *outbound
 // ── Provider detection ──
 
 // openAICompatibleHosts maps known OpenAI-schema hosts to provider labels.
+// Validated against the 2026 inference-provider landscape: OpenAI-compatible
+// /chat/completions is the lingua franca (Groq serves it under /openai/v1/,
+// Cohere under /compatibility/v1/, DashScope under /compatible-mode/v1/ —
+// suffix matching covers all of them).
 var openAICompatibleHosts = map[string]string{
-	"api.openai.com":     "openai",
-	"api.deepseek.com":   "deepseek",
-	"api.groq.com":       "groq",
-	"api.mistral.ai":     "mistral",
-	"api.together.xyz":   "together",
-	"openrouter.ai":      "openrouter",
-	"api.x.ai":           "xai",
-	"api.perplexity.ai":  "perplexity",
-	"api.moonshot.ai":    "moonshot",
-	"api.fireworks.ai":   "fireworks",
+	"api.openai.com":           "openai",
+	"api.deepseek.com":         "deepseek",
+	"api.groq.com":             "groq",
+	"api.mistral.ai":           "mistral",
+	"api.together.xyz":         "together",
+	"openrouter.ai":            "openrouter",
+	"api.x.ai":                 "xai",
+	"api.perplexity.ai":        "perplexity",
+	"api.moonshot.ai":          "moonshot",
+	"api.fireworks.ai":         "fireworks",
+	"api.cerebras.ai":          "cerebras",
+	"api.cohere.ai":            "cohere",
+	"api.cohere.com":           "cohere",
+	"dashscope.aliyuncs.com":   "dashscope",
+	"api.sambanova.ai":         "sambanova",
+	"integrate.api.nvidia.com": "nvidia",
 }
 
 // detectLLMCall classifies an outbound request. Returns nil for non-LLM
@@ -384,13 +411,54 @@ func detectLLMCall(req *http.Request) *outboundCall {
 		return &outboundCall{Provider: "anthropic", Operation: genaiOperationChat, PathSuffix: path}
 	}
 
+	// Gemini API — including its OpenAI-compatibility endpoint
+	// (/v1beta/openai/chat/completions).
 	if host == "generativelanguage.googleapis.com" {
-		if idx := strings.Index(path, ":generateContent"); idx == -1 {
-			if idx = strings.Index(path, ":streamGenerateContent"); idx == -1 {
-				return nil
+		if strings.HasSuffix(path, "/chat/completions") {
+			return &outboundCall{Provider: "google", Operation: genaiOperationChat, Compatible: true, PathSuffix: path}
+		}
+		if strings.Contains(path, ":generateContent") || strings.Contains(path, ":streamGenerateContent") {
+			return &outboundCall{Provider: "google", Operation: genaiOperationChat, Model: googleModelFromPath(path), PathSuffix: path}
+		}
+		return nil
+	}
+
+	// Vertex AI (Gemini via Google Cloud).
+	if strings.HasSuffix(host, "aiplatform.googleapis.com") {
+		if strings.Contains(path, ":generateContent") || strings.Contains(path, ":streamGenerateContent") {
+			return &outboundCall{Provider: "google_vertex", Operation: genaiOperationChat, Model: googleModelFromPath(path), PathSuffix: path}
+		}
+		return nil
+	}
+
+	// Azure OpenAI: {resource}.openai.azure.com/openai/deployments/{d}/...
+	if strings.HasSuffix(host, ".openai.azure.com") || strings.HasSuffix(host, ".cognitiveservices.azure.com") {
+		switch {
+		case strings.HasSuffix(path, "/chat/completions"):
+			return &outboundCall{Provider: "azure_openai", Operation: genaiOperationChat, Compatible: true, PathSuffix: path}
+		case strings.HasSuffix(path, "/embeddings"):
+			return &outboundCall{Provider: "azure_openai", Operation: genaiOperationEmbedding, PathSuffix: path}
+		case strings.HasSuffix(path, "/completions"):
+			return &outboundCall{Provider: "azure_openai", Operation: genaiOperationCompletion, Compatible: true, PathSuffix: path}
+		}
+		return nil
+	}
+
+	// AWS Bedrock runtime: /model/{modelId}/converse | /invoke (+ -stream).
+	// Own request schema — tracked for budgets/observability, no fallback.
+	// Streaming uses AWS event-stream framing, not SSE; JSON responses only.
+	if strings.HasPrefix(host, "bedrock-runtime.") && strings.HasSuffix(host, ".amazonaws.com") {
+		if idx := strings.Index(path, "/model/"); idx != -1 {
+			rest := path[idx+len("/model/"):]
+			if slash := strings.Index(rest, "/"); slash != -1 {
+				action := rest[slash+1:]
+				if action == "converse" || action == "invoke" || action == "converse-stream" || action == "invoke-with-response-stream" {
+					model, _ := urlPathUnescape(rest[:slash])
+					return &outboundCall{Provider: "aws_bedrock", Operation: genaiOperationChat, Model: model, PathSuffix: path}
+				}
 			}
 		}
-		return &outboundCall{Provider: "google", Operation: genaiOperationChat, Model: googleModelFromPath(path), PathSuffix: path}
+		return nil
 	}
 
 	// Self-hosted OpenAI-compatible servers (vLLM, llama.cpp, LocalAI, ...).
@@ -399,6 +467,10 @@ func detectLLMCall(req *http.Request) *outboundCall {
 	}
 
 	return nil
+}
+
+func urlPathUnescape(segment string) (string, error) {
+	return url.PathUnescape(segment)
 }
 
 func googleModelFromPath(path string) string {
