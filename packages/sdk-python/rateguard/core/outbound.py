@@ -195,8 +195,12 @@ class _OutboundCore:
         self.mode = mode if mode in ("enforce", "observe") else "enforce"
         self.chain = chain or []
         self.disable_rate_limit = disable_rate_limit
-        # Zero → sane default; reserving the whole remaining budget per call
-        # would serialize concurrent agents. Negative → strict reserve-all.
+        # Zero falls back to the SDK-instance estimated_tokens_per_request
+        # config, then to a sane hardcoded default; reserving the whole
+        # remaining budget per call would serialize concurrent agents.
+        # Negative → strict reserve-all. Mirrors Go's outbound.go Transport().
+        if estimated_tokens == 0:
+            estimated_tokens = runtime.config.estimated_tokens_per_request
         if estimated_tokens == 0:
             estimated_tokens = _DEFAULT_OUTBOUND_ESTIMATED_TOKENS
         self.estimated_tokens = max(estimated_tokens, 0)

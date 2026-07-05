@@ -19,6 +19,8 @@ from .types import (
 if TYPE_CHECKING:
     from .adapters.asgi import ASGIApp
     from .adapters.wsgi import WSGIApp
+    from .core.guardrail_log import GuardrailLog
+    from .core.guardrails import GuardrailChain
     from .core.mcp import LoopDetector, MCPTool, MCPToolResult
     from .core.token_budget import TokenBudgetManager
 
@@ -65,7 +67,11 @@ class RateGuard:
         token_budget: TokenBudgetOptions | None = None,
         circuit_breaker: CircuitBreakerOptions | None = None,
         event_emitter: EventEmitterLike | None = None,
+        event_endpoint: str | None = None,
         clock: Clock | None = None,
+        guardrails: "GuardrailChain | None" = None,
+        loop_detection: bool = False,
+        estimated_tokens_per_request: int = 0,
     ) -> None:
         self.options = RateGuardOptions(
             api_key=api_key,
@@ -83,25 +89,33 @@ class RateGuard:
             circuit_breaker=circuit_breaker,
             event_emitter=event_emitter,
             clock=clock,
+            event_endpoint=event_endpoint,
+            guardrails=guardrails,
+            loop_detection=loop_detection,
+            estimated_tokens_per_request=estimated_tokens_per_request,
         )
         self.runtime = RateGuardRuntime(self.options)
         self._mcp_tools: list["MCPTool"] | None = None
-        self._loop_detector: "LoopDetector | None" = None
 
     @property
     def loop_detector(self) -> "LoopDetector":
-        from .core.mcp import LoopDetector
+        """Loop detector shared with the actual middleware admission path
+        (not a separate standalone instance) — MCP pre-flight checks and
+        real request-time loop detection see the same fingerprint state."""
+        return self.runtime.loop_detector
 
-        if self._loop_detector is None:
-            self._loop_detector = LoopDetector()
-        return self._loop_detector
+    @property
+    def guardrail_log(self) -> "GuardrailLog":
+        """Guardrail violation log shared with the middleware's 422
+        rejection path."""
+        return self.runtime.guardrail_log
 
     def mcp_tools(self) -> list["MCPTool"]:
         """MCP tool set for agent pre-flight queries. Peek semantics — never consumes budget."""
         from .core.mcp import create_mcp_tools
 
         if self._mcp_tools is None:
-            self._mcp_tools = create_mcp_tools(self.runtime, self.loop_detector)
+            self._mcp_tools = create_mcp_tools(self.runtime, self.loop_detector, self.guardrail_log)
         return self._mcp_tools
 
     def mcp_call(self, tool_name: str, args: dict | None = None) -> "MCPToolResult":

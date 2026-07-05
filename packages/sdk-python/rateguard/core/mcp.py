@@ -20,6 +20,7 @@ from .bounded_cache import BoundedCache
 
 if TYPE_CHECKING:
     from ..runtime import RateGuardRuntime
+    from .guardrail_log import GuardrailLog
 
 _DEFAULT_LOOP_DETECTOR_CAPACITY = 10_000
 
@@ -146,13 +147,18 @@ class MCPToolResult:
     content: list[dict[str, str]] = field(default_factory=list)
 
 
-def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = None) -> list[MCPTool]:
+def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = None, guardrail_log: "GuardrailLog | None" = None) -> list[MCPTool]:
     """Build the RateGuard MCP tool set bound to a runtime.
 
     Agents call these tools to query their limits before making API calls.
     All queries use peek semantics — they never consume budget.
     """
-    detector = loops if loops is not None else LoopDetector()
+    # Defaults to the runtime's OWN loop detector / guardrail log (not a
+    # fresh standalone instance) — MCP pre-flight checks must see the same
+    # state the actual middleware admission path mutates, or check_loop /
+    # list_limits would silently report stale, disconnected state.
+    detector = loops if loops is not None else runtime.loop_detector
+    guard_log = guardrail_log if guardrail_log is not None else runtime.guardrail_log
 
     def get_rate_limit_state(args: dict[str, Any]) -> dict[str, Any]:
         key = args.get("key")
@@ -231,6 +237,15 @@ def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = N
         key = args.get("key")
         if not isinstance(key, str) or not key:
             raise ValueError("mcp: key is required")
+
+        # "enabled" reflects whether guardrails are configured at all, not
+        # just whether the tracking log exists (it always does) — an
+        # instance with no guardrails configured has nothing to violate,
+        # which is a different state from "configured and clean." Mirrors
+        # Go's mcp.go.
+        guardrail_stats = guard_log.stats()
+        guardrail_stats["enabled"] = runtime.config.guardrails is not None
+
         return {
             "key": key,
             "rate_limit": get_rate_limit_state({"key": key}),
@@ -242,6 +257,7 @@ def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = N
                 "burst": runtime.config.rate_limit.burst,
             },
             "loop_detector": detector.stats(),
+            "guardrails": guardrail_stats,
         }
 
     return [

@@ -7,8 +7,9 @@ from .adapters.decorators import rate_limited, token_budget
 from .adapters.wsgi import RateGuardMiddleware as WSGIRateGuardMiddleware
 from .config import known_presets, normalize_preset, normalize_token_budget_mode, preset_policy, resolve_rateguard_options
 from .core.circuit_breaker import CircuitBreaker
-from .core.event_emitter import ConsoleEventEmitter, WebSocketEventEmitter
+from .core.event_emitter import ConsoleEventEmitter, HTTPEventEmitter, WebSocketEventEmitter
 from .core.genai import GenAICall, estimate_cost, genai_span_attributes, genai_span_end_attributes, priced_models
+from .core.guardrail_log import GuardrailEvent, GuardrailLog
 from .core.guardrails import (
     Guardrail,
     GuardrailChain,
@@ -75,6 +76,7 @@ __all__ = [
     "ASGIRateGuardMiddleware",
     "WSGIRateGuardMiddleware",
     "ConsoleEventEmitter",
+    "HTTPEventEmitter",
     "WebSocketEventEmitter",
     "CircuitBreaker",
     "RateGuard",
@@ -131,6 +133,9 @@ __all__ = [
     "TokenLimitGuardrail",
     "standard_guardrails",
     "strict_guardrails",
+    # Guardrail violation tracking
+    "GuardrailEvent",
+    "GuardrailLog",
     # MCP + loop detection
     "LoopDetector",
     "MCPTool",

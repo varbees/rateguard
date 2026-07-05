@@ -118,6 +118,14 @@ def resolve_rateguard_options(options: RateGuardOptions) -> ResolvedRateGuardOpt
         ),
         event_emitter=options.event_emitter,
         clock=clock,
+        event_endpoint=(options.event_endpoint or "").strip() or None,
+        guardrails=options.guardrails,
+        loop_detection=bool(options.loop_detection),
+        estimated_tokens_per_request=(
+            int(options.estimated_tokens_per_request)
+            if isinstance(options.estimated_tokens_per_request, (int, float)) and options.estimated_tokens_per_request > 0
+            else 0
+        ),
     )
 
 

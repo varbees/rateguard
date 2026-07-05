@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Literal, Mapping, Protocol, Sequence, TypeAlias
+from typing import TYPE_CHECKING, Awaitable, Callable, Literal, Mapping, Protocol, Sequence, TypeAlias
+
+if TYPE_CHECKING:
+    from .core.guardrails import GuardrailChain
 
 PresetName = Literal["dev", "standard", "high-throughput", "llm-heavy", "strict-upstream-protection", "streaming-llm", "agent-orchestrator", "mcp-server"]
 TokenBudgetMode = Literal["hard-stop", "soft-stop"]
@@ -92,6 +95,22 @@ class RateGuardOptions:
     circuit_breaker: CircuitBreakerOptions | None = None
     event_emitter: EventEmitterLike | None = None
     clock: Clock | None = None
+    # HTTP webhook endpoint events are POSTed to when no event_emitter is
+    # set. Mirrors Go's cfg.EventEndpoint.
+    event_endpoint: str | None = None
+    # Content guardrail chain checked against request bodies (PII, prompt
+    # injection, length). Mirrors Go's cfg.Guardrails — None (default)
+    # disables the check entirely.
+    guardrails: "GuardrailChain | None" = None
+    # Enables agent loop detection for requests carrying an
+    # X-Sequence-Depth header. Mirrors Go's cfg.LoopDetection. Opt-in.
+    loop_detection: bool = False
+    # Bounds hard-stop token budget reservations: zero (default) reserves
+    # the entire remaining budget per in-flight request (serializes
+    # concurrent requests on the same key); a positive value reserves
+    # min(estimate, remaining) so concurrent requests can proceed. Mirrors
+    # Go's cfg.EstimatedTokensPerRequest.
+    estimated_tokens_per_request: int = 0
 
 
 @dataclass(slots=True)
@@ -111,6 +130,10 @@ class ResolvedRateGuardOptions:
     circuit_breaker: CircuitBreakerOptions
     event_emitter: EventEmitterLike | None
     clock: Clock
+    event_endpoint: str | None
+    guardrails: "GuardrailChain | None"
+    loop_detection: bool
+    estimated_tokens_per_request: int
 
 
 @dataclass(slots=True)
@@ -237,6 +260,22 @@ class PreflightDecision:
     token_budget: TokenBudgetDecision | None = None
     circuit_breaker: CircuitBreakerDecision | None = None
     token_budget_reservation_id: str | None = None
+    # Pre-built {"error": ..., "message": ...} rejection body for
+    # loop-detection (429) and guardrail (422) denials — these don't fit
+    # the standard {"error": ..., "retry_after_ms": ...} denial shape, so
+    # adapters prefer this over denial_payload() when it is set.
+    rejection_payload: dict[str, str] | None = None
+
+
+@dataclass(slots=True)
+class RequestBodyRejection:
+    """Outcome of runtime.check_request_body: the request must be blocked
+    with this status code, error code, and message — mirrors Go's inline
+    429 loop_detected / 422 guardrail responses in checkRequestBody."""
+
+    status_code: int
+    error: str
+    message: str
 
 
 @dataclass(slots=True)

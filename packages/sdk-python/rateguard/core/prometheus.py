@@ -20,6 +20,7 @@ def prometheus_text(
     circuit_breaker_trips: int = 0,
     tokens_consumed: int = 0,
     circuit_breaker_state: int = 0,  # 0=closed, 1=open, 2=half-open
+    guardrail_violations: int = 0,
     version: str = "dev",
 ) -> str:
     """Generate Prometheus exposition format text for RateGuard metrics."""
@@ -65,6 +66,10 @@ def prometheus_text(
     lines.append("# HELP rateguard_tokens_consumed_total Total tokens consumed")
     lines.append("# TYPE rateguard_tokens_consumed_total counter")
     lines.append(f"rateguard_tokens_consumed_total {tokens_consumed}")
+
+    lines.append("# HELP rateguard_guardrail_violations_total Content guardrail violations (PII, prompt injection, length)")
+    lines.append("# TYPE rateguard_guardrail_violations_total counter")
+    lines.append(f"rateguard_guardrail_violations_total {guardrail_violations}")
 
     # SDK info
     lines.append("# HELP rateguard_sdk_info SDK version and build info")
