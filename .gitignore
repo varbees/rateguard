@@ -32,6 +32,9 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
+.next/
+.open-next/
+.wrangler/
 
 # Python
 __pycache__/
