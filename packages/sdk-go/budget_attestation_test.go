@@ -28,7 +28,7 @@ func rootGrant(now time.Time) BudgetGrant {
 
 func TestNewRootBudgetTokenAndVerifyChain(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	token, delegatePriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
@@ -53,7 +53,7 @@ func TestNewRootBudgetTokenAndVerifyChain(t *testing.T) {
 func TestVerifyChainRejectsWrongRootKey(t *testing.T) {
 	_, authorityPriv := genKey(t)
 	wrongPub, _ := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	token, _, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
@@ -66,7 +66,7 @@ func TestVerifyChainRejectsWrongRootKey(t *testing.T) {
 
 func TestAttestSingleHopDelegation(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	root, rootPriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
@@ -101,7 +101,7 @@ func TestAttestSingleHopDelegation(t *testing.T) {
 
 func TestAttestRejectsWideningTokens(t *testing.T) {
 	_, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	root, rootPriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +119,7 @@ func TestAttestRejectsWideningTokens(t *testing.T) {
 
 func TestAttestRejectsWideningProviders(t *testing.T) {
 	_, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	root, rootPriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
@@ -138,7 +138,7 @@ func TestAttestRejectsWideningProviders(t *testing.T) {
 
 func TestAttestRejectsLaterExpiry(t *testing.T) {
 	_, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	root, rootPriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +156,7 @@ func TestAttestRejectsLaterExpiry(t *testing.T) {
 
 func TestAttestRejectsDepthExhaustion(t *testing.T) {
 	_, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	root, rootPriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: BudgetGrant{
 		MaxTokens: 1000,
 		MaxDepth:  0, // no further delegation allowed
@@ -179,7 +179,7 @@ func TestAttestRejectsDepthExhaustion(t *testing.T) {
 func TestAttestRejectsWrongParentKey(t *testing.T) {
 	_, authorityPriv := genKey(t)
 	_, wrongPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	root, _, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
@@ -197,7 +197,7 @@ func TestAttestRejectsWrongParentKey(t *testing.T) {
 
 func TestVerifyChainRejectsExpiredToken(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	token, _, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
@@ -211,7 +211,7 @@ func TestVerifyChainRejectsExpiredToken(t *testing.T) {
 
 func TestSignAndVerifyPresentation(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	token, delegatePriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
@@ -235,7 +235,7 @@ func TestSignAndVerifyPresentation(t *testing.T) {
 func TestVerifyPresentationRejectsWrongHolder(t *testing.T) {
 	_, authorityPriv := genKey(t)
 	_, impostorPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	token, _, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +251,7 @@ func TestVerifyPresentationRejectsWrongHolder(t *testing.T) {
 
 func TestVerifyPresentationRejectsReplayedSignatureUnderDifferentContext(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	token, delegatePriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
@@ -268,7 +268,7 @@ func TestVerifyPresentationRejectsReplayedSignatureUnderDifferentContext(t *test
 
 func TestSignRejectsTokenNotMatchingDelegateKey(t *testing.T) {
 	_, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 	explicitDelegatePub, explicitDelegatePriv := genKey(t)
 
 	token, generatedPriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{
@@ -290,7 +290,7 @@ func TestSignRejectsTokenNotMatchingDelegateKey(t *testing.T) {
 
 func TestBudgetTokenMarshalRoundTripPreservesVerification(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	// Unrestricted root (nil Providers/Models) so the child can validly
 	// leave them nil too — this exercises nil-vs-empty-slice signing
@@ -338,7 +338,7 @@ func TestBudgetTokenMarshalRoundTripPreservesVerification(t *testing.T) {
 
 func TestBudgetTokenMarshalRoundTripWithRestrictedProviders(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	now := time.Now().UTC().Truncate(time.Second)
 
 	token, delegatePriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
