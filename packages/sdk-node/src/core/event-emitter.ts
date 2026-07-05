@@ -19,6 +19,47 @@ export class ConsoleEventEmitter implements EventEmitterLike {
   }
 }
 
+/**
+ * HTTP webhook event emitter — POSTs the JSON-marshaled event envelope to a
+ * configured endpoint. Mirrors Go's HTTPEventEmitter (events.go): same
+ * User-Agent, same Content-Type, same "status >= 300 is an error" rule,
+ * same 5-second timeout. Event delivery must never break the request path,
+ * so failures are logged, not thrown.
+ */
+export class HTTPEventEmitter implements EventEmitterLike {
+  constructor(private readonly endpoint: string) {}
+
+  async emit(event: RateGuardEventEnvelope): Promise<void> {
+    if (!this.endpoint) {
+      return;
+    }
+
+    try {
+      const response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'RateGuard-Node-SDK/0.1',
+        },
+        body: toJson(event),
+        signal: AbortSignal.timeout(5_000),
+      });
+
+      // Drain the response body so the underlying connection can be reused,
+      // mirroring Go's io.Copy(io.Discard, resp.Body).
+      await response.text().catch(() => undefined);
+
+      if (response.status >= 300) {
+        // eslint-disable-next-line no-console
+        console.warn(`RateGuard event delivery failed: ${response.status} ${response.statusText}`);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn('RateGuard event delivery failed', error);
+    }
+  }
+}
+
 type WebSocketCtor = new (url: string) => WebSocket;
 
 /**
@@ -116,6 +157,9 @@ export class ControlPlaneEventEmitter implements EventEmitterLike {
 export function createEventEmitter(options: ResolvedRateGuardOptions): EventEmitterLike {
   if (options.eventEmitter) {
     return options.eventEmitter;
+  }
+  if (options.eventEndpoint) {
+    return new HTTPEventEmitter(options.eventEndpoint);
   }
   if (options.wsUrl) {
     return new ControlPlaneEventEmitter({ wsUrl: options.wsUrl });

@@ -1,3 +1,5 @@
+import type { Guardrail } from './core/guardrails.js';
+
 /**
  * Canonical RateGuard preset names.
  */
@@ -96,7 +98,28 @@ export interface RateGuardOptions {
   tokenBudget?: TokenBudgetOptions;
   circuitBreaker?: CircuitBreakerOptions;
   eventEmitter?: EventEmitterLike;
+  /** HTTP webhook endpoint events are POSTed to when no eventEmitter is set. Mirrors Go's cfg.EventEndpoint. */
+  eventEndpoint?: string;
   clock?: Clock;
+  /**
+   * Content guardrail chain checked against request bodies (PII, prompt
+   * injection, length). Mirrors Go's cfg.Guardrails — undefined disables
+   * the check entirely (the default).
+   */
+  guardrails?: Guardrail;
+  /**
+   * Enables agent loop detection for requests carrying an X-Sequence-Depth
+   * header. Mirrors Go's cfg.LoopDetection. Opt-in, defaults to false.
+   */
+  loopDetection?: boolean;
+  /**
+   * Bounds hard-stop token budget reservations: zero (default) reserves the
+   * entire remaining budget per in-flight request (serializes concurrent
+   * requests on the same key); a positive value reserves
+   * min(estimate, remaining) so concurrent requests can proceed. Mirrors
+   * Go's cfg.EstimatedTokensPerRequest.
+   */
+  estimatedTokensPerRequest?: number;
 }
 
 /**
@@ -117,7 +140,11 @@ export interface ResolvedRateGuardOptions {
   tokenBudget: Required<TokenBudgetOptions>;
   circuitBreaker: Required<CircuitBreakerOptions>;
   eventEmitter: EventEmitterLike | undefined;
+  eventEndpoint: string | undefined;
   clock: Clock;
+  guardrails: Guardrail | undefined;
+  loopDetection: boolean;
+  estimatedTokensPerRequest: number;
 }
 
 /**
@@ -282,14 +309,20 @@ export interface EventEmitterLike {
  */
 export interface PreflightDecision {
   allowed: boolean;
-  statusCode?: 429 | 503;
+  statusCode?: 429 | 503 | 422;
   errorCode?: AdmissionErrorCode;
-  body?: string;
   retryAfterMs?: number;
   rateLimit?: RateLimitDecision;
   tokenBudget?: TokenBudgetDecision;
   circuitBreaker?: CircuitBreakerDecision;
   tokenBudgetReservationId?: string;
+  /**
+   * Pre-built `{error, message}` rejection body for loop-detection (429) and
+   * guardrail (422) denials — these don't fit the standard
+   * `{error, retry_after_ms?}` denial shape, so adapters prefer this over
+   * `denialPayload()` when it is set.
+   */
+  rejectionPayload?: { error: string; message: string };
 }
 
 /**

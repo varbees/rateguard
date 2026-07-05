@@ -15,6 +15,8 @@ export function prometheusText(policy: PolicyPreset, state: {
   circuitBreakerTrips: number;
   tokensConsumed: number;
   circuitBreakerState: 0 | 1 | 2;  // 0=closed, 1=open, 2=half-open
+  /** Sourced from `runtime.guardrailLog.stats().total` when guardrails are wired. */
+  guardrailViolations?: number;
 }): string {
   const lines: string[] = [];
 
@@ -54,6 +56,10 @@ export function prometheusText(policy: PolicyPreset, state: {
   lines.push('# TYPE rateguard_tokens_consumed_total counter');
   lines.push(`rateguard_tokens_consumed_total ${state.tokensConsumed}`);
 
+  lines.push('# HELP rateguard_guardrail_violations_total Content guardrail violations (PII, prompt injection, length)');
+  lines.push('# TYPE rateguard_guardrail_violations_total counter');
+  lines.push(`rateguard_guardrail_violations_total ${state.guardrailViolations ?? 0}`);
+
   // SDK info
   const version = process.env.RATEGUARD_VERSION || 'dev';
   lines.push('# HELP rateguard_sdk_info SDK version and build info');
@@ -71,6 +77,7 @@ export function metricsMiddleware(policy: PolicyPreset, getState: () => {
   circuitBreakerTrips: number;
   tokensConsumed: number;
   circuitBreakerState: 0 | 1 | 2;
+  guardrailViolations?: number;
 }) {
   return (_req: any, res: any) => {
     res.setHeader('Content-Type', 'text/plain; version=0.0.4');

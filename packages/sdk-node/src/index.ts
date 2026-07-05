@@ -8,6 +8,7 @@ export * from './core/circuit-breaker.js';
 export * from './core/event-emitter.js';
 export * from './core/mcp.js';
 export * from './core/guardrails.js';
+export * from './core/guardrail-log.js';
 export * from './core/genai.js';
 export * from './core/prometheus.js';
 export * from './core/outbound.js';
@@ -24,7 +25,8 @@ export * from './adapters/hono.js';
 export * from './adapters/next.js';
 
 import { RateGuardRuntime } from './runtime.js';
-import { createMCPTools, mcpCall, LoopDetector, type MCPTool, type MCPToolResult } from './core/mcp.js';
+import { createMCPTools, mcpCall, type LoopDetector, type MCPTool, type MCPToolResult } from './core/mcp.js';
+import type { GuardrailLog } from './core/guardrail-log.js';
 import { wrapFetch, type WrapFetchOptions } from './core/outbound.js';
 import { middleware as expressMiddleware } from './adapters/express.js';
 import { rateguardPlugin } from './adapters/fastify.js';
@@ -37,18 +39,30 @@ import type { RateGuardOptions } from './types.js';
  */
 export class RateGuard {
   readonly runtime: RateGuardRuntime;
-  readonly loopDetector: LoopDetector;
   private tools?: MCPTool[];
 
   constructor(options: RateGuardOptions = {}) {
     this.runtime = new RateGuardRuntime(options);
-    this.loopDetector = new LoopDetector();
+  }
+
+  /**
+   * Loop detector shared with the actual middleware admission path (not a
+   * separate standalone instance) — MCP pre-flight checks and the real
+   * request-time loop detection see the same fingerprint state.
+   */
+  get loopDetector(): LoopDetector {
+    return this.runtime.loopDetector;
+  }
+
+  /** Guardrail violation log shared with the middleware's 422 rejection path. */
+  get guardrailLog(): GuardrailLog {
+    return this.runtime.guardrailLog;
   }
 
   /** MCP tool set for agent pre-flight queries. Peek semantics — never consumes budget. */
   mcpTools(): MCPTool[] {
     if (!this.tools) {
-      this.tools = createMCPTools(this.runtime, this.loopDetector);
+      this.tools = createMCPTools(this.runtime, this.runtime.loopDetector, this.runtime.guardrailLog);
     }
     return this.tools;
   }

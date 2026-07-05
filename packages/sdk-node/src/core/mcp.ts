@@ -11,6 +11,7 @@
 import { createHash } from 'node:crypto';
 
 import { BoundedCache } from './bounded-cache.js';
+import type { GuardrailLog } from './guardrail-log.js';
 import type { RateGuardRuntime } from '../runtime.js';
 
 export interface MCPTool {
@@ -130,8 +131,9 @@ export class LoopDetector {
  * Builds the RateGuard MCP tool set bound to a runtime. Agents call these
  * tools to query their limits before making API calls.
  */
-export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector): MCPTool[] {
-  const detector = loops ?? new LoopDetector();
+export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector, guardrailLog?: GuardrailLog): MCPTool[] {
+  const detector = loops ?? runtime.loopDetector;
+  const guardLog = guardrailLog ?? runtime.guardrailLog;
 
   const rateLimitOptions = () => ({
     requestsPerSecond: runtime.config.rateLimit.requestsPerSecond,
@@ -231,6 +233,13 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector):
       throw new Error('mcp: key is required');
     }
 
+    // "enabled" reflects whether guardrails are configured at all, not just
+    // whether the tracking log exists (it always does) — an instance with
+    // no guardrails configured has nothing to violate, which is a
+    // different state from "configured and clean." Mirrors Go's mcp.go.
+    const guardStats = guardLog.stats();
+    guardStats.enabled = Boolean(runtime.config.guardrails);
+
     return {
       key,
       rate_limit: await getRateLimitState({ key }),
@@ -242,6 +251,7 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector):
         burst: runtime.config.rateLimit.burst,
       },
       loop_detector: detector.stats(),
+      guardrails: guardStats,
     };
   };
 

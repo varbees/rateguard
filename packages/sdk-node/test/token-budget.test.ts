@@ -45,6 +45,69 @@ describe('TokenBudgetManager', () => {
     expect(budget.check(key, options).remaining).toBe(83);
   });
 
+  it('estimate-based reservation lets two concurrent same-key requests both succeed when estimate < remaining/2', () => {
+    const budget = new TokenBudgetManager({ clock, capacity: 50_000 });
+    const key = 'tenant:route:upstream:GET';
+    const options = {
+      hourLimit: 0,
+      dayLimit: 0,
+      monthLimit: 100,
+      mode: 'hard-stop' as const,
+      softStopAt: 0.8,
+    };
+
+    // remaining is 100; an estimate of 10 (< 100/2) should reserve only 10,
+    // leaving room for a second concurrent request on the same key.
+    const first = budget.reserve(key, options, 10);
+    expect(first.decision.allowed).toBe(true);
+    expect(first.decision.remaining).toBe(90);
+    expect(first.reservationId).toBeDefined();
+
+    const second = budget.reserve(key, options, 10);
+    expect(second.decision.allowed).toBe(true);
+    expect(second.decision.remaining).toBe(80);
+    expect(second.reservationId).toBeDefined();
+    expect(second.reservationId).not.toBe(first.reservationId);
+  });
+
+  it('the old zero-estimate behavior still serializes concurrent requests on the same key', () => {
+    const budget = new TokenBudgetManager({ clock, capacity: 50_000 });
+    const key = 'tenant:route:upstream:GET';
+    const options = {
+      hourLimit: 0,
+      dayLimit: 0,
+      monthLimit: 100,
+      mode: 'hard-stop' as const,
+      softStopAt: 0.8,
+    };
+
+    // No estimate (default / explicit 0) reserves the ENTIRE remaining
+    // budget, so a second concurrent request on the same key is denied
+    // until the first is committed or released.
+    const first = budget.reserve(key, options);
+    expect(first.decision.allowed).toBe(true);
+    expect(first.decision.remaining).toBe(0);
+
+    const second = budget.reserve(key, options, 0);
+    expect(second.decision.allowed).toBe(false);
+  });
+
+  it('caps the reservation at the remaining budget when estimate exceeds it', () => {
+    const budget = new TokenBudgetManager({ clock, capacity: 50_000 });
+    const key = 'tenant:route:upstream:GET';
+    const options = {
+      hourLimit: 0,
+      dayLimit: 0,
+      monthLimit: 100,
+      mode: 'hard-stop' as const,
+      softStopAt: 0.8,
+    };
+
+    const reservation = budget.reserve(key, options, 10_000);
+    expect(reservation.decision.allowed).toBe(true);
+    expect(reservation.decision.remaining).toBe(0);
+  });
+
   it('soft-stops with a warning once the threshold is crossed', () => {
     const budget = new TokenBudgetManager({ clock, capacity: 50_000 });
     const key = 'tenant:route:upstream:GET';

@@ -1,12 +1,16 @@
 import { RateGuardRuntime } from '../runtime.js';
-import { buildAdapterRequestContext, denialHeaders, denialPayload } from './common.js';
-import type { AdapterPayload } from './common.js';
-import type { HeadersLike, RateGuardOptions, RequestContext, ResponseSnapshot } from '../types.js';
+import { admissionHeaders, buildAdapterRequestContext, denialHeaders, resolveDenialPayload, resolveInspectionBodyText } from './common.js';
+import type { AdapterPayload, ReadableBodySource } from './common.js';
+import type { HeadersLike, PreflightDecision, RateGuardOptions, RequestContext, ResponseSnapshot } from '../types.js';
 
 export interface FastifyLikeRequest {
   method?: string;
   url?: string;
   headers: HeadersLike;
+  /** The underlying raw Node request (real Fastify exposes this as `request.raw`). */
+  raw?: ReadableBodySource;
+  /** Already-parsed body, when available (Fastify's own body parsing runs after onRequest, so this is typically unset when RateGuard's onRequest hook fires). */
+  body?: unknown;
 }
 
 export interface FastifyLikeReply {
@@ -47,9 +51,19 @@ export async function rateguardPlugin(
 
   instance.addHook('onRequest', async (request, reply) => {
     const requestContext = buildRequestContext(runtime, request);
-    const preflight = await runtime.admit(requestContext);
+
+    let bodyText: string | undefined;
+    if (runtime.wantsRequestBody(requestContext)) {
+      bodyText = await resolveInspectionBodyText(request.body, request.raw);
+    }
+
+    const preflight = await runtime.admit(requestContext, bodyText);
+    for (const [name, value] of Object.entries(admissionHeaders(runtime, preflight))) {
+      reply.header(name, value);
+    }
+
     if (!preflight.allowed) {
-      writeDeniedReply(reply, preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0, preflight.errorCode);
+      writeDeniedReply(reply, preflight);
       return;
     }
 
@@ -102,10 +116,12 @@ function buildRequestContext(runtime: RateGuardRuntime, request: FastifyLikeRequ
   });
 }
 
-function writeDeniedReply(reply: FastifyLikeReply, statusCode: number, retryAfterMs: number, errorCode?: Parameters<typeof denialPayload>[2]): void {
+function writeDeniedReply(reply: FastifyLikeReply, preflight: PreflightDecision): void {
+  const statusCode = preflight.statusCode ?? 429;
+  const retryAfterMs = preflight.retryAfterMs ?? 0;
   reply.code(statusCode);
   for (const [name, value] of Object.entries(denialHeaders(retryAfterMs))) {
     reply.header(name, value);
   }
-  reply.send(denialPayload(statusCode, retryAfterMs, errorCode));
+  reply.send(resolveDenialPayload(preflight, statusCode, retryAfterMs));
 }

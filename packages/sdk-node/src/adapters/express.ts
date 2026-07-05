@@ -1,9 +1,14 @@
 import { createHash } from 'node:crypto';
 import { RateGuardRuntime } from '../runtime.js';
-import { formatRetryAfterMs } from '../core/utils.js';
-import { buildAdapterRequestContext, denialHeaders, denialPayload } from './common.js';
-import type { AdapterPayload } from './common.js';
-import type { HeadersLike, RateGuardOptions, ResponseSnapshot } from '../types.js';
+import {
+  admissionHeaders,
+  buildAdapterRequestContext,
+  denialHeaders,
+  resolveDenialPayload,
+  resolveInspectionBodyText,
+} from './common.js';
+import type { AdapterPayload, ReadableBodySource } from './common.js';
+import type { HeadersLike, PreflightDecision, RateGuardOptions, ResponseSnapshot } from '../types.js';
 
 type ExpressResponseChunk = string | Uint8Array;
 type ExpressEncoding = string;
@@ -20,11 +25,13 @@ type ExpressEndArgs =
   | [chunk: ExpressResponseChunk, callback: ExpressWriteCallback]
   | [chunk: ExpressResponseChunk, encoding: ExpressEncoding, callback: ExpressWriteCallback];
 
-export interface ExpressLikeRequest {
+export interface ExpressLikeRequest extends ReadableBodySource {
   method?: string;
   originalUrl?: string;
   url?: string;
   headers: HeadersLike;
+  /** Already-parsed body (e.g. from express.json() mounted ahead of RateGuard). */
+  body?: unknown;
 }
 
 export interface ExpressLikeResponse {
@@ -53,14 +60,21 @@ export function middleware(options: RateGuardOptions | RateGuardRuntime = {}): (
   const runtime = options instanceof RateGuardRuntime ? options : new RateGuardRuntime(options);
   return async (req, res, next) => {
     const request = buildRequestContext(runtime, req);
-    const preflight = await runtime.admit(request);
-    if (!preflight.allowed) {
-      writeAdmissionHeaders(res, runtime, preflight.rateLimit?.limit ?? runtime.config.rateLimit.requestsPerSecond + runtime.config.rateLimit.burst, preflight.rateLimit?.remaining ?? 0, runtime.config.rateLimit.burst, preflight.retryAfterMs ?? 0);
-      writeDeniedResponse(res, preflight.statusCode ?? 429, preflight.retryAfterMs ?? 0, preflight.errorCode);
-      return;
+
+    let bodyText: string | undefined;
+    if (runtime.wantsRequestBody(request)) {
+      bodyText = await resolveInspectionBodyText(req.body, req);
     }
 
-    writeAdmissionHeaders(res, runtime, preflight.rateLimit?.limit ?? runtime.config.rateLimit.requestsPerSecond + runtime.config.rateLimit.burst, preflight.rateLimit?.remaining ?? 0, runtime.config.rateLimit.burst, 0);
+    const preflight = await runtime.admit(request, bodyText);
+    for (const [name, value] of Object.entries(admissionHeaders(runtime, preflight))) {
+      res.setHeader(name, value);
+    }
+
+    if (!preflight.allowed) {
+      writeDeniedResponse(res, preflight);
+      return;
+    }
 
     const capture = patchResponse(res);
     const startedAt = runtime.config.clock.now();
@@ -118,17 +132,9 @@ function buildRequestContext(runtime: RateGuardRuntime, req: ExpressLikeRequest)
   });
 }
 
-function writeAdmissionHeaders(res: ExpressLikeResponse, runtime: RateGuardRuntime, limit: number, remaining: number, burst: number, retryAfterMs: number): void {
-  res.setHeader('X-RateGuard-Preset', runtime.config.preset.name);
-  res.setHeader('X-RateGuard-Limit', String(limit));
-  res.setHeader('X-RateGuard-Burst', String(burst));
-  res.setHeader('X-RateGuard-Remaining', String(Math.max(0, remaining)));
-  if (retryAfterMs > 0) {
-    res.setHeader('Retry-After', formatRetryAfterMs(retryAfterMs));
-  }
-}
-
-function writeDeniedResponse(res: ExpressLikeResponse, statusCode: number, retryAfterMs: number, errorCode?: Parameters<typeof denialPayload>[2]): void {
+function writeDeniedResponse(res: ExpressLikeResponse, preflight: PreflightDecision): void {
+  const statusCode = preflight.statusCode ?? 429;
+  const retryAfterMs = preflight.retryAfterMs ?? 0;
   if (typeof res.status === 'function') {
     res.status(statusCode);
   } else {
@@ -137,7 +143,7 @@ function writeDeniedResponse(res: ExpressLikeResponse, statusCode: number, retry
   for (const [name, value] of Object.entries(denialHeaders(retryAfterMs))) {
     res.setHeader(name, value);
   }
-  const payload = denialPayload(statusCode, retryAfterMs, errorCode);
+  const payload = resolveDenialPayload(preflight, statusCode, retryAfterMs);
   if (typeof res.json === 'function') {
     res.json(payload);
     return;

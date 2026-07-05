@@ -252,7 +252,14 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
     },
     circuitBreaker: normalizeCircuitBreakerOptions(options.circuitBreaker),
     eventEmitter: options.eventEmitter,
+    eventEndpoint: options.eventEndpoint?.trim() || undefined,
     clock,
+    guardrails: options.guardrails,
+    loopDetection: options.loopDetection ?? false,
+    estimatedTokensPerRequest:
+      typeof options.estimatedTokensPerRequest === 'number' && options.estimatedTokensPerRequest > 0
+        ? Math.floor(options.estimatedTokensPerRequest)
+        : 0,
   };
 }
 
