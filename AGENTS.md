@@ -34,7 +34,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Pre-flight Peek (non-consuming query) | ✅ | ✅ | ✅ | `limiter.go` |
 | Store primitives (Get/Increment(n)/Reset — variable-cost consumption, key clearing) | ✅ | ✅ | ✅ | `limiter.go`, `sharded_limiter.go`, `redis_limiter.go` |
 | LLM token budgets (hr/day/mo) | ✅ | ✅ | ✅ | `token_budget.go` |
-| Estimate-based budget reservations | ✅ | — | — | `token_budget.go` |
+| Estimate-based budget reservations | ✅ | ✅ | ✅ | `token_budget.go` |
 | Circuit breakers | ✅ | ✅ | ✅ | `circuit_breaker.go` |
 | GenAI OTel helpers (semconv span names, input/output tokens, error.type classes) | ✅ | ✅ | ✅ | `genai_observability.go` |
 | Public GenAI API (StartGenAICall/GenAISpan, TTFT/TPOT) | ✅ | — | — | Same file |
@@ -90,7 +90,7 @@ cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 # Node tests (52 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (54 passing)
+# Python tests (57 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Cross-language conformance (shared oracle, all 3 SDKs replay the same

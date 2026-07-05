@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from base64 import urlsafe_b64encode
 from csv import writer as csv_writer
 from dataclasses import dataclass
@@ -13,9 +14,21 @@ from zipfile import ZIP_DEFLATED, ZipFile
 DIST_NAME = "varbees-rateguard"
 NORMALIZED_NAME = DIST_NAME.replace("-", "_")
 IMPORT_PACKAGE = "rateguard"
-VERSION = "0.1.0"
 TAG = "py3-none-any"
 ROOT = Path(__file__).resolve().parent
+
+
+def _read_version() -> str:
+    # rateguard/__init__.py is the single version source; pyproject.toml must
+    # agree (release checklist step 1 verifies).
+    source = (ROOT / IMPORT_PACKAGE / "__init__.py").read_text(encoding="utf-8")
+    match = re.search(r'^__version__ = "([^"]+)"$', source, re.MULTILINE)
+    if match is None:
+        raise RuntimeError("rateguard/__init__.py must define __version__")
+    return match.group(1)
+
+
+VERSION = _read_version()
 REPO_ROOT = ROOT.parent.parent
 LICENSE_FILE = REPO_ROOT / "LICENSE"
 DIST_INFO = f"{NORMALIZED_NAME}-{VERSION}.dist-info"

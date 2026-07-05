@@ -6,9 +6,18 @@ from .adapters.asgi import RateGuardMiddleware as ASGIRateGuardMiddleware
 from .adapters.decorators import rate_limited, token_budget
 from .adapters.wsgi import RateGuardMiddleware as WSGIRateGuardMiddleware
 from .config import known_presets, normalize_preset, normalize_token_budget_mode, preset_policy, resolve_rateguard_options
+from .core.bounded_cache import BoundedCache
 from .core.circuit_breaker import CircuitBreaker
 from .core.event_emitter import ConsoleEventEmitter, WebSocketEventEmitter
-from .core.genai import GenAICall, estimate_cost, genai_span_attributes, genai_span_end_attributes, priced_models
+from .core.genai import (
+    GenAICall,
+    classify_error_type,
+    estimate_cost,
+    genai_span_attributes,
+    genai_span_end_attributes,
+    genai_span_name,
+    priced_models,
+)
 from .core.guardrails import (
     Guardrail,
     GuardrailChain,
@@ -40,6 +49,7 @@ from .core.rate_limiter import RateLimiter
 from .core.token_budget import TokenBudgetManager
 from .exceptions import BudgetExceeded, RateGuardException
 from .facade import RateGuard
+from .runtime import RateGuardRuntime
 from .types import (
     BucketState,
     CircuitBreakerDecision,
@@ -50,6 +60,7 @@ from .types import (
     EventEmitterLike,
     HeadersLike,
     PolicyPreset,
+    PreflightDecision,
     PresetName,
     RateGuardEvent,
     RateGuardEventEnvelope,
@@ -76,11 +87,13 @@ __all__ = [
     "WSGIRateGuardMiddleware",
     "ConsoleEventEmitter",
     "WebSocketEventEmitter",
+    "BoundedCache",
     "CircuitBreaker",
     "RateGuard",
     "BudgetExceeded",
     "RateGuardException",
     "RateGuardMiddleware",
+    "RateGuardRuntime",
     "RateLimiter",
     "TokenBudget",
     "TokenBudgetManager",
@@ -100,6 +113,7 @@ __all__ = [
     "EventEmitterLike",
     "HeadersLike",
     "PolicyPreset",
+    "PreflightDecision",
     "PresetName",
     "RateGuardEvent",
     "RateGuardEventEnvelope",
@@ -117,9 +131,11 @@ __all__ = [
     "TokenUsage",
     # GenAI observability
     "GenAICall",
+    "classify_error_type",
     "estimate_cost",
     "genai_span_attributes",
     "genai_span_end_attributes",
+    "genai_span_name",
     "priced_models",
     # Guardrails
     "Guardrail",
