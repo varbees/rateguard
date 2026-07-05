@@ -21,6 +21,10 @@ coverage.html
 /packages/sdk-go/semantic-cache
 /packages/sdk-go/adaptive-rate-limit
 /packages/sdk-go/budget-attestation
+/packages/sdk-go/dashboard-demo
+
+# Graphify's own analysis output (regenerable, not source)
+graphify-out/
 
 # Node
 node_modules/

@@ -1,1 +1,0 @@
-{"nodes": [{"id": "agents_md", "label": "AGENTS.md", "file_type": "document", "source_file": "AGENTS.md"}], "edges": [], "hyperedges": [{"id": "rateguard_sdks", "label": "RateGuard SDK Suite", "nodes": ["packages_sdk_go", "packages_sdk_node", "packages_sdk_python"], "relation": "participate_in", "confidence": "EXTRACTED", "confidence_score": 1.0, "source_file": "AGENTS.md"}]}
