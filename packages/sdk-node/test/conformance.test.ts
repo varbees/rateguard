@@ -5,7 +5,7 @@ import { RateLimiter } from '../src/core/rate-limiter.js';
 
 interface ConformanceVectors {
   policy: { requests_per_second: number; burst: number };
-  steps: Array<{ note: string; advance_ms: number; n: number; allowed: boolean; remaining: number }>;
+  steps: Array<{ note: string; advance_ms: number; n: number; allowed: boolean; remaining: number; retry_after_ms: number }>;
 }
 
 const vectorsPath = fileURLToPath(new URL('../../../conformance/token_bucket_vectors.json', import.meta.url));
@@ -45,6 +45,8 @@ describe('Conformance: token bucket', () => {
       expect(d.allowed, `step ${i} (${step.note})`).toBe(step.allowed);
       if (step.allowed) {
         expect(d.remaining, `step ${i} (${step.note})`).toBe(step.remaining);
+      } else {
+        expect(d.retryAfterMs, `step ${i} (${step.note})`).toBe(step.retry_after_ms);
       }
     }
   });

@@ -6,7 +6,10 @@
  * - refill_rate = requests_per_second (tokens added per second)
  * - On each request: refill = elapsed × refill_rate, clamp to max_tokens
  * - Allow if tokens >= 1.0, consume 1 token
- * - Retry-after: time until bucket refills to 1.0 tokens
+ * - Retry-after: ceil(deficit_seconds) rounded up to the next whole second,
+ *   floored at 1000ms — matches the Go and Python SDKs exactly (cross-checked
+ *   by conformance/token_bucket_vectors.json) so a client backing off on
+ *   retry_after_ms behaves identically regardless of which SDK served it.
  *
  * Source: https://en.wikipedia.org/wiki/Token_bucket
  */
@@ -126,7 +129,7 @@ export class RateLimiter {
         allowed: false,
         applied: true,
         remaining: 0,
-        retryAfterMs: Math.max(1000, Math.ceil(deficit * 1000)),
+        retryAfterMs: Math.max(1000, Math.ceil(deficit) * 1000),
         limit: rps,
         degraded: false,
       };
@@ -183,7 +186,7 @@ export class RateLimiter {
     // Deny if not enough tokens
     if (bucket.tokens < n) {
       const deficit = (n - bucket.tokens) / rps;
-      const retryAfterMs = Math.max(1000, Math.ceil(deficit * 1000));
+      const retryAfterMs = Math.max(1000, Math.ceil(deficit) * 1000);
       return {
         allowed: false,
         applied: true,

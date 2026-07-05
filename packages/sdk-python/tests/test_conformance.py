@@ -33,3 +33,5 @@ def test_matches_shared_oracle() -> None:
         assert d.allowed == step["allowed"], f"step {i} ({step['note']})"
         if step["allowed"]:
             assert d.remaining == step["remaining"], f"step {i} ({step['note']})"
+        else:
+            assert d.retry_after_ms == step["retry_after_ms"], f"step {i} ({step['note']})"

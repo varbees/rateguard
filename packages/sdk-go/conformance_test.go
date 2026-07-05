@@ -14,11 +14,12 @@ type conformanceVectors struct {
 		Burst             int `json:"burst"`
 	} `json:"policy"`
 	Steps []struct {
-		Note      string  `json:"note"`
-		AdvanceMs int64   `json:"advance_ms"`
-		N         float64 `json:"n"`
-		Allowed   bool    `json:"allowed"`
-		Remaining int     `json:"remaining"`
+		Note         string  `json:"note"`
+		AdvanceMs    int64   `json:"advance_ms"`
+		N            float64 `json:"n"`
+		Allowed      bool    `json:"allowed"`
+		Remaining    int     `json:"remaining"`
+		RetryAfterMs int64   `json:"retry_after_ms"`
 	} `json:"steps"`
 }
 
@@ -75,6 +76,9 @@ func TestConformanceTokenBucket(t *testing.T) {
 				}
 				if d.Allowed && d.Remaining != step.Remaining {
 					t.Fatalf("step %d (%s): remaining = %d, want %d", i, step.Note, d.Remaining, step.Remaining)
+				}
+				if !d.Allowed && d.RetryAfter.Milliseconds() != step.RetryAfterMs {
+					t.Fatalf("step %d (%s): retry_after_ms = %d, want %d", i, step.Note, d.RetryAfter.Milliseconds(), step.RetryAfterMs)
 				}
 			}
 		})
