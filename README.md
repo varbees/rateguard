@@ -126,7 +126,6 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 | Node.js | `@varbees/rateguard-node` | `npm install` |
 | Python | `varbees-rateguard` | `pip install` |
 | Dashboard | `packages/dashboard` — self-hosted control center | `docker compose up` |
-| Connect | `packages/connect` — one-command reverse proxy for third-party tools (Claude Code, Hermes, Aider, anything with a `base_url` override) that puts RateGuard in front of any OpenAI/Anthropic-compatible endpoint | `go run . -upstream <url> -port <port>` |
 
 ## vs the competition
 

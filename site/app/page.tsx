@@ -16,7 +16,6 @@ import {
   MicroSingleNode,
   MicroFallback,
   MicroDashboard,
-  MicroConnect,
 } from "@/components/landing/FeatureMicros";
 
 export const metadata: Metadata = {
@@ -72,7 +71,7 @@ const features = [
   },
   {
     title: "One algorithm, three runtimes",
-    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 255 tests — including a shared conformance suite that replays identical admission sequences across all three — hold them to real behavioral parity, not just similar APIs.",
+    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 253 tests — including a shared conformance suite that replays identical admission sequences across all three — hold them to real behavioral parity, not just similar APIs.",
     micro: <MicroParity />,
   },
   {
@@ -209,7 +208,7 @@ export default function Page() {
         <Reveal>
           <h2 className="font-display text-2xl font-bold mb-10 text-center">See it, don&apos;t just ship it</h2>
         </Reveal>
-        <div className="grid sm:grid-cols-2 gap-5">
+        <div className="flex justify-center">
           <Reveal>
             <Link href="/docs/dashboard">
               <FeatureCard
@@ -219,15 +218,13 @@ export default function Page() {
               />
             </Link>
           </Reveal>
-          <Reveal delay={0.06}>
-          </Reveal>
         </div>
       </section>
 
       {/* Stats */}
       <section className="mx-auto max-w-3xl px-6 pb-32">
         <Reveal className="grid grid-cols-2 sm:grid-cols-4 gap-8 rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
-          <StatCounter value={255} label="Tests" />
+          <StatCounter value={253} label="Tests" />
           <StatCounter value={16} label="Providers" />
           <StatCounter value={3} label="Languages" />
           <div className="text-center">
