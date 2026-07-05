@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rateguard.antharmaya.com/sitemap.xml
+
+# Machine-readable docs for AI agents and LLM crawlers.
+# https://llmstxt.org
+# Full docs, quick starts (Go/Node/Python), and the token-bucket formula in one file.
