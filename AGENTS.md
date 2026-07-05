@@ -46,7 +46,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | 8 presets | ✅ | ✅ | ✅ | `presets.go` |
 | Redis distributed limiter (atomic Lua GCRA) | ✅ | ❌ | ❌ | `redis_limiter.go` |
 | Events/webhooks | ✅ | — | — | `events.go` |
-| MCP tools (7: rate limit, budget, breaker, loop, list, attest, verify) | ✅ | ✅ | ✅ | `mcp.go` |
+| MCP tools (5 base: rate limit, budget, breaker, loop, list; Go adds attest + verify = 7) | ✅ 7 | ✅ 5 | ✅ 5 | `mcp.go` |
 | Lock-free sharded limiter (64-way, atomic CAS) | ✅ | — | — | `sharded_limiter.go` |
 | Adaptive rate limiting (AIMD controller) | ✅ | — | — | `adaptive.go` |
 | Semantic response caching (pluggable Embedder) | ✅ | — | — | `semantic_cache.go` |

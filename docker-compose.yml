@@ -9,14 +9,6 @@
 # Python app) and point the dashboard's "Instance" field at it — the
 # dashboard is a static client, it has no idea which RateGuard instance
 # it's talking to until you tell it.
-#
-# To also front a real third-party tool (Claude Code, Hermes, Aider — anything
-# with a base_url override) instead of a service you own, bring up the connect
-# proxy too — it's opt-in via a profile since it needs a real upstream:
-#   UPSTREAM_BASE_URL=https://api.deepseek.com docker compose --profile connect up
-# Then point the tool's base_url at http://localhost:8090/v1, and the
-# dashboard's Instance field at http://localhost:8090 (key defaults to the
-# upstream's host, e.g. "deepseek" — set CONNECT_NAME to override).
 services:
   rateguard-demo:
     build:
@@ -33,18 +25,3 @@ services:
       - "3001:3001"
     depends_on:
       - rateguard-demo
-
-  connect:
-    profiles: ["connect"]
-    build:
-      context: ./packages
-      dockerfile: connect/Dockerfile
-    ports:
-      - "8090:8090"
-    environment:
-      # Falls back to a harmless default so plain `docker compose up` (no
-      # --profile connect) never fails at parse time — compose interpolates
-      # every service's env block up front, before filtering by profile.
-      UPSTREAM_BASE_URL: ${UPSTREAM_BASE_URL:-https://api.openai.com}
-      PORT: "8090"
-      NAME: ${CONNECT_NAME:-}
