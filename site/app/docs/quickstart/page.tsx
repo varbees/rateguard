@@ -112,7 +112,7 @@ client = OpenAI(http_client=rg.wrap_httpx_client())
 
       <DocH2 id="mcp">4. Let your agents ask first (MCP)</DocH2>
       <P>
-        Expose RateGuard&apos;s five pre-flight tools to any MCP client — so agents check limits{" "}
+        Expose RateGuard&apos;s pre-flight tools to any MCP client — so agents check limits{" "}
         <em>before</em> they spend:
       </P>
       <CodeTabs

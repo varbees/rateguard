@@ -7,7 +7,7 @@ import { CodeBlock } from "../../../components/docs/CodeBlock";
 export const metadata: Metadata = {
   title: "Agents & MCP",
   description:
-    "Give AI agents rate-limit awareness: five MCP pre-flight tools with peek semantics, a zero-dependency stdio server, and config for Claude Code, Claude Desktop, and Cursor.",
+    "Give AI agents rate-limit awareness: MCP pre-flight tools with peek semantics, a zero-dependency stdio server, and config for Claude Code, Claude Desktop, and Cursor.",
 };
 
 export default function AgentsMcpPage() {
@@ -26,7 +26,7 @@ export default function AgentsMcpPage() {
         for free.
       </Callout>
 
-      <DocH2 id="tools">The five tools</DocH2>
+      <DocH2 id="tools">The five base tools</DocH2>
       <P>Identical across Go, Node.js, and Python:</P>
       <Table
         head={["Tool", "What it answers"]}
@@ -38,6 +38,11 @@ export default function AgentsMcpPage() {
           [<code key="t">list_limits</code>, "Everything above in one call — designed for agent initialization."],
         ]}
       />
+      <P>
+        Go adds two more — <code>attest_budget</code> and <code>verify_budget</code> — for
+        cryptographic budget delegation between agents. See{" "}
+        <Link href="/docs/budget-attestation">Budget attestation</Link>.
+      </P>
 
       <DocH2 id="serve">Serve the tools</DocH2>
       <P>

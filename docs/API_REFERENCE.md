@@ -27,6 +27,47 @@ Allow:   tokens >= 1.0 → consume 1
 Deny:    retry_after = ceil((1.0 - tokens) / rps) × 1000ms
 ```
 
+## Store Interface
+
+Every backend (in-memory, the lock-free sharded limiter, and the Redis GCRA limiter) also
+implements `Store` — the composable primitives underneath `Allow`/`Peek`. Additive: nothing
+about `Limiter.Allow`/`Peek` changes shape or behavior.
+
+| Method | Consumes? | Use for |
+|---|---|---|
+| `Get(key, policy)` | Never | Read raw bucket state (tokens/capacity/limit) — for a status page or health check, without affecting admission |
+| `Increment(key, policy, n)` | Yes, `n` units | A single call costing more than one unit of the limit — e.g. an LLM request billed by estimated token count rather than by call count. `Increment(key, policy, 1)` is byte-for-byte identical to `Allow(key, policy)` |
+| `Reset(key)` | N/A | Clear a key's bucket outright — admin override, test setup, or a billing-cycle boundary — instead of waiting for the 10-minute idle reset |
+
+```go
+// Go — type assertion, since Store is optional on the Limiter interface
+store, ok := limiter.(rateguard.Store)
+state, _ := store.Get(ctx, "tenant-42", policy)               // read-only
+decision, _ := store.Increment(ctx, "tenant-42", policy, 3.5)  // consume 3.5 tokens atomically
+_ = store.Reset(ctx, "tenant-42")                              // clear the bucket
+```
+
+```ts
+// Node — RateLimiter exposes these directly
+const state = limiter.get(key, options);
+const decision = limiter.increment(key, options, 3.5);
+limiter.reset(key);
+```
+
+```python
+# Python — RateLimiter exposes these directly
+state = limiter.get(key, options)
+decision = limiter.increment(key, options, 3.5)
+limiter.reset(key)
+```
+
+Verified by a cross-language conformance suite (`conformance/token_bucket_vectors.json`) that
+replays one shared oracle — the same `(advance_ms, n, expected allowed, expected remaining)`
+sequence — against all 3 SDKs, proving real behavioral parity rather than just matching test
+counts. Known current exception: `retry_after_ms` rounding differs across SDKs (Go rounds up to
+the nearest whole second; Node/Python round up to the nearest whole millisecond, floored at
+1000ms) — not yet unified, see AGENTS.md rule 13.
+
 ## Configuration (Go)
 
 ```go
@@ -209,7 +250,8 @@ agent pre-flight answers stay honest while the limit is being adjusted.
 
 ## MCP Tools (agent pre-flight)
 
-Five tools, identical across Go/Node/Python. All use **peek semantics** — querying never consumes budget.
+Five base tools across Go/Node/Python; Go adds two more (`attest_budget`, `verify_budget` — see
+below). All use **peek semantics** — querying never consumes budget.
 
 | Tool | What it answers |
 |---|---|

@@ -20,7 +20,7 @@ Every other rate limiting tool was built for REST APIs. RateGuard was built for 
 | **Provider fallback** | Automatic failover across OpenAI-compatible providers (DeepSeek, Groq, Cerebras, vLLM, ...) on 429/5xx/breaker-open, with credential isolation. Honest scope: cross-schema fallback is impossible at the transport layer and not claimed. |
 | **Rate limiting** | Token bucket algorithm (RFC standard). Configurable per-tenant, per-route, per-provider. |
 | **Pre-flight queries** | `Peek` semantics everywhere: agents ask "can I make this call?" without consuming budget. |
-| **MCP tools** | 5 MCP tools in Go, Node, and Python. Go also ships a zero-dependency stdio server; Node/Python expose tool helpers for your MCP server framework. |
+| **MCP tools** | 5 base tools in Node and Python; Go has 7 (adds `attest_budget`/`verify_budget`). Go also ships a zero-dependency stdio server; Node/Python expose tool helpers for your MCP server framework. |
 | **Loop detection** | SHA-256 payload fingerprinting halts runaway agent loops. The primitive ships in all SDKs; Go middleware can enforce it via `X-Sequence-Depth`. |
 | **Token budgets** | Hourly, daily, monthly limits on LLM token consumption. Hard-stop or soft-stop (queue). Estimate-based reservations keep concurrency high. |
 | **Circuit breakers** | Per-provider on outbound, per-upstream on inbound. Closed → Open → Half-Open state machine. |
@@ -28,7 +28,7 @@ Every other rate limiting tool was built for REST APIs. RateGuard was built for 
 | **Content guardrails** | PII detection, prompt injection detection, token/length limits. Go middleware can reject violations with 422; Node/Python expose the same guardrail chains for app-level wiring. |
 | **Prometheus metrics** | Go `/metrics` endpoint with live counters; Node/Python expose zero-dependency exposition helpers. |
 | **Streaming-aware** | SSE bytes pass through untouched while usage, TTFT, and TPOT are extracted on the side. Bounded memory, always. |
-| **12 models priced** | Pricing table for GPT-4o, GPT-4.1, Claude, Gemini, Llama, and DeepSeek families. Unknown models return `$0.00`; verify provider pages before release. |
+| **14 models priced** | Pricing table for GPT-4o/4.1, o3/o4-mini, Claude, Gemini, Llama, and DeepSeek families. Unknown models return `$0.00`; verify provider pages before release. |
 | **Adaptive rate limiting** (Go) | Opt-in AIMD controller auto-tunes the effective limit from observed upstream error rate — grows on healthy traffic, cuts before the circuit breaker has to trip. |
 | **Semantic caching** (Go) | Bring your own `Embedder` (OpenAI/Cohere/Voyage embeddings, a local model — anything). A cosine-similarity hit skips the network call, breaker, and budget entirely. Streaming requests always bypass it. |
 | **Budget attestation** (Go) | Ed25519-signed delegation chains so one agent can hand a sub-agent a cryptographic budget that only narrows, never widens — no shared secret, verifiable end-to-end. RateGuard's own extension in the shape of the IETF Agent Identity Protocol draft, not a claim of AIP compliance. |
@@ -125,6 +125,8 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 | Go | `github.com/varbees/rateguard/packages/sdk-go` | `go get` |
 | Node.js | `@varbees/rateguard-node` | `npm install` |
 | Python | `varbees-rateguard` | `pip install` |
+| Dashboard | `packages/dashboard` — self-hosted control center | `docker compose up` |
+| Connect | `packages/connect` — one-command reverse proxy for third-party tools (Claude Code, Hermes, Aider, anything with a `base_url` override) that puts RateGuard in front of any OpenAI/Anthropic-compatible endpoint | `go run . -upstream <url> -port <port>` |
 
 ## vs the competition
 
@@ -133,7 +135,7 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 | Multi-language | ✅ Go+Node+Python | ❌ JS only | ❌ Python only | ❌ |
 | Zero infrastructure | ✅ Middleware | ✅ | ❌ Proxy required | ❌ Gateway |
 | In-process outbound spend tracking | ✅ Client wrapper | ❌ | ❌ Proxy only | ❌ |
-| Agent pre-flight queries (MCP) | ✅ 5 tools + stdio server | ❌ | ❌ | ❌ |
+| Agent pre-flight queries (MCP) | ✅ 5 base tools (7 in Go) + stdio server | ❌ | ❌ | ❌ |
 | Agent loop detection | ✅ Library/MCP; Go middleware | ❌ | ❌ | ❌ |
 | LLM token budgets | ✅ | ❌ | ✅ | ❌ |
 | GenAI OTel conventions | ✅ | ❌ | ❌ | ❌ |
@@ -147,6 +149,7 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 
 - [Framework Integrations](INTEGRATIONS.md) — LangGraph, OpenAI Agents SDK, Vercel AI SDK, Pydantic AI, one line each
 - [Architecture](ARCHITECTURE.md) — how RateGuard works, positioning vs Datadog/Kong/Cloudflare
+- [Dashboard & admin API](https://rateguard.antharmaya.com/docs/dashboard) — self-hosted control center, `docker compose up` demo, admin API security posture
 - [Release Notes](docs/RELEASE_NOTES.md)
 - [API Reference](docs/API_REFERENCE.md) — all presets, config options, middleware adapters
 - [GenAI Observability](docs/GENAI_OBSERVABILITY.md) — OTel integration, model pricing, span attributes

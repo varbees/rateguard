@@ -49,7 +49,7 @@ Cost is estimated automatically from the pricing table when not provided. TTFT a
 
 ## Model pricing
 
-12 models are configured in the SDK pricing table. Costs are approximate (USD per 1K tokens); re-check provider pricing pages before publishing a release.
+14 models are configured in the SDK pricing table. Costs are approximate (USD per 1K tokens); re-check provider pricing pages before publishing a release.
 
 | Model | Prompt ($/1K) | Completion ($/1K) |
 |---|---|---|
@@ -57,6 +57,8 @@ Cost is estimated automatically from the pricing table when not provided. TTFT a
 | GPT-4o Mini | $0.00015 | $0.0006 |
 | GPT-4.1 | $0.002 | $0.008 |
 | GPT-4.1 Mini | $0.0001 | $0.0004 |
+| o3 | $0.002 | $0.008 |
+| o4-mini | $0.0011 | $0.0044 |
 | Claude Opus 4.5 | $0.005 | $0.025 |
 | Claude Sonnet 4 | $0.003 | $0.015 |
 | Claude Haiku 3.5 | $0.0008 | $0.004 |

@@ -32,12 +32,13 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 |---|---|---|---|---|
 | Rate limiting (token bucket) | ✅ | ✅ | ✅ | `limiter.go` |
 | Pre-flight Peek (non-consuming query) | ✅ | ✅ | ✅ | `limiter.go` |
+| Store primitives (Get/Increment(n)/Reset — variable-cost consumption, key clearing) | ✅ | ✅ | ✅ | `limiter.go`, `sharded_limiter.go`, `redis_limiter.go` |
 | LLM token budgets (hr/day/mo) | ✅ | ✅ | ✅ | `token_budget.go` |
 | Estimate-based budget reservations | ✅ | — | — | `token_budget.go` |
 | Circuit breakers | ✅ | ✅ | ✅ | `circuit_breaker.go` |
 | GenAI OTel helpers (semconv span names, input/output tokens, error.type classes) | ✅ | ✅ | ✅ | `genai_observability.go` |
 | Public GenAI API (StartGenAICall/GenAISpan, TTFT/TPOT) | ✅ | — | — | Same file |
-| 12-model pricing table | ✅ | ✅ | ✅ | Same file |
+| 14-model pricing table | ✅ | ✅ | ✅ | Same file |
 | Prometheus exposition | ✅ endpoint | ✅ helpers | ✅ helpers | `prometheus.go` |
 | Provider chain (routing decisions) | ✅ | ✅ | ✅ | `provider_chain.go` |
 | Content guardrails (PII, injection) | ✅ | ✅ | ✅ | `guardrails.go` |
@@ -61,6 +62,10 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Provider detection (16 hosts + Azure/Bedrock/Vertex + self-hosted) | ✅ | ✅ | ✅ | `outbound.go` |
 | Async outbound transport (agent frameworks are async-first) | n/a | n/a | ✅ | `core/outbound.py` |
 | Framework integration recipes (INTEGRATIONS.md, doc-verified) | ✅ | ✅ | ✅ | `INTEGRATIONS.md` |
+| Admin API — state/policy/MCP-tool-call over HTTP (opt-in, unauthenticated by design — bind privately) | ✅ | ❌ | ❌ | `admin.go` |
+| Guardrail violation tracking (bounded log + counts by code + Prometheus counter) | ✅ | ❌ | ❌ | `guardrail_log.go` |
+| Dashboard control center (`packages/dashboard`: Overview/Analytics/Agents/Controls/MCP Console/Settings, `docker compose up` demo) | ✅ (via Go admin API) | ❌ | ❌ | `packages/dashboard/` |
+| Universal connect proxy for third-party tools (`packages/connect`, one-command, any OpenAI/Anthropic-compatible endpoint) | ✅ | n/a (consumes Go SDK) | n/a | `packages/connect/` |
 
 ## 8 Presets
 
@@ -80,14 +85,22 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (118 test funcs, all with -race)
+# Go tests (150 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (46 passing)
+# Node tests (52 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (48 passing)
+# Python tests (54 passing)
 cd packages/sdk-python && python3 -m pytest -q
+
+# Cross-language conformance (shared oracle, all 3 SDKs replay the same
+# admission sequence — see conformance/token_bucket_vectors.json)
+
+# Throughput benchmarks
+cd packages/sdk-go && go test -bench=. -benchmem -run=^$ .
+cd packages/sdk-node && bun run build && node bench/throughput.mjs
+cd packages/sdk-python && python3 bench/throughput.py
 
 # Graphify (codebase to knowledge graph)
 cd /path/to/rateguard && graphify update .
@@ -103,13 +116,14 @@ opensrc path github.com/varbees/rateguard/packages/sdk-go
 3. **No new dependencies without reason.** The Go Prometheus endpoint uses stdlib only. Follow that pattern.
 4. **Commit as varbees.** Conventional Commits: `feat(sdk-go):`, `fix(sdk-node):`, `docs:`, `chore:`.
 5. **No Co-Authored-By.** Author is always `varbees <harshavar968@gmail.com>`.
-6. **Keep it SDK-only.** No gateway, dashboard, proxy, billing, marketplace code on `main`. The legacy full-stack product is on `legacy/full-stack`.
+6. **The SDKs stay proxy-free; companion tools are sanctioned, scoped, and separate.** The core positioning — in-process, zero extra infrastructure — is for code you own. As of 2026-07-05, `packages/dashboard` (observability/control-center UI) and `packages/connect` (a reverse-proxy pattern specifically for third-party tools you *don't* own the source of — Hermes, Claude Code, any agent exposing a `base_url` override) are deliberate, explicitly-approved exceptions, not scope creep — each lives in its own `packages/*` directory, depends on the SDK like any consumer, and never gets imported by the SDKs themselves. Billing, marketplace, and multi-tenant-platform code still don't belong here — the legacy full-stack product is on `legacy/full-stack`.
 7. **Verify formulas.** Every formula must cite its source (RFC, Wikipedia, academic paper). No hand-waving.
 8. **Model pricing must be verifiable.** Every price in the pricing table must be checkable against the provider's public pricing page as of the commit date.
 9. **A feature isn't done until it's wired.** A module that exists but isn't exported from the package entry point, isn't reachable through the middleware/facade, or isn't exercised by a test that drives the public surface is NOT a feature — don't mark it ✅ or document it as shipped. (July 2026 audit found MCP tools, guardrails, loop detection, GenAI OTel, and Prometheus counters all existed as files but were unreachable by users.)
 10. **Pre-flight queries must never consume.** Anything advertised as a "check before you call" (MCP tools, dashboards) must use Peek/read-only paths — never `Allow()`, which consumes a token, and never `breaker.Allow()`, which claims the half-open probe.
 11. **Transports must be byte-transparent.** The outbound wrapper delivers the exact bytes the provider sent — never rewrite line endings, never buffer a stream whole, never alter framing. Usage extraction happens on a bounded side-scan (see `sse_usage.go`).
 12. **Streaming usage events must be decoded individually and merged with MAX semantics.** OpenAI sends `"usage":null` in every intermediate chunk; Anthropic splits input (message_start) from output (message_delta) and repeats fields. Concatenating chunks or summing fields double-counts — all three SDKs merge per-event maxima.
+13. **Parity claims must be conformance-tested, not assumed.** `conformance/token_bucket_vectors.json` is the shared oracle all 3 SDKs replay (`TestConformanceTokenBucket`, `conformance.test.ts`, `test_conformance.py`) — a passing per-language test suite does not by itself prove cross-language behavioral parity. Known current exception: `retry_after_ms` rounding differs (Go rounds up to the nearest whole second; Node/Python round up to the nearest whole millisecond, floored at 1000ms) — the conformance vectors deliberately check only `allowed`/`remaining` until that's unified. Don't claim full parity in docs/marketing until it is.
 
 ## Domain types
 

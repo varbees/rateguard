@@ -64,23 +64,30 @@ RateGuard is the transparent window into your API internals. One line of code, a
 | Zero infra overhead | ❌ | ❌ | ❌ | **✅** |
 | MCP-ready | ❌ | ❌ | ❌ | **✅** |
 
-## Claude's hard 10% (at 1:50 AM)
+## Companion tools (optional — the SDK never depends on them)
 
-### 1. Lock-free sharded rate limiter
-- Replace mutex-based limiter with atomic counters + sharded windows
-- Target: <1μs overhead at p99 under 100K concurrent req/s
-- Pattern: per-CPU shard, no contention on read path
+The middleware above is the whole product; nothing below is required to use it.
 
-### 2. gRPC middleware adapter
-- Unary + streaming interceptors for Go gRPC
-- LLM services increasingly use gRPC streaming
-- Follow existing adapter pattern (see `packages/sdk-node/src/adapters/`)
+- **Dashboard** (`packages/dashboard`) — a self-hosted control center for a running RateGuard
+  instance: live budgets, breaker state, agent loop stats, guardrail violations, an MCP tool
+  console, and runtime policy tweaks. Talks to `AdminHandler()` directly from the browser — no
+  separate database. `docker compose up` for a one-command demo.
+- **Connect** (`packages/connect`) — a one-command reverse proxy for third-party tools you don't
+  control the source of (Claude Code, Hermes, Aider, Cursor — anything with a `base_url`
+  override). Same rate limiting, budgets, breaker, loop detection, and guardrails, fronting any
+  OpenAI- or Anthropic-compatible endpoint.
 
-### 3. Redis cluster support
-- Current `redis_limiter.go` is single-node
-- Need: Redis Cluster with slot-aware key routing
-- Fallback: local limiter when Redis is partitioned
+Both are thin: they depend on the SDK, never the reverse, and both are opt-in — nothing about the
+in-process middleware changes whether or not you run either of them.
 
-### 4. Prometheus exposition ✅ DONE
-- Go exposes a `/metrics` handler with live RateGuard counters in Prometheus format
-- Node and Python expose zero-dependency text-format helpers for apps to mount in their own HTTP layer
+## Roadmap
+
+Shipped, not aspirational — the SDK's default limiter (`ShardedLimiter`, `sharded_limiter.go`) is
+already a lock-free, 64-shard, atomic-CAS design; the mutex-based `MemoryLimiter` remains for
+callers who want the simpler implementation. Two gaps are still open:
+
+- **Redis Cluster support** — `redis_limiter.go` is single-node today; slot-aware key routing for
+  a clustered Redis deployment isn't built yet.
+- **gRPC middleware adapter** — unary/streaming interceptors for Go gRPC. LLM services increasingly
+  stream over gRPC, but no adapter exists yet; follow the pattern in `packages/sdk-node/src/adapters/`
+  when one lands.

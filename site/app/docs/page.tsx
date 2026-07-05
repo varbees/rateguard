@@ -62,7 +62,7 @@ openai := openai.NewClient(option.WithHTTPClient(client))`,
       <DocH2 id="agents">Built for agents</DocH2>
       <P>
         Every AI gateway makes agents discover limits by hitting 429s. RateGuard answers{" "}
-        <strong>before the request leaves the process</strong>: five MCP tools with peek
+        <strong>before the request leaves the process</strong>: MCP tools with peek
         semantics let any agent — Claude Code, Cursor, or your own — ask &quot;can I make this
         call?&quot; without consuming budget. See{" "}
         <Link href="/docs/agents-mcp">Agents &amp; MCP</Link>.
@@ -73,7 +73,7 @@ openai := openai.NewClient(option.WithHTTPClient(client))`,
         head={["Capability", "What it means"]}
         rows={[
           [<strong key="1">Outbound spend tracking</strong>, <>Wrap <code>http.Client</code>/<code>fetch</code>/<code>httpx</code> — real token usage from JSON and SSE streaming responses, metered into budgets.</>],
-          [<strong key="2">Agent pre-flight (MCP)</strong>, "5 MCP tools + a zero-dependency stdio server. Querying never consumes budget."],
+          [<strong key="2">Agent pre-flight (MCP)</strong>, "5 base tools (7 in Go) + a zero-dependency stdio server. Querying never consumes budget."],
           [<strong key="3">Token budgets</strong>, "Hourly / daily / monthly caps on LLM tokens. Hard-stop or soft-stop."],
           [<strong key="4">Loop detection</strong>, "SHA-256 payload fingerprinting halts runaway agent loops."],
           [<strong key="5">Provider fallback</strong>, "Automatic failover across OpenAI-compatible providers with credential isolation."],
@@ -90,7 +90,7 @@ openai := openai.NewClient(option.WithHTTPClient(client))`,
           ["Multi-language", "✅ Go + Node + Python", "❌ JS only", "❌ Python only", "❌"],
           ["Zero infrastructure", "✅ Middleware", "✅", "❌ Proxy required", "❌ Gateway"],
           ["In-process outbound tracking", "✅ Client wrapper", "❌", "❌ Proxy only", "❌"],
-          ["Agent pre-flight (MCP)", "✅ 5 tools + stdio", "❌", "❌", "❌"],
+          ["Agent pre-flight (MCP)", "✅ 5 tools (7 Go) + stdio", "❌", "❌", "❌"],
           ["Agent loop detection", "✅", "❌", "❌", "❌"],
           ["LLM token budgets", "✅", "❌", "✅", "❌"],
           ["GenAI OTel conventions", "✅", "❌", "❌", "❌"],

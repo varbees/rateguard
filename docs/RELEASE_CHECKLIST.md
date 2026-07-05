@@ -31,6 +31,13 @@ cd packages/sdk-go
 CC=/usr/bin/gcc GOCACHE=/tmp/go-build-cache GOWORK=off go test ./...
 ```
 
+Includes `TestConformanceTokenBucket`, which replays the shared oracle in
+`conformance/token_bucket_vectors.json` — a real cross-language parity check, not just a
+per-language pass. If touching limiter/token-bucket code, also run the throughput benchmarks
+before tagging a release (`go test -bench=. -benchmem -run=^$ .` in sdk-go, `node
+bench/throughput.mjs` in sdk-node after `bun run build`, `python3 bench/throughput.py` in
+sdk-python) and update the numbers in `docs/RELEASE_NOTES.md` if they moved meaningfully.
+
 ## 3. Verify Node
 
 ```bash
@@ -52,7 +59,24 @@ python3 -m build --sdist --wheel
 python3 -m twine check dist/*
 ```
 
-## 5. Publish Go
+## 5. Verify Connect & Dashboard
+
+Neither publishes to a package registry — they ship from the repo (`go run`/Docker), so this is a
+build + smoke test, not a publish step.
+
+```bash
+cd packages/connect
+go build -o /tmp/rateguard-connect .
+go test ./...
+/tmp/rateguard-connect -upstream https://api.openai.com -port 8099 &
+curl -s http://localhost:8099/ | grep -q "rateguard-connect" && echo "connect OK"
+kill %1
+
+cd ../dashboard
+npx next build
+```
+
+## 6. Publish Go
 
 Go packages are released by pushing a submodule tag.
 
@@ -62,7 +86,7 @@ git push origin packages/sdk-go/vX.Y.Z
 GOPROXY=proxy.golang.org go list -m github.com/varbees/rateguard/packages/sdk-go@vX.Y.Z
 ```
 
-## 6. Create Repo Release Tag
+## 7. Create Repo Release Tag
 
 Use a normal repo-wide tag for GitHub Releases. Keep the Go submodule tag from
 the previous step because that is what Go module resolution needs.
@@ -72,7 +96,7 @@ git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z
 ```
 
-## 7. Publish Node
+## 8. Publish Node
 
 ```bash
 cd packages/sdk-node
@@ -84,7 +108,7 @@ npm view @varbees/rateguard-node version
 If npm requires two-factor auth, complete the browser challenge or pass a fresh
 OTP with `--otp`.
 
-## 8. Publish Python
+## 9. Publish Python
 
 The local project-scoped PyPI token is stored in the ignored root file
 `.env.pypi`.
@@ -105,7 +129,7 @@ python3 -m pip index versions varbees-rateguard
 
 Never commit `.env.pypi`.
 
-## 9. Public Install Smokes
+## 10. Public Install Smokes
 
 ```bash
 rm -rf /tmp/rateguard-public-go
@@ -131,7 +155,7 @@ python3 -m venv /tmp/rateguard-public-python
 /tmp/rateguard-public-python/bin/python -c "import rateguard; print(rateguard.__version__)"
 ```
 
-## 10. GitHub Release
+## 11. GitHub Release
 
 Create the GitHub Release from the repo-wide tag `vX.Y.Z`.
 
@@ -149,7 +173,7 @@ Otherwise create the release in the GitHub UI:
 - Title: `RateGuard vX.Y.Z`
 - Body: copy the matching section from `docs/RELEASE_NOTES.md`
 
-## 11. Post-release
+## 12. Post-release
 
 - Update `docs/RELEASE_NOTES.md`.
 - Create a GitHub release for the pushed release tag.

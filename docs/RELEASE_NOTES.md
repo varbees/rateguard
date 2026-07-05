@@ -1,5 +1,169 @@
 # Release Notes
 
+## Unreleased (v0.2.0-dev) — July 5, 2026, part 4 (packages/connect — universal proxy)
+
+### The proxy pattern graduates from "hack for one instance" to sanctioned companion package
+`packages/connect` — a one-command reverse proxy (`rateguard-connect -upstream <url> -port <port>`)
+that puts RateGuard in front of any OpenAI-compatible or Anthropic-compatible endpoint, for tools
+you don't control the source of. Generalizes the ad hoc proxy built earlier this session for
+Hermes: configurable upstream/port/name/limits via flags, a derived human-readable dashboard key
+(`api.deepseek.com` → `deepseek`, correcting a real off-by-one in the first version of that logic
+— every "api.<provider>.com" host's first label is the generic word "api", not the provider name,
+so the fix skips past it instead of falling back to the full host), and a friendly root-page
+response instead of forwarding an unauthenticated browser visit to the real upstream (which
+returns a confusing vendor-specific error).
+
+Updated `AGENTS.md` rule 6: `packages/dashboard` and `packages/connect` are now explicit, scoped
+exceptions to "SDK-only" — companion tools that depend on the SDK like any consumer, never the
+reverse. Billing/marketplace/platform code still doesn't belong here.
+
+**Pluggability matrix in `packages/connect/README.md`** is confidence-labeled throughout — rows
+verified against official docs or a live test are marked distinctly from rows carried over from
+research that wasn't independently re-checked. Two corrections caught doing the verification pass
+Claude Code's `ANTHROPIC_BASE_URL` only takes effect on a new process (not an already-running
+session) and disables MCP tool search by default on non-first-party hosts; Cursor's custom base
+URL override only affects its chat panel, not Composer/inline-edit/autocomplete — the tool's actual
+agentic features don't route through it at all.
+
+## Unreleased (v0.2.0-dev) — July 5, 2026, part 3 (dashboard rebuild + guardrail tracking)
+
+### From single page to real control center
+`packages/dashboard` rebuilt on shadcn/ui: a persistent icon-collapsible sidebar, six real
+sections (Overview, Analytics, Agents, Controls, MCP Console, Settings) instead of one scrolling
+page, animated route transitions, and a branded OKLCH theme (tinted neutrals, amber primary — not
+the default flat grayscale shadcn ships with). Connection settings (instance URL, query key) now
+persist to localStorage, so a page reload doesn't silently fall back to the default instance —
+found this the hard way mid-verification.
+
+### New: MCP Console
+`GET /admin/mcp/tools` (the catalog, JSON-Schema included) and `POST /admin/mcp/call` (invoke any
+tool directly) — the dashboard's try-it panel calls the *exact* handler function an MCP client
+calls over stdio, not a reimplementation.
+
+### New: guardrail violation tracking
+Guardrail checks (`checkRequestBody`) previously rejected a violating request but recorded
+nothing. A new bounded log (`guardrail_log.go`, 50-event ring buffer + cumulative counts by code)
+now tracks every violation — code, message, timestamp, deliberately never the content that
+triggered it — reachable via `list_limits`/`/admin/state` and a new
+`rateguard_guardrail_violations_total` Prometheus counter. Shown on the dashboard's Agents page.
+
+### Live charts, smoothed
+Analytics' throughput chart now applies exponential smoothing to the per-poll rate calculation
+(not just the raw delta/elapsed derivative) plus explicit Recharts animation timing, so the line
+moves fluidly between polls instead of snapping. Stat card numbers and progress bars animate too.
+
+### Verified against a real LLM call, not just synthetic traffic
+Built and tested a standalone reverse-proxy pattern (documented in the dashboard docs page) that
+fronts a real OpenAI-compatible provider with RateGuard's middleware — no source changes to the
+calling service required, since most agent frameworks already expose a plain `base_url` override.
+Confirmed token extraction against a real provider response: reported token count matched the
+proxy's tracked count exactly. Caught a real bug doing this — `httputil.NewSingleHostReverseProxy`
+doesn't rewrite the HTTP `Host` header, and CloudFront-fronted APIs reject the mismatch with a 403.
+
+### A control center, not just a read-only view
+`packages/dashboard` — a self-hosted Next.js control center for a running RateGuard instance:
+live token budget (single burn bar for whichever window is closest to exhausted), rate limit
+gauge, circuit breaker and loop detection status, cumulative counters from `/metrics`, and a
+**tweak panel** that applies policy changes to the live instance with an inline confirm step, not
+a modal. Product-register design (system font, restrained color, semantic state pills separate
+from the accent) — verified end-to-end against a real running instance, including an actual
+applied `SetPolicy` change reflected back from the server.
+
+### The admin API making that possible (Go only)
+`rg.AdminHandler()` is new, opt-in, and additive:
+- `GET /admin/state?key=` — full snapshot (rate limit, token budget, circuit breaker, loop
+  detector), reusing the same handler behind the `list_limits` MCP tool.
+- `GET`/`PATCH /admin/policy` — read or atomically override the running policy via the new
+  `SDK.SetPolicy` / `SDK.Policy()` (mutex-guarded; `Policy()` replaces a bare struct-field read
+  everywhere on the request hot path, including one place — `writePrometheusMetrics` — that
+  turned out to still read the field directly and would have raced with `SetPolicy` under
+  concurrent load; caught by a dedicated test, not by inspection).
+- No authentication by design — same posture as pprof or an unauthenticated Prometheus endpoint.
+  Bind to localhost/an internal network, or put your own auth in front of it.
+- Permissive CORS on both `/admin/*` and `/metrics` (the latter needed its own fix — it's served
+  by a separate handler `AdminHandler`'s CORS wrapper doesn't cover) so the dashboard can read a
+  RateGuard instance running on a different port from the browser.
+
+### One-command demo
+`docker compose up` from the repo root runs a real RateGuard instance (`examples/dashboard-demo`,
+synthetic traffic included so the numbers move from first load) plus the dashboard, pre-wired
+together. New docs page: `/docs/dashboard`.
+
+### Known gaps, stated plainly
+- Node and Python have no admin handler yet — this session's admin API is Go-only.
+- The dashboard's "tweak" panel only covers rate limit and hourly token budget; day/month budgets
+  and mode aren't exposed in the UI yet (the API supports all of them).
+
+## Unreleased (v0.2.0-dev) — July 5, 2026, part 1 (Store interface, conformance, benchmarks)
+
+### The composable primitives underneath Allow/Peek
+A new `Store` interface — `Get` / `Increment(n)` / `Reset` — sits alongside the
+existing `Limiter.Allow`/`Peek` in all 3 SDKs. Fully additive: nothing existing
+changed shape or behavior.
+
+- **Get**: raw bucket state (tokens/capacity/limit), never consumes, never
+  creates state for an unseen key.
+- **Increment(n)**: consume `n` tokens atomically in one call — for a single
+  LLM request billed by estimated token count rather than by call count.
+  `Increment(..., 1)` is byte-for-byte identical to `Allow`.
+- **Reset**: clear a key's bucket outright (admin override, tests, billing-
+  cycle boundaries) instead of waiting for the 10-minute idle reset.
+- Implemented for every backend: `MemoryLimiter`, the lock-free
+  `ShardedLimiter`, and the Redis GCRA limiter (`Increment` generalizes the
+  GCRA tolerance/TAT math to a variable cell cost `n`; `Reset` is a `DEL`
+  script). See `packages/sdk-go/limiter.go`, `sharded_limiter.go`,
+  `redis_limiter.go`.
+
+### Cross-language conformance suite
+`conformance/token_bucket_vectors.json` is a single shared oracle — a policy
+plus a sequence of `(advance_ms, n, expected allowed, expected remaining)`
+steps — replayed by all 3 SDKs against their own `Store.Increment`
+(`TestConformanceTokenBucket` in Go, `conformance.test.ts` in Node,
+`test_conformance.py` in Python). This proves real behavioral parity, not
+just that each SDK's own test suite passes in isolation.
+
+**Known gap surfaced by building this:** `retry_after_ms` rounding currently
+differs across SDKs — Go rounds up to the nearest whole second, Node/Python
+round up to the nearest whole millisecond (floored at 1000ms). The vectors
+deliberately check only `allowed`/`remaining` until that's unified; see
+AGENTS.md rule 13.
+
+### Throughput benchmarks, all 3 languages
+Go already had `b.RunParallel` concurrent-load benchmarks
+(`sharded_limiter_test.go`); Node (`bench/throughput.mjs`) and Python
+(`bench/throughput.py`) now have matching hot-key / many-key throughput
+scripts. Measured on a dev laptop (i5-9300H) — not a server-grade claim, just
+a reproducible baseline:
+
+| | Hot key | Many keys (1024) | Notes |
+|---|---|---|---|
+| Go — MemoryLimiter | 223 ns/op (~4.5M ops/s) | 472 ns/op (~2.1M ops/s) | concurrent (8 goroutines), 0 allocs |
+| Go — ShardedLimiter | 149 ns/op (~6.7M ops/s) | 55.5 ns/op (~18M ops/s) | concurrent (8 goroutines), 0 allocs |
+| Node | 163 ns/op (~6.1M ops/s) | 105 ns/op (~9.5M ops/s) | single-threaded (no real parallelism for this op) |
+| Python | 1946 ns/op (~514K ops/s) | 1915 ns/op (~522K ops/s) | single-threaded (GIL) |
+
+Go's numbers are concurrent (multiple goroutines contending for the same
+limiter); Node/Python numbers are sequential single-threaded throughput —
+these are not directly comparable across languages without also modeling
+each runtime's real concurrency story (multi-process for Node, multi-process
+or async for Python).
+
+### Test counts
+Go 126 (+8 from Store/conformance) · Node 52 (+6) · Python 54 (+6) — 232 total.
+
+### Also this session
+- `_cofounder/rateguard-competitive-intel-2026-07-04.md`: the "Store
+  abstraction" gap identified there is closed (see status update at top of
+  that file).
+- Landing page rebuilt (`site/app/page.tsx`): scroll-driven narrative,
+  corrected stat counters, real token-bucket-driven signature visual.
+- Agent-facing discovery closed a real gap: `rateguard.jsonld` existed in the
+  repo but was never copied into `site/public/` — it was never actually
+  served. Now served at `/rateguard.jsonld` and linked via
+  `<link rel="alternate" type="application/ld+json">` in the homepage head.
+  Added `robots.txt` (points to `llms.txt` and `sitemap.xml`) and a
+  Next.js-native `sitemap.ts` covering every docs page.
+
 ## Unreleased (v0.2.0-dev) — July 4, 2026 (outbound transport, all 3 SDKs)
 
 ### Guard the money, not just the door 💸
