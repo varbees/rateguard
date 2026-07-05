@@ -48,3 +48,4 @@ build/
 # Local agent/cache output
 .cache/
 codex_resume.txt
+packages/connect/

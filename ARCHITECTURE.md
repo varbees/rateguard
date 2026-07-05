@@ -72,13 +72,9 @@ The middleware above is the whole product; nothing below is required to use it.
   instance: live budgets, breaker state, agent loop stats, guardrail violations, an MCP tool
   console, and runtime policy tweaks. Talks to `AdminHandler()` directly from the browser — no
   separate database. `docker compose up` for a one-command demo.
-- **Connect** (`packages/connect`) — a one-command reverse proxy for third-party tools you don't
-  control the source of (Claude Code, Hermes, Aider, Cursor — anything with a `base_url`
-  override). Same rate limiting, budgets, breaker, loop detection, and guardrails, fronting any
-  OpenAI- or Anthropic-compatible endpoint.
 
-Both are thin: they depend on the SDK, never the reverse, and both are opt-in — nothing about the
-in-process middleware changes whether or not you run either of them.
+The dashboard is thin: it depends on the SDK, never the reverse, and is opt-in — nothing about the
+in-process middleware changes whether or not you run it.
 
 ## Roadmap
 

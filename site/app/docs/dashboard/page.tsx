@@ -46,17 +46,10 @@ http.ListenAndServe(":8080", mux)`}
         will show a connection error against a Node/Python instance until that ships.
       </Callout>
       <P>
-        For a third-party tool you don&apos;t control the source of — Claude Code, Hermes, Aider,
-        anything that exposes a <code>base_url</code> override —{" "}
-        <Link href="/docs/connect"><code>packages/connect</code></Link> is a one-command reverse
-        proxy: it points the tool&apos;s provider config at itself instead of the real endpoint, so
-        you get full visibility and control without touching the calling code at all.
+        The dashboard talks to the Go admin API at <code>/admin/</code>. Node and Python don&apos;t
+        have an admin handler yet — the dashboard will show a connection error against a
+        Node/Python instance until that ships.
       </P>
-      <CodeBlock
-        title="packages/connect"
-        code={`go run . -upstream https://api.deepseek.com -port 8090
-# point the tool's base_url at http://localhost:8090/v1`}
-      />
 
       <DocH2 id="sections">What each section shows</DocH2>
       <ul style={{ paddingLeft: "1.25rem", marginBottom: "1rem" }}>

@@ -36,7 +36,6 @@ export const docsNav: DocSection[] = [
     label: "Operate",
     pages: [
       { slug: "dashboard", title: "Dashboard & admin API" },
-      { slug: "connect", title: "Connect (universal proxy)" },
     ],
   },
   {
