@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Awaitable, Callable, Literal, Mapping, Protocol, Sequence, TypeAlias
 
 if TYPE_CHECKING:
+    from .core.adaptive import AdaptiveOptions
     from .core.guardrails import GuardrailChain
 
 PresetName = Literal["dev", "standard", "high-throughput", "llm-heavy", "strict-upstream-protection", "streaming-llm", "agent-orchestrator", "mcp-server"]
@@ -111,6 +112,16 @@ class RateGuardOptions:
     # min(estimate, remaining) so concurrent requests can proceed. Mirrors
     # Go's cfg.EstimatedTokensPerRequest.
     estimated_tokens_per_request: int = 0
+    # adaptive_rate_limit auto-tunes the effective rate limit from observed
+    # upstream outcomes: healthy traffic grows the limit additively, error
+    # rates above target cut it multiplicatively — before the circuit
+    # breaker has to trip. The configured rate_limit policy stays the
+    # anchor; see AdaptiveOptions for bounds. Mirrors Go's
+    # cfg.AdaptiveRateLimit.
+    adaptive_rate_limit: bool = False
+    # adaptive overrides the adaptive control loop defaults. Ignored unless
+    # adaptive_rate_limit is True. Mirrors Go's cfg.Adaptive.
+    adaptive: "AdaptiveOptions | None" = None
 
 
 @dataclass(slots=True)
@@ -134,6 +145,8 @@ class ResolvedRateGuardOptions:
     guardrails: "GuardrailChain | None"
     loop_detection: bool
     estimated_tokens_per_request: int
+    adaptive_rate_limit: bool
+    adaptive: "AdaptiveOptions | None"
 
 
 @dataclass(slots=True)

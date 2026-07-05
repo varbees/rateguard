@@ -6,6 +6,7 @@ import asyncio
 import logging
 
 from .config import resolve_rateguard_options
+from .core.adaptive import AdaptiveLimiter
 from .core.circuit_breaker import CircuitBreaker
 from .core.event_emitter import build_event_envelope, create_event_emitter
 from .core.guardrail_log import GuardrailLog
@@ -26,7 +27,18 @@ MAX_INSPECTED_BODY_BYTES = 256 * 1024
 class RateGuardRuntime:
     def __init__(self, options: RateGuardOptions) -> None:
         self.config = resolve_rateguard_options(options)
-        self.rate_limiter = RateLimiter(self.config.clock, capacity=50_000)
+        base_limiter = RateLimiter(self.config.clock, capacity=50_000)
+        # Adaptive rate limiting wraps the configured limiter with an AIMD
+        # controller that auto-tunes the effective policy from observed
+        # upstream outcomes — same wrapping pattern as Go's New(). None
+        # when disabled: adaptive_limiter is the introspection handle
+        # (factor()/error_rate()), self.rate_limiter is what admit() calls
+        # either way.
+        self.rate_limiter: RateLimiter | AdaptiveLimiter = base_limiter
+        self.adaptive_limiter: AdaptiveLimiter | None = None
+        if self.config.adaptive_rate_limit:
+            self.adaptive_limiter = AdaptiveLimiter(base_limiter, self.config.adaptive, self.config.clock)
+            self.rate_limiter = self.adaptive_limiter
         self.token_budget = TokenBudgetManager(
             clock=self.config.clock,
             hour_limit=self.config.token_budget.hour_limit or 0,
@@ -164,6 +176,11 @@ class RateGuardRuntime:
         else:
             self.token_budget.release_reservation(key, observation.token_budget_reservation_id)
         success = observation.error is None and observation.status_code < 500
+        if self.adaptive_limiter is not None:
+            # Same signal the breaker learns from — the adaptive limiter
+            # tunes the effective rate limit before the breaker would have
+            # to trip. Mirrors Go's handleHTTP call order.
+            self.adaptive_limiter.record_outcome(success)
         breaker_decision = self.circuit_breaker.record_outcome(success)
         payload = self.build_payload(request, breaker_decision.state, observation.status_code, started_at_ms, None, None, usage, breaker_decision.retry_after_ms)
         await self.emit_event("request.completed", request, breaker_decision.state, payload)
@@ -321,6 +338,11 @@ class RateGuardRuntime:
         else:
             self.token_budget.release_reservation(key, observation.token_budget_reservation_id)
         success = observation.error is None and observation.status_code < 500
+        if self.adaptive_limiter is not None:
+            # Same signal the breaker learns from — the adaptive limiter
+            # tunes the effective rate limit before the breaker would have
+            # to trip. Mirrors Go's handleHTTP call order.
+            self.adaptive_limiter.record_outcome(success)
         breaker_decision = self.circuit_breaker.record_outcome(success)
         payload = self.build_payload(request, breaker_decision.state, observation.status_code, started_at_ms, None, None, usage, breaker_decision.retry_after_ms)
         self._emit_event_sync("request.completed", request, payload)

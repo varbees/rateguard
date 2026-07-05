@@ -6,9 +6,10 @@ from .adapters.asgi import RateGuardMiddleware as ASGIRateGuardMiddleware
 from .adapters.decorators import rate_limited, token_budget
 from .adapters.wsgi import RateGuardMiddleware as WSGIRateGuardMiddleware
 from .config import known_presets, normalize_preset, normalize_token_budget_mode, preset_policy, resolve_rateguard_options
+from .core.adaptive import AdaptiveLimiter, AdaptiveOptions
 from .core.circuit_breaker import CircuitBreaker
 from .core.event_emitter import ConsoleEventEmitter, HTTPEventEmitter, WebSocketEventEmitter
-from .core.genai import GenAICall, estimate_cost, genai_span_attributes, genai_span_end_attributes, priced_models
+from .core.genai import GenAICall, GenAISpan, estimate_cost, genai_span_attributes, genai_span_end_attributes, priced_models, start_genai_call
 from .core.guardrail_log import GuardrailEvent, GuardrailLog
 from .core.guardrails import (
     Guardrail,
@@ -38,6 +39,8 @@ from .core.provider_chain import (
     quality_provider_chain,
 )
 from .core.rate_limiter import RateLimiter
+from .core.semantic_cache import CachedResponse, Embedder, SemanticCache, SemanticCacheOptions, is_streaming_request_body, prompt_text_from_request_body
+from .core.sharded_limiter import ShardedLimiter
 from .core.token_budget import TokenBudgetManager
 from .exceptions import BudgetExceeded, RateGuardException
 from .facade import RateGuard
@@ -84,6 +87,9 @@ __all__ = [
     "RateGuardException",
     "RateGuardMiddleware",
     "RateLimiter",
+    "ShardedLimiter",
+    "AdaptiveLimiter",
+    "AdaptiveOptions",
     "TokenBudget",
     "TokenBudgetManager",
     "rate_limited",
@@ -119,10 +125,12 @@ __all__ = [
     "TokenUsage",
     # GenAI observability
     "GenAICall",
+    "GenAISpan",
     "estimate_cost",
     "genai_span_attributes",
     "genai_span_end_attributes",
     "priced_models",
+    "start_genai_call",
     # Guardrails
     "Guardrail",
     "GuardrailChain",
@@ -148,6 +156,13 @@ __all__ = [
     "create_httpx_transport",
     "create_httpx_async_transport",
     "detect_llm_call",
+    # Semantic response caching
+    "CachedResponse",
+    "Embedder",
+    "SemanticCache",
+    "SemanticCacheOptions",
+    "is_streaming_request_body",
+    "prompt_text_from_request_body",
     # Prometheus
     "prometheus_text",
     # Provider chain

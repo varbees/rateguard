@@ -9,8 +9,12 @@ OpenTelemetry GenAI semantic conventions v1.29.0 (2026)
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Literal
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from ..runtime import RateGuardRuntime
+    from ..types import Clock
 
 
 @dataclass
@@ -128,3 +132,121 @@ def genai_span_end_attributes(call: GenAICall, latency_seconds: float, error: Ex
     if call.response_id:
         attrs["gen_ai.response.id"] = call.response_id
     return attrs
+
+
+# ── Public GenAI tracking API ──
+#
+# genai_span_attributes/genai_span_end_attributes above are pure OTel
+# attribute builders — RateGuard's Python SDK ships no OpenTelemetry SDK
+# integration of its own (unlike Go's genai_observability.go, which wires
+# them into a real otel tracer/meter when one is configured). GenAISpan is
+# the same stateful facade Go's SDK.StartGenAICall/GenAISpan provide —
+# start a span per LLM call, record streaming chunks as they arrive, and
+# call end() with whatever the response told you — except its output is
+# the computed GenAICall plus the OTel-shaped end attributes dict, ready
+# for a caller with their own tracer to emit onto a real span.
+
+
+def _merge_genai_call(start_call: GenAICall, final: GenAICall | None) -> GenAICall:
+    """Merges final over the fields captured at start: non-zero/non-empty
+    fields in final win, everything else falls back to the value recorded
+    at start_genai_call time. Mirrors Go's GenAISpan.End field-by-field
+    (only the fields Go's End() actually touches — Model, Provider,
+    Operation, token counts, EstimatedCostUSD, ResponseID; fields like
+    ConversationID or CircuitBreakerState are start-time only, exactly as
+    in Go)."""
+    call = replace(start_call)
+    if final is None:
+        return call
+    if final.model:
+        call.model = final.model
+    if final.provider:
+        call.provider = final.provider
+    if final.operation:
+        call.operation = final.operation
+    if final.prompt_tokens > 0:
+        call.prompt_tokens = final.prompt_tokens
+    if final.completion_tokens > 0:
+        call.completion_tokens = final.completion_tokens
+    if final.total_tokens > 0:
+        call.total_tokens = final.total_tokens
+    if final.estimated_cost_usd > 0:
+        call.estimated_cost_usd = final.estimated_cost_usd
+    if final.response_id:
+        call.response_id = final.response_id
+    return call
+
+
+class GenAISpan:
+    """Tracks one in-flight LLM call started with start_genai_call.
+    Mirrors Go's GenAISpan (genai_observability.go lines ~319-425).
+
+        span = rg.start_genai_call(GenAICall(model="gpt-4o", provider="openai", operation="chat"))
+        try:
+            for chunk in stream:
+                span.record_chunk()
+                ...
+        except Exception as exc:
+            span.end(GenAICall(model="", provider=""), error=exc)
+        else:
+            span.end(GenAICall(model="gpt-4o", provider="openai",
+                                prompt_tokens=usage.input, completion_tokens=usage.output))
+
+    After end(), `.call` holds the fully merged GenAICall and
+    `.end_attributes` holds the OTel-shaped attributes dict from
+    genai_span_end_attributes — feed those onto your own tracer's span if
+    you have one.
+    """
+
+    def __init__(self, call: GenAICall, clock: "Clock") -> None:
+        self._clock = clock
+        self._start_call = call
+        self._start = clock.now()  # ms, per this codebase's Clock convention
+        self._first_chunk_at: float | None = None
+        self._chunks = 0
+        self.call: GenAICall = call
+        self.end_attributes: dict[str, str | int | bool | float] | None = None
+
+    def record_chunk(self) -> None:
+        """Marks a streaming chunk. The first call sets time-to-first-chunk."""
+        self._chunks += 1
+        if self._first_chunk_at is None:
+            self._first_chunk_at = self._clock.now()
+
+    def end(self, final: GenAICall | None = None, error: Exception | None = None) -> None:
+        """Completes the span with final usage. Zero-value/empty fields in
+        final fall back to the values passed at start_genai_call. Cost is
+        estimated automatically from the pricing table when not provided."""
+        call = _merge_genai_call(self._start_call, final)
+
+        if call.total_tokens == 0:
+            call.total_tokens = call.prompt_tokens + call.completion_tokens
+        if call.estimated_cost_usd == 0:
+            call.estimated_cost_usd = estimate_cost(call.model, call.prompt_tokens, call.completion_tokens)
+
+        latency_ms = max(0.0, self._clock.now() - self._start)
+        if self._chunks > 0:
+            call.streaming = True
+            call.stream_chunks = self._chunks
+            if self._first_chunk_at is not None:
+                call.time_to_first_chunk_ms = int(self._first_chunk_at - self._start)
+            call.time_per_output_chunk_ms = latency_ms / self._chunks
+        # final's own stream fields win over computed ones if explicitly
+        # provided — same order Go's End() applies them in.
+        if final is not None:
+            if final.stream_chunks > 0:
+                call.stream_chunks = final.stream_chunks
+            if final.time_to_first_chunk_ms > 0:
+                call.time_to_first_chunk_ms = final.time_to_first_chunk_ms
+            if final.time_per_output_chunk_ms > 0:
+                call.time_per_output_chunk_ms = final.time_per_output_chunk_ms
+
+        self.call = call
+        self.end_attributes = genai_span_end_attributes(call, latency_ms / 1000.0, error)
+
+
+def start_genai_call(runtime: "RateGuardRuntime", call: GenAICall) -> GenAISpan:
+    """Opens a GenAI call span, recording the start time via runtime's
+    Clock. Thin entry point wired onto RateGuard.start_genai_call in
+    facade.py — mirrors Go's SDK.StartGenAICall."""
+    return GenAISpan(call, runtime.config.clock)

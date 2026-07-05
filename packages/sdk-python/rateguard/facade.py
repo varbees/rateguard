@@ -19,6 +19,8 @@ from .types import (
 if TYPE_CHECKING:
     from .adapters.asgi import ASGIApp
     from .adapters.wsgi import WSGIApp
+    from .core.adaptive import AdaptiveLimiter, AdaptiveOptions
+    from .core.genai import GenAICall, GenAISpan
     from .core.guardrail_log import GuardrailLog
     from .core.guardrails import GuardrailChain
     from .core.mcp import LoopDetector, MCPTool, MCPToolResult
@@ -72,6 +74,8 @@ class RateGuard:
         guardrails: "GuardrailChain | None" = None,
         loop_detection: bool = False,
         estimated_tokens_per_request: int = 0,
+        adaptive_rate_limit: bool = False,
+        adaptive: "AdaptiveOptions | None" = None,
     ) -> None:
         self.options = RateGuardOptions(
             api_key=api_key,
@@ -93,9 +97,19 @@ class RateGuard:
             guardrails=guardrails,
             loop_detection=loop_detection,
             estimated_tokens_per_request=estimated_tokens_per_request,
+            adaptive_rate_limit=adaptive_rate_limit,
+            adaptive=adaptive,
         )
         self.runtime = RateGuardRuntime(self.options)
         self._mcp_tools: list["MCPTool"] | None = None
+
+    @property
+    def adaptive_limiter(self) -> "AdaptiveLimiter | None":
+        """The adaptive rate-limit controller, when adaptive_rate_limit was
+        enabled — None otherwise. Mirrors Go's
+        SDK.AdaptiveRateLimitFactor(): use .factor()/.error_rate() for
+        introspection (dashboards, health checks)."""
+        return self.runtime.adaptive_limiter
 
     @property
     def loop_detector(self) -> "LoopDetector":
@@ -123,6 +137,21 @@ class RateGuard:
         from .core.mcp import mcp_call
 
         return mcp_call(self.mcp_tools(), tool_name, args)
+
+    def start_genai_call(self, call: "GenAICall") -> "GenAISpan":
+        """Public GenAI observability API: wrap an LLM call to track
+        TTFT/TPOT/cost. Mirrors Go's SDK.StartGenAICall.
+
+            span = rg.start_genai_call(GenAICall(model="gpt-4o", provider="openai", operation="chat"))
+            for chunk in stream:
+                span.record_chunk()
+                ...
+            span.end(GenAICall(model="gpt-4o", provider="openai",
+                                prompt_tokens=usage.input, completion_tokens=usage.output))
+        """
+        from .core.genai import start_genai_call
+
+        return start_genai_call(self.runtime, call)
 
     def httpx_transport(self, **kwargs) -> object:
         """Sync httpx transport with outbound GenAI tracking.

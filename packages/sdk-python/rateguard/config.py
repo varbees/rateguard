@@ -126,6 +126,8 @@ def resolve_rateguard_options(options: RateGuardOptions) -> ResolvedRateGuardOpt
             if isinstance(options.estimated_tokens_per_request, (int, float)) and options.estimated_tokens_per_request > 0
             else 0
         ),
+        adaptive_rate_limit=bool(options.adaptive_rate_limit),
+        adaptive=options.adaptive,
     )
 
 

@@ -23,12 +23,14 @@ impossible at the transport layer and is NOT claimed.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
 
 from .circuit_breaker import CircuitBreaker
+from .semantic_cache import CachedResponse, SemanticCache, SemanticCacheOptions, is_streaming_request_body, prompt_text_from_request_body
 from .utils import extract_token_usage_from_text, format_retry_after_ms
 
 if TYPE_CHECKING:
@@ -281,6 +283,7 @@ def create_httpx_transport(
     disable_rate_limit: bool = False,
     estimated_tokens: int = 0,
     transport: Any = None,
+    semantic_cache: SemanticCacheOptions | None = None,
 ) -> Any:
     """Build a sync httpx transport with outbound GenAI tracking.
 
@@ -288,6 +291,14 @@ def create_httpx_transport(
         transport = create_httpx_transport(rg.runtime)
         client = httpx.Client(transport=transport)
         openai = OpenAI(http_client=client)
+
+    Pass semantic_cache=SemanticCacheOptions(embedder=...) to enable
+    semantic response caching (core/semantic_cache.py) for this
+    transport. None (default) disables it entirely — no embedding calls,
+    no memory overhead. A hit skips the network call, the rate limiter,
+    the circuit breaker, and the token budget entirely: it is a real
+    dollar saved, not just a faster response. Streaming requests always
+    bypass the cache.
     """
     try:
         import httpx
@@ -299,6 +310,7 @@ def create_httpx_transport(
 
     core = _OutboundCore(runtime, mode=mode, chain=chain, disable_rate_limit=disable_rate_limit, estimated_tokens=estimated_tokens)
     inner = transport or httpx.HTTPTransport()
+    cache = SemanticCache(semantic_cache, runtime.config.clock) if semantic_cache is not None else None
 
     def synthesized(request: Any, status: int, code: str, message: str, retry_after_ms: int) -> Any:
         headers = {"content-type": "application/json", "x-rateguard-synthesized": "true"}
@@ -306,6 +318,11 @@ def create_httpx_transport(
             headers["retry-after"] = format_retry_after_ms(retry_after_ms)
         payload = json.dumps({"error": {"type": code, "message": message, "source": "rateguard"}})
         return httpx.Response(status, headers=headers, content=payload.encode(), request=request)
+
+    def cached_response_to_httpx(request: Any, cached: CachedResponse) -> Any:
+        headers = dict(cached.headers)
+        headers["x-rateguard-cache"] = "hit"
+        return httpx.Response(cached.status_code, headers=headers, content=cached.body, request=request)
 
     class _ScanningByteStream(httpx.SyncByteStream):
         """Passes chunks through unchanged while scanning SSE lines for usage."""
@@ -349,7 +366,51 @@ def create_httpx_transport(
             if call.model == "" and body:
                 call.model = _model_from_body(body)
 
+            if cache is not None:
+                body_text = body.decode("utf-8", errors="replace") if body else ""
+                if not is_streaming_request_body(body_text):
+                    return self._execute_with_cache(request, body, body_text, call)
+
             return self._execute(request, body, call, 0)
+
+        def _execute_with_cache(self, request: Any, body: bytes, body_text: str, call: OutboundCall) -> Any:
+            """Checks the semantic cache before making the real call and
+            stores a fresh successful response afterward. A hit bypasses
+            _execute entirely — no breaker check, no rate limit, no token
+            budget, no network call, because the whole point is that
+            nothing was actually spent."""
+            assert cache is not None
+            scope = f"{call.provider}:{call.model or 'default'}"
+            prompt = prompt_text_from_request_body(body_text)
+            if not prompt:
+                return self._execute(request, body, call, 0)
+
+            try:
+                # Embedder.embed is async-only (bring your own OpenAI/
+                # Cohere/Voyage/local embedder); this sync transport runs
+                # it to completion on a private event loop. Embedding
+                # failure degrades to a real call — caching is a cost
+                # optimization, never a reason to fail the request.
+                embedding = asyncio.run(cache.embed(prompt))
+            except Exception:
+                return self._execute(request, body, call, 0)
+            if not embedding:
+                return self._execute(request, body, call, 0)
+
+            cached = cache.lookup(scope, embedding)
+            if cached is not None:
+                return cached_response_to_httpx(request, cached)
+
+            response = self._execute(request, body, call, 0)
+            content_type = response.headers.get("content-type", "")
+            if response.status_code != 200 or content_type.startswith("text/event-stream"):
+                return response
+            if response.headers.get("x-rateguard-synthesized") == "true":
+                return response  # a rejection we synthesized ourselves — never cache it
+
+            content = response.read()
+            cache.store(scope, embedding, CachedResponse(status_code=response.status_code, headers=dict(response.headers), body=content))
+            return response
 
         def _execute(self, request: Any, body: bytes, call: OutboundCall, depth: int) -> Any:
             breaker = core.breaker_for(call.provider)
@@ -455,6 +516,7 @@ def create_httpx_async_transport(
     disable_rate_limit: bool = False,
     estimated_tokens: int = 0,
     transport: Any = None,
+    semantic_cache: SemanticCacheOptions | None = None,
 ) -> Any:
     """Build an async httpx transport with outbound GenAI tracking.
 
@@ -464,6 +526,11 @@ def create_httpx_async_transport(
         transport = create_httpx_async_transport(rg.runtime)
         client = httpx.AsyncClient(transport=transport)
         set_default_openai_client(AsyncOpenAI(http_client=client))
+
+    Pass semantic_cache=SemanticCacheOptions(embedder=...) to enable
+    semantic response caching (core/semantic_cache.py) for this
+    transport — see create_httpx_transport's docstring for the same
+    option on the sync transport.
     """
     try:
         import httpx
@@ -475,6 +542,7 @@ def create_httpx_async_transport(
 
     core = _OutboundCore(runtime, mode=mode, chain=chain, disable_rate_limit=disable_rate_limit, estimated_tokens=estimated_tokens)
     inner = transport or httpx.AsyncHTTPTransport()
+    cache = SemanticCache(semantic_cache, runtime.config.clock) if semantic_cache is not None else None
 
     def synthesized(request: Any, status: int, code: str, message: str, retry_after_ms: int) -> Any:
         headers = {"content-type": "application/json", "x-rateguard-synthesized": "true"}
@@ -482,6 +550,11 @@ def create_httpx_async_transport(
             headers["retry-after"] = format_retry_after_ms(retry_after_ms)
         payload = json.dumps({"error": {"type": code, "message": message, "source": "rateguard"}})
         return httpx.Response(status, headers=headers, content=payload.encode(), request=request)
+
+    def cached_response_to_httpx(request: Any, cached: CachedResponse) -> Any:
+        headers = dict(cached.headers)
+        headers["x-rateguard-cache"] = "hit"
+        return httpx.Response(cached.status_code, headers=headers, content=cached.body, request=request)
 
     class _AsyncScanningByteStream(httpx.AsyncByteStream):
         """Passes chunks through unchanged while scanning SSE lines for usage."""
@@ -525,7 +598,45 @@ def create_httpx_async_transport(
             if call.model == "" and body:
                 call.model = _model_from_body(body)
 
+            if cache is not None:
+                body_text = body.decode("utf-8", errors="replace") if body else ""
+                if not is_streaming_request_body(body_text):
+                    return await self._execute_with_cache(request, body, body_text, call)
+
             return await self._execute(request, body, call, 0)
+
+        async def _execute_with_cache(self, request: Any, body: bytes, body_text: str, call: OutboundCall) -> Any:
+            """Async counterpart of the sync transport's
+            _execute_with_cache — see its docstring."""
+            assert cache is not None
+            scope = f"{call.provider}:{call.model or 'default'}"
+            prompt = prompt_text_from_request_body(body_text)
+            if not prompt:
+                return await self._execute(request, body, call, 0)
+
+            try:
+                embedding = await cache.embed(prompt)
+            except Exception:
+                # Embedding failure degrades to a real call — caching is a
+                # cost optimization, never a reason to fail the request.
+                return await self._execute(request, body, call, 0)
+            if not embedding:
+                return await self._execute(request, body, call, 0)
+
+            cached = cache.lookup(scope, embedding)
+            if cached is not None:
+                return cached_response_to_httpx(request, cached)
+
+            response = await self._execute(request, body, call, 0)
+            content_type = response.headers.get("content-type", "")
+            if response.status_code != 200 or content_type.startswith("text/event-stream"):
+                return response
+            if response.headers.get("x-rateguard-synthesized") == "true":
+                return response  # a rejection we synthesized ourselves — never cache it
+
+            content = await response.aread()
+            cache.store(scope, embedding, CachedResponse(status_code=response.status_code, headers=dict(response.headers), body=content))
+            return response
 
         async def _execute(self, request: Any, body: bytes, call: OutboundCall, depth: int) -> Any:
             breaker = core.breaker_for(call.provider)
