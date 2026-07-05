@@ -211,7 +211,11 @@ func TestVerifyChainRejectsExpiredToken(t *testing.T) {
 
 func TestSignAndVerifyPresentation(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	// VerifyPresentation checks expiry against real wall-clock time (unlike
+	// verifyChainAt, which the other tests in this file call directly with an
+	// injected `now`), so the grant must be anchored to time.Now(), not a
+	// fixed historical date that will eventually be in the past.
+	now := time.Now()
 	token, delegatePriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
@@ -251,7 +255,9 @@ func TestVerifyPresentationRejectsWrongHolder(t *testing.T) {
 
 func TestVerifyPresentationRejectsReplayedSignatureUnderDifferentContext(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
-	now := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	// Same real-clock consideration as TestSignAndVerifyPresentation above:
+	// VerifyPresentation checks expiry against time.Now(), so anchor to it.
+	now := time.Now()
 	token, delegatePriv, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: rootGrant(now)})
 	if err != nil {
 		t.Fatal(err)
