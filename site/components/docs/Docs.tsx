@@ -36,7 +36,7 @@ export function DocH1({ kicker, children }: { kicker?: string; children: React.R
           {kicker}
         </p>
       )}
-      <h1 className="text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{children}</h1>
+      <h1 className="font-display text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{children}</h1>
     </header>
   );
 }

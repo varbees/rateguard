@@ -1,17 +1,50 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #0a0a0a;
-  --fg: #f5f5f5;
-  --muted: #737373;
-  --accent: #3b82f6;
-  --border: #262626;
-  --card: #171717;
+  /* Named palette — pulled from the shield artwork: chaos in, structure, order out */
+  --void: #050507;
+  --bone: #f5f5f5;
+  --amber: #f59e0b;
+  --violet: #7c6cff;
+  --ice: #38bdf8;
+  --ink: #131316;
+
+  --bg: var(--void);
+  --fg: var(--bone);
+  --muted: #8a8a92;
+  --accent: var(--amber);
+  --border: #232328;
+  --card: var(--ink);
+
+  --font-display: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* {
+  border-color: var(--border);
 }
 
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+}
+
+code, pre, .font-mono {
+  font-family: var(--font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
