@@ -22,6 +22,7 @@ coverage.html
 /packages/sdk-go/adaptive-rate-limit
 /packages/sdk-go/budget-attestation
 /packages/sdk-go/dashboard-demo
+/packages/connect/rateguard-connect
 
 # Graphify's own analysis output (regenerable, not source)
 graphify-out/

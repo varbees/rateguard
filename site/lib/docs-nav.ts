@@ -33,6 +33,13 @@ export const docsNav: DocSection[] = [
     pages: [{ slug: "integrations", title: "Agent frameworks" }],
   },
   {
+    label: "Operate",
+    pages: [
+      { slug: "dashboard", title: "Dashboard & admin API" },
+      { slug: "connect", title: "Connect (universal proxy)" },
+    ],
+  },
+  {
     label: "Reference",
     pages: [{ slug: "configuration", title: "Configuration" }],
   },
