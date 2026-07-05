@@ -69,10 +69,9 @@ Every limiter also implements Peek — a non-consuming pre-flight query.
 - Admin API (Go): `rg.AdminHandler()` — GET /admin/state?key=, GET/PATCH /admin/policy (live policy tweaks via SDK.SetPolicy), GET /admin/mcp/tools + POST /admin/mcp/call (invoke any MCP tool directly over HTTP). Opt-in, unauthenticated by design (same posture as pprof) — bind to localhost/internal network or add your own auth. Not yet ported to Node/Python.
 - Guardrail violation tracking: bounded log (50 events, code+message+timestamp, never the content) + cumulative counts by code + `rateguard_guardrail_violations_total` Prometheus counter. Reachable via list_limits/admin/state.
 - Dashboard (packages/dashboard): self-hosted control center, six sections (Overview, Analytics, Agents, Controls, MCP Console, Settings) behind a persistent sidebar — live budget/rate-limit/circuit-breaker/loop/guardrail state, live time-series traffic charts, an interactive MCP tool console, a policy tweak panel. `docker compose up` for a one-command demo against a synthetic-traffic instance.
-- Connect (packages/connect): one-command reverse proxy for third-party tools you don't control the source of (Claude Code, Hermes, Aider, Cursor — anything with a base_url override) — puts the same rate limiting, budgets, breaker, loop detection, and guardrails in front of any OpenAI- or Anthropic-compatible endpoint. `go run . -upstream https://api.deepseek.com -port 8090`.
 
 ## Tests
-All 3 SDKs green — 256 total: `go test ./...` (150 passing), `bun run test` (52 passing), `pytest -q` (54 passing). Plus packages/connect (2 passing) and a cross-language conformance suite (`conformance/token_bucket_vectors.json`) that replays one shared oracle against all 3 SDKs to prove real behavioral parity, not just per-language test counts. Known current gap: `retry_after_ms` rounds to the nearest second in Go vs. nearest millisecond (floored at 1000ms) in Node/Python — not yet unified.
+All 3 SDKs green — 253 total: `go test ./...` (147 test funcs), `bun run test` (52 passing), `pytest -q` (54 passing). Plus a cross-language conformance suite (`conformance/token_bucket_vectors.json`) that replays one shared oracle against all 3 SDKs to prove real behavioral parity, not just per-language test counts. Known current gap: `retry_after_ms` rounds to the nearest second in Go vs. nearest millisecond (floored at 1000ms) in Node/Python — not yet unified.
 
 ## Docs
 - AGENTS.md: full agent contract with architecture, domain types, rules, commands
@@ -80,7 +79,6 @@ All 3 SDKs green — 256 total: `go test ./...` (150 passing), `bun run test` (5
 - docs/API_REFERENCE.md: all config, adapters, provider chain, guardrails
 - docs/GENAI_OBSERVABILITY.md: OTel integration, model pricing, streaming
 - docs/RELEASE_NOTES.md: changelog
-- packages/connect/README.md: universal proxy, per-tool config with confidence labels
 
 ## vs Competition
 As of 2026-07-05: no other product combines (1) true in-process embedding — no proxy, no base-URL swap, (2) real multi-language parity — Go *and* Node *and* Python, not one language plus an HTTP API, and (3) MCP tools the agent itself calls to check its own limit pre-flight. The closest competing claims are architecturally different, not weaker: Bifrost (Maxim AI) combines LLM+MCP governance in one binary but is a proxy you deploy, Go-only; Envoy AI Gateway v1.0 ships token-aware limits with a native MCP Gateway but is Kubernetes/Envoy infrastructure, not an embedded library. Token-aware rate limiting itself is being commoditized fast at the gateway layer (Cloudflare AI Gateway, Kong, Kuadrant, Envoy all ship some form of it now) — RateGuard's durable claim is the architecture, not the feature list.

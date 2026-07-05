@@ -106,21 +106,6 @@ export function MicroDashboard() {
   );
 }
 
-// A tool's traffic rerouted through a local proxy before it reaches the real endpoint.
-export function MicroConnect() {
-  return (
-    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-      <rect x="3" y="15" width="7" height="7" rx="1.5" stroke="var(--violet)" strokeWidth="1.5" />
-      <rect x="26" y="15" width="7" height="7" rx="1.5" stroke="var(--border)" strokeWidth="1.5" />
-      <circle cx="18" cy="18.5" r="4" stroke="var(--amber)" strokeWidth="1.5" />
-      <motion.circle cx="18" cy="18.5" r="4" stroke="var(--amber)" strokeWidth="1"
-        animate={{ scale: [1, 1.7], opacity: [0.6, 0] }} transition={{ duration: 1.8, repeat: Infinity }}
-        style={{ originX: "18px", originY: "18.5px" }} />
-      <path d="M10 18.5h4M22 18.5h4" stroke="var(--border)" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
 // A chain that reroutes the instant one link opens.
 export function MicroFallback() {
   return (

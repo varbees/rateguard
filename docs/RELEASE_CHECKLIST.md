@@ -59,20 +59,13 @@ python3 -m build --sdist --wheel
 python3 -m twine check dist/*
 ```
 
-## 5. Verify Connect & Dashboard
+## 5. Verify Dashboard
 
-Neither publishes to a package registry — they ship from the repo (`go run`/Docker), so this is a
+Dashboard doesn't publish to a package registry — it ships from the repo (Docker), so this is a
 build + smoke test, not a publish step.
 
 ```bash
-cd packages/connect
-go build -o /tmp/rateguard-connect .
-go test ./...
-/tmp/rateguard-connect -upstream https://api.openai.com -port 8099 &
-curl -s http://localhost:8099/ | grep -q "rateguard-connect" && echo "connect OK"
-kill %1
-
-cd ../dashboard
+cd packages/dashboard
 npx next build
 ```
 
