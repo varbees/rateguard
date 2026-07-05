@@ -3,7 +3,8 @@ import {
   buildEventEnvelope,
 } from './core/event-emitter.js';
 import { CircuitBreaker } from './core/circuit-breaker.js';
-import { RateLimiter } from './core/rate-limiter.js';
+import { RateLimiter, type RateLimiterLike } from './core/rate-limiter.js';
+import { AdaptiveLimiter } from './core/adaptive.js';
 import { TokenBudgetManager } from './core/token-budget.js';
 import { LoopDetector } from './core/mcp.js';
 import { GuardrailLog } from './core/guardrail-log.js';
@@ -39,7 +40,7 @@ export interface RequestBodyRejection {
  */
 export class RateGuardRuntime {
   readonly config: ReturnType<typeof resolveRateGuardOptions>;
-  readonly rateLimiter: RateLimiter;
+  readonly rateLimiter: RateLimiterLike;
   readonly tokenBudget: TokenBudgetManager;
   readonly circuitBreaker: CircuitBreaker;
   readonly eventEmitter: ReturnType<typeof createEventEmitter>;
@@ -48,12 +49,36 @@ export class RateGuardRuntime {
 
   constructor(options: RateGuardOptions = {}) {
     this.config = resolveRateGuardOptions(options);
-    this.rateLimiter = new RateLimiter({ clock: this.config.clock, capacity: 50_000 });
+
+    let rateLimiter: RateLimiterLike = new RateLimiter({ clock: this.config.clock, capacity: 50_000 });
+    if (this.config.adaptiveRateLimit) {
+      // Mirrors Go's New(): `if cfg.AdaptiveRateLimit { limiter =
+      // newAdaptiveLimiterWithClock(limiter, cfg.Adaptive, clock) }` — the
+      // configured RateLimiter becomes the AIMD controller's inner limiter,
+      // never replaced, only scaled.
+      rateLimiter = new AdaptiveLimiter(rateLimiter, this.config.adaptive, this.config.clock);
+    }
+    this.rateLimiter = rateLimiter;
+
     this.tokenBudget = new TokenBudgetManager({ clock: this.config.clock, capacity: 50_000 });
     this.circuitBreaker = new CircuitBreaker(this.config.clock, this.config.circuitBreaker);
     this.eventEmitter = createEventEmitter(this.config);
     this.loopDetector = new LoopDetector();
     this.guardrailLog = new GuardrailLog();
+  }
+
+  /**
+   * Current adaptive rate-limit scaling factor (1.0 = configured policy), or
+   * undefined when adaptive rate limiting isn't enabled. Mirrors Go's
+   * SDK.AdaptiveRateLimitFactor().
+   */
+  adaptiveRateLimitFactor(): number | undefined {
+    return this.rateLimiter instanceof AdaptiveLimiter ? this.rateLimiter.factor() : undefined;
+  }
+
+  /** Current EMA of upstream error rate driving the adaptive controller, or undefined when disabled. */
+  adaptiveRateLimitErrorRate(): number | undefined {
+    return this.rateLimiter instanceof AdaptiveLimiter ? this.rateLimiter.errorRate() : undefined;
   }
 
   /**
@@ -201,6 +226,9 @@ export class RateGuardRuntime {
 
     const success = observation.error ? false : observation.statusCode < 500;
     const breakerDecision = this.circuitBreaker.recordOutcome(success);
+    if (this.rateLimiter instanceof AdaptiveLimiter) {
+      this.rateLimiter.recordOutcome(success);
+    }
 
     const tokenDecision = this.tokenBudget.check(key, this.config.tokenBudget);
     const payload = this.buildPayload(request, breakerDecision.state, observation.statusCode, startedAtMs, undefined, tokenDecision, usage, breakerDecision.retryAfterMs);

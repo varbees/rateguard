@@ -1,4 +1,5 @@
 import {
+  type AdaptiveOptions,
   type Clock,
   type CircuitBreakerOptions,
   type PolicyPreset,
@@ -260,6 +261,34 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
       typeof options.estimatedTokensPerRequest === 'number' && options.estimatedTokensPerRequest > 0
         ? Math.floor(options.estimatedTokensPerRequest)
         : 0,
+    adaptiveRateLimit: options.adaptiveRateLimit ?? false,
+    adaptive: normalizeAdaptiveOptions(options.adaptive),
+  };
+}
+
+/**
+ * Normalize adaptive rate-limit controller options against the documented
+ * defaults (mirrors Go's AdaptiveOptions.withDefaults in adaptive.go).
+ */
+export function normalizeAdaptiveOptions(options: AdaptiveOptions | undefined): Required<AdaptiveOptions> {
+  const minFactor = typeof options?.minFactor === 'number' && options.minFactor > 0 ? options.minFactor : 0.25;
+  let maxFactor = typeof options?.maxFactor === 'number' && options.maxFactor > 0 ? options.maxFactor : 2.0;
+  if (maxFactor < minFactor) {
+    maxFactor = minFactor;
+  }
+
+  return {
+    minFactor,
+    maxFactor,
+    targetErrorRate: typeof options?.targetErrorRate === 'number' && options.targetErrorRate > 0 ? options.targetErrorRate : 0.05,
+    increaseStep: typeof options?.increaseStep === 'number' && options.increaseStep > 0 ? options.increaseStep : 0.05,
+    decreaseFactor:
+      typeof options?.decreaseFactor === 'number' && options.decreaseFactor > 0 && options.decreaseFactor < 1
+        ? options.decreaseFactor
+        : 0.5,
+    adjustIntervalMs:
+      typeof options?.adjustIntervalMs === 'number' && options.adjustIntervalMs > 0 ? Math.floor(options.adjustIntervalMs) : 1_000,
+    emaAlpha: typeof options?.emaAlpha === 'number' && options.emaAlpha > 0 && options.emaAlpha <= 1 ? options.emaAlpha : 0.2,
   };
 }
 

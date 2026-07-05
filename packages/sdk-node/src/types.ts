@@ -81,6 +81,28 @@ export interface CircuitBreakerOptions {
 }
 
 /**
+ * Tunes the AIMD adaptive rate-limiting controller. The zero value (all
+ * fields omitted) selects the documented defaults. Mirrors Go's
+ * AdaptiveOptions in adaptive.go.
+ */
+export interface AdaptiveOptions {
+  /** Lower bound on the policy scaling factor (default 0.25). */
+  minFactor?: number;
+  /** Upper bound on the policy scaling factor (default 2.0). */
+  maxFactor?: number;
+  /** Upstream error rate the controller steers under (default 0.05). */
+  targetErrorRate?: number;
+  /** Additive factor gain per healthy adjust interval (default 0.05). */
+  increaseStep?: number;
+  /** Multiplicative factor cut on a breach (default 0.5). */
+  decreaseFactor?: number;
+  /** Minimum time between controller adjustments (default 1000ms). */
+  adjustIntervalMs?: number;
+  /** EMA weight applied to each new outcome sample (default 0.2). */
+  emaAlpha?: number;
+}
+
+/**
  * Root configuration accepted by the Node SDK.
  */
 export interface RateGuardOptions {
@@ -120,6 +142,15 @@ export interface RateGuardOptions {
    * Go's cfg.EstimatedTokensPerRequest.
    */
   estimatedTokensPerRequest?: number;
+  /**
+   * Enables the AIMD adaptive rate-limiting controller, which scales the
+   * effective rps/burst up or down from observed upstream success/error
+   * outcomes instead of trusting the configured policy forever. Mirrors
+   * Go's cfg.AdaptiveRateLimit. Opt-in, defaults to false.
+   */
+  adaptiveRateLimit?: boolean;
+  /** Tunes the adaptive controller. Mirrors Go's cfg.Adaptive. */
+  adaptive?: AdaptiveOptions;
 }
 
 /**
@@ -145,6 +176,8 @@ export interface ResolvedRateGuardOptions {
   guardrails: Guardrail | undefined;
   loopDetection: boolean;
   estimatedTokensPerRequest: number;
+  adaptiveRateLimit: boolean;
+  adaptive: Required<AdaptiveOptions>;
 }
 
 /**

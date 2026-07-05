@@ -3,6 +3,8 @@ export * from './config.js';
 export * from './runtime.js';
 export * from './core/bounded-cache.js';
 export * from './core/rate-limiter.js';
+export * from './core/sharded-limiter.js';
+export * from './core/adaptive.js';
 export * from './core/token-budget.js';
 export * from './core/circuit-breaker.js';
 export * from './core/event-emitter.js';
@@ -10,6 +12,8 @@ export * from './core/mcp.js';
 export * from './core/guardrails.js';
 export * from './core/guardrail-log.js';
 export * from './core/genai.js';
+export * from './core/genai-span.js';
+export * from './core/semantic-cache.js';
 export * from './core/prometheus.js';
 export * from './core/outbound.js';
 export {
@@ -28,6 +32,8 @@ import { RateGuardRuntime } from './runtime.js';
 import { createMCPTools, mcpCall, type LoopDetector, type MCPTool, type MCPToolResult } from './core/mcp.js';
 import type { GuardrailLog } from './core/guardrail-log.js';
 import { wrapFetch, type WrapFetchOptions } from './core/outbound.js';
+import { startGenAICall as openGenAISpan, type GenAIObserver, type GenAISpan } from './core/genai-span.js';
+import type { GenAICall } from './core/genai.js';
 import { middleware as expressMiddleware } from './adapters/express.js';
 import { rateguardPlugin } from './adapters/fastify.js';
 import { rateguard } from './adapters/hono.js';
@@ -79,6 +85,29 @@ export class RateGuard {
    */
   wrapFetch(options: WrapFetchOptions = {}): typeof fetch {
     return wrapFetch(this.runtime, options);
+  }
+
+  /**
+   * Opens a GenAI observability span for one outbound LLM call — token
+   * counts, cost estimation, and (for streaming calls) TTFT/TPOT timing.
+   * Mirrors Go's SDK.StartGenAICall.
+   */
+  startGenAICall(call: Partial<GenAICall> = {}, observer?: GenAIObserver): GenAISpan {
+    return openGenAISpan(this.runtime.config.clock, call, observer);
+  }
+
+  /**
+   * Current adaptive rate-limit scaling factor (1.0 = configured policy), or
+   * undefined when `adaptiveRateLimit` isn't enabled. Mirrors Go's
+   * SDK.AdaptiveRateLimitFactor().
+   */
+  adaptiveRateLimitFactor(): number | undefined {
+    return this.runtime.adaptiveRateLimitFactor();
+  }
+
+  /** Current EMA of upstream error rate driving the adaptive controller, or undefined when disabled. */
+  adaptiveRateLimitErrorRate(): number | undefined {
+    return this.runtime.adaptiveRateLimitErrorRate();
   }
 
   middleware() {

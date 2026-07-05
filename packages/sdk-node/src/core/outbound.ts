@@ -18,6 +18,7 @@
 
 import { CircuitBreaker } from './circuit-breaker.js';
 import { extractTokenUsageFromText } from './utils.js';
+import { SemanticCache, isStreamingRequestBody, promptTextFromRequestBody, type SemanticCacheOptions } from './semantic-cache.js';
 import type { ProviderEntry } from './provider-chain.js';
 import type { RateGuardRuntime } from '../runtime.js';
 import type { TokenUsage } from '../types.js';
@@ -47,6 +48,14 @@ export interface WrapFetchOptions {
   disableRateLimit?: boolean;
   /** Base fetch to wrap. Defaults to globalThis.fetch. */
   fetch?: typeof fetch;
+  /**
+   * Enables semantic response caching for this transport. Undefined
+   * (default) disables it entirely — no embedding calls, no memory
+   * overhead. A hit skips the network call, the rate limiter, the circuit
+   * breaker, and the token budget entirely: it is a real dollar saved, not
+   * just a faster response. Streaming requests always bypass the cache.
+   */
+  semanticCache?: SemanticCacheOptions;
 }
 
 const MAX_EXTRACT_BYTES = 1 << 20; // 1 MiB cap on JSON usage extraction
@@ -189,6 +198,7 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
   const rawEstimate = options.estimatedTokens ?? DEFAULT_OUTBOUND_ESTIMATED_TOKENS;
   const estimatedTokens = rawEstimate < 0 ? 0 : rawEstimate; // negative = strict reserve-all
   const breakers = new Map<string, CircuitBreaker>();
+  const cache = options.semanticCache ? new SemanticCache(options.semanticCache, runtime.config.clock) : undefined;
 
   const breakerFor = (provider: string): CircuitBreaker => {
     let breaker = breakers.get(provider);
@@ -337,6 +347,68 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     return response;
   };
 
+  /**
+   * Checks the semantic cache before making the real call and stores a
+   * fresh, cacheable response afterward. A hit bypasses `attempt` entirely —
+   * no breaker check, no rate limit, no token budget, no network call,
+   * because the whole point is that nothing was actually spent.
+   */
+  const attemptWithCache = async (url: URL, init: RequestInit, bodyText: string, call: OutboundCall): Promise<Response> => {
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    const semanticCache = cache!;
+    const scope = `${call.provider}:${call.model || 'default'}`;
+    const prompt = promptTextFromRequestBody(bodyText);
+    if (!prompt) {
+      return attempt(url, init, bodyText || undefined, call, 0);
+    }
+
+    let embedding: number[];
+    try {
+      embedding = await semanticCache.embed(prompt);
+    } catch {
+      // Embedding failure degrades to a real call — caching is a cost
+      // optimization, never a reason to fail the request.
+      return attempt(url, init, bodyText || undefined, call, 0);
+    }
+    if (!embedding || embedding.length === 0) {
+      return attempt(url, init, bodyText || undefined, call, 0);
+    }
+
+    const cached = semanticCache.lookup(scope, embedding);
+    if (cached) {
+      const headers = new Headers(cached.headers);
+      headers.set('x-rateguard-cache', 'hit');
+      return new Response(cached.body, { status: cached.status, headers });
+    }
+
+    const response = await attempt(url, init, bodyText || undefined, call, 0);
+
+    // Never cache a rejection we synthesized ourselves, a non-200, or a
+    // streaming response — a cached response is a full body, and replaying
+    // it as a fabricated SSE stream would misrepresent timing to the caller.
+    if (response.status !== 200 || response.headers.get('x-rateguard-synthesized') === 'true') {
+      return response;
+    }
+    const contentType = response.headers.get('content-type') ?? '';
+    if (contentType.startsWith('text/event-stream')) {
+      return response;
+    }
+
+    try {
+      // Reuse the same clone()+text() pattern the token-usage extraction
+      // path uses below — never double-buffer the body the caller reads.
+      const text = await response.clone().text();
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headers[key] = value;
+      });
+      semanticCache.store(scope, embedding, { status: response.status, headers, body: text });
+    } catch {
+      // Storing is best-effort; never fail the real response over it.
+    }
+    return response;
+  };
+
   const guarded = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     let url: URL;
     try {
@@ -363,6 +435,10 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     const body = typeof requestInit.body === 'string' ? requestInit.body : undefined;
     if (!call.model && body) {
       call.model = modelFromBody(body);
+    }
+
+    if (cache && !isStreamingRequestBody(body ?? '')) {
+      return attemptWithCache(url, requestInit, body ?? '', call);
     }
 
     return attempt(url, requestInit, body, call, 0);

@@ -30,9 +30,25 @@ interface RemoteRateLimitResponse {
 }
 
 /**
+ * Shared contract implemented by every admission-decision limiter in this
+ * SDK (`RateLimiter`, `ShardedLimiter`, `AdaptiveLimiter`) — the minimal
+ * surface `RateGuardRuntime` and its callers need: consume-and-decide
+ * (`allow`) and decide-without-consuming (`peek`). `allow` may be async
+ * (`RateLimiter.allow` can call out to a remote control-plane endpoint);
+ * callers `await` it either way.
+ */
+export interface RateLimiterLike {
+  allow(
+    key: string,
+    options: Required<RateLimitOptions> & { apiKey: string | undefined },
+  ): Promise<RateLimitDecision> | RateLimitDecision;
+  peek(key: string, options: Required<RateLimitOptions>): RateLimitDecision;
+}
+
+/**
  * In-process token-bucket rate limiter with optional remote control-plane fallback.
  */
-export class RateLimiter {
+export class RateLimiter implements RateLimiterLike {
   private readonly clock: Clock;
   private readonly buckets: BoundedCache<string, Bucket>;
 
