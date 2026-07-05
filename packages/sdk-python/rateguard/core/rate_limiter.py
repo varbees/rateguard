@@ -18,7 +18,7 @@ from math import ceil
 from threading import RLock
 from typing import TYPE_CHECKING
 
-from ..types import Clock, RateLimitDecision, RateLimitOptions
+from ..types import BucketState, Clock, RateLimitDecision, RateLimitOptions
 from .bounded_cache import BoundedCache
 
 if TYPE_CHECKING:
@@ -46,10 +46,48 @@ class RateLimiter:
     def allow(self, key: str, options: RateLimitOptions, **kwargs: object) -> RateLimitDecision:
         rps = options.requests_per_second or 0
         burst = options.burst or 0
-        return self._allow_token_bucket(key, rps, burst)
+        return self._increment_token_bucket(key, rps, burst, 1.0)
 
     async def allow_async(self, key: str, options: RateLimitOptions, **kwargs: object) -> RateLimitDecision:
         return self.allow(key, options)
+
+    def increment(self, key: str, options: RateLimitOptions, n: float) -> RateLimitDecision:
+        """Consume n tokens atomically. increment(key, options, 1) behaves
+        identically to allow(key, options). Used when a single call costs
+        more than one unit of the limit — e.g. an LLM request billed by
+        estimated token count rather than by call count.
+        """
+        rps = options.requests_per_second or 0
+        burst = options.burst or 0
+        return self._increment_token_bucket(key, rps, burst, n)
+
+    def get(self, key: str, options: RateLimitOptions) -> BucketState:
+        """Return the current bucket state for key without consuming
+        anything. Never creates bucket state for unseen keys."""
+        rps = options.requests_per_second or 0
+        burst = options.burst or 0
+
+        with self._lock:
+            bucket = self._buckets.get(key)
+
+        if bucket is None:
+            return BucketState(tokens=float(burst), capacity=burst, limit=rps)
+
+        now = self._clock.now()
+        tokens = bucket.tokens
+        if now - bucket.last > 600_000:
+            tokens = float(burst)
+        else:
+            elapsed = (now - bucket.last) / 1000.0
+            if elapsed > 0:
+                tokens = min(float(burst), tokens + elapsed * float(rps))
+
+        return BucketState(tokens=tokens, capacity=burst, limit=rps)
+
+    def reset(self, key: str) -> None:
+        """Clear key's bucket; the next access starts from a full bucket."""
+        with self._lock:
+            self._buckets.delete(key)
 
     def peek(self, key: str, options: RateLimitOptions) -> RateLimitDecision:
         """Report what allow() would decide right now WITHOUT consuming a token.
@@ -85,12 +123,14 @@ class RateLimiter:
 
         return RateLimitDecision(True, True, max(0, int(tokens)), 0, rps, False)
 
-    def _allow_token_bucket(self, key: str, rps: int, burst: int) -> RateLimitDecision:
-        """Check if a request is allowed under the token bucket.
+    def _increment_token_bucket(
+        self, key: str, rps: int, burst: int, n: float
+    ) -> RateLimitDecision:
+        """Consume n tokens atomically under the token bucket.
 
         Formula: tokens = min(burst, tokens + elapsed × rps)
-        Allow: tokens >= 1.0 → consume 1
-        Deny: retry_after = ceil((1.0 - tokens) / rps) × 1000 ms
+        Allow: tokens >= n → consume n
+        Deny: retry_after = ceil((n - tokens) / rps) × 1000 ms
         """
         if rps <= 0 or burst <= 0:
             return RateLimitDecision(True, False, -1, 0, -1, False)
@@ -114,8 +154,8 @@ class RateLimiter:
             bucket.last = now
 
         # Deny if not enough tokens
-        if bucket.tokens < 1.0:
-            deficit = 1.0 - bucket.tokens
+        if bucket.tokens < n:
+            deficit = n - bucket.tokens
             retry_sec = ceil(deficit / float(rps))
             retry_ms = max(1000, int(retry_sec * 1000))
             return RateLimitDecision(
@@ -127,8 +167,8 @@ class RateLimiter:
                 degraded=False,
             )
 
-        # Allow: consume 1 token
-        bucket.tokens -= 1.0
+        # Allow: consume n tokens
+        bucket.tokens -= n
         return RateLimitDecision(
             allowed=True,
             applied=True,

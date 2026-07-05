@@ -225,7 +225,7 @@ func (s *SDK) mcpGetRateLimitState(args map[string]any) (map[string]any, error) 
 		return nil, fmt.Errorf("mcp: key is required")
 	}
 
-	decision, err := s.limiter.Peek(context.Background(), key, s.policy)
+	decision, err := s.limiter.Peek(context.Background(), key, s.Policy())
 	if err != nil {
 		return map[string]any{
 			"error": fmt.Sprintf("rate limiter unavailable: %v", err),
@@ -255,7 +255,7 @@ func (s *SDK) mcpGetTokenBudget(args map[string]any) (map[string]any, error) {
 		}, nil
 	}
 
-	decision := s.tokens.check(key, s.policy)
+	decision := s.tokens.check(key, s.Policy())
 	if !decision.Applied {
 		return map[string]any{
 			"key":     key,
@@ -388,19 +388,28 @@ func (s *SDK) mcpListLimits(args map[string]any) (map[string]any, error) {
 
 	// Preset info
 	result["preset"] = map[string]any{
-		"name":                   s.policy.Name,
-		"requests_per_second":    s.policy.RequestsPerSecond,
-		"burst":                  s.policy.Burst,
-		"token_budget_per_hour":  s.policy.TokenBudgetPerHour,
-		"token_budget_per_day":   s.policy.TokenBudgetPerDay,
-		"token_budget_per_month": s.policy.TokenBudgetPerMonth,
-		"token_budget_mode":      string(s.policy.TokenBudgetMode),
+		"name":                   s.Policy().Name,
+		"requests_per_second":    s.Policy().RequestsPerSecond,
+		"burst":                  s.Policy().Burst,
+		"token_budget_per_hour":  s.Policy().TokenBudgetPerHour,
+		"token_budget_per_day":   s.Policy().TokenBudgetPerDay,
+		"token_budget_per_month": s.Policy().TokenBudgetPerMonth,
+		"token_budget_mode":      string(s.Policy().TokenBudgetMode),
 	}
 
 	// Loop detector stats
 	if s.loops != nil {
 		result["loop_detector"] = s.loops.Stats()
 	}
+
+	// Guardrail violation stats (recent events + counts by code). "enabled"
+	// reflects whether guardrails are configured at all, not just whether
+	// the tracking log exists (it always does) — an instance with no
+	// Guardrails configured has nothing to violate, which is a different
+	// state from "configured and clean."
+	guardStats := s.guardLog.Stats()
+	guardStats["enabled"] = s.cfg.Guardrails != nil
+	result["guardrails"] = guardStats
 
 	return result, nil
 }

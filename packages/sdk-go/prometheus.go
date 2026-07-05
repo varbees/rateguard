@@ -9,15 +9,20 @@ import (
 // ── Prometheus /metrics endpoint (zero-dependency, stdlib only) ──
 
 // Metrics returns an http.Handler that serves Prometheus-format metrics.
+// Sets a permissive CORS header — harmless for a server-side Prometheus
+// scraper (which ignores CORS entirely; it's a browser-only restriction),
+// and required for the dashboard (packages/dashboard) to read /metrics
+// directly from a different origin.
 func (s *SDK) Metrics() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		writePrometheusMetrics(w, s)
 	})
 }
 
 func writePrometheusMetrics(w http.ResponseWriter, s *SDK) {
-	p := s.policy
+	p := s.Policy()
 
 	// Rate limiter counters
 	promGauge(w, "rateguard_rate_limit_config", 1,
@@ -92,6 +97,7 @@ type atomicMetrics struct {
 	outboundFallbacks    atomic.Int64
 	semanticCacheHits    atomic.Int64
 	semanticCacheMisses  atomic.Int64
+	guardrailViolations  atomic.Int64
 }
 
 func (m *atomicMetrics) prometheusText() string {
@@ -122,7 +128,10 @@ func (m *atomicMetrics) prometheusText() string {
 			"rateguard_semantic_cache_hits_total %d\n"+
 			"# HELP rateguard_semantic_cache_misses_total Outbound calls that missed the semantic cache\n"+
 			"# TYPE rateguard_semantic_cache_misses_total counter\n"+
-			"rateguard_semantic_cache_misses_total %d\n",
+			"rateguard_semantic_cache_misses_total %d\n"+
+			"# HELP rateguard_guardrail_violations_total Content guardrail violations (PII, prompt injection, length)\n"+
+			"# TYPE rateguard_guardrail_violations_total counter\n"+
+			"rateguard_guardrail_violations_total %d\n",
 		m.totalRequests.Load(),
 		m.rateLimitHits.Load(),
 		m.tokenBudgetExhausted.Load(),
@@ -132,5 +141,6 @@ func (m *atomicMetrics) prometheusText() string {
 		m.outboundFallbacks.Load(),
 		m.semanticCacheHits.Load(),
 		m.semanticCacheMisses.Load(),
+		m.guardrailViolations.Load(),
 	)
 }

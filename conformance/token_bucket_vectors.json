@@ -1,0 +1,17 @@
+{
+  "$schema": "RateGuard cross-language conformance vectors — token bucket.",
+  "description": "One shared oracle for the token-bucket admission decision (allowed, remaining), replayed by all 3 SDKs (Go, Node.js, Python) against their own Store.Increment. Proves real behavioral parity, not just matching test counts. See AGENTS.md rule 1: 'same algorithm, same API, same behavior.'",
+  "formula": "tokens = min(burst, tokens + elapsed_seconds * rps); allow if tokens >= n, consume n; idle bucket (>600000ms since last access) resets to a full burst before refilling.",
+  "source": "https://en.wikipedia.org/wiki/Token_bucket",
+  "known_gap": "retry_after_ms rounding currently differs across SDKs (Go rounds up to the nearest whole second; Node/Python round up to the nearest whole millisecond, floored at 1000ms) — these vectors intentionally check only `allowed` and `remaining`, not `retry_after_ms`, until that's unified.",
+  "policy": { "requests_per_second": 10, "burst": 10 },
+  "steps": [
+    { "note": "consume 4 of 10 — allow", "advance_ms": 0, "n": 4, "allowed": true, "remaining": 6 },
+    { "note": "ask for 10 with only 6 left — deny, no consumption", "advance_ms": 0, "n": 10, "allowed": false, "remaining": 0 },
+    { "note": "consume exactly the 6 remaining — allow, bucket now empty", "advance_ms": 0, "n": 6, "allowed": true, "remaining": 0 },
+    { "note": "empty bucket — deny", "advance_ms": 0, "n": 1, "allowed": false, "remaining": 0 },
+    { "note": "partial refill: 0.3s * 10rps = 3 tokens, not capped by burst", "advance_ms": 300, "n": 1, "allowed": true, "remaining": 2 },
+    { "note": "refill would exceed burst — clamps to burst before consuming", "advance_ms": 1000, "n": 1, "allowed": true, "remaining": 9 },
+    { "note": "idle >10min triggers the reset-to-full branch, not just a large refill", "advance_ms": 700000, "n": 1, "allowed": true, "remaining": 9 }
+  ]
+}

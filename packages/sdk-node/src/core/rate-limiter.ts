@@ -12,7 +12,7 @@
  */
 
 import { BoundedCache } from './bounded-cache.js';
-import type { Clock, RateLimitDecision, RateLimitOptions } from '../types.js';
+import type { BucketState, Clock, RateLimitDecision, RateLimitOptions } from '../types.js';
 
 interface Bucket {
   tokens: number; // float — fractional tokens for smooth refill
@@ -143,6 +143,16 @@ export class RateLimiter {
   }
 
   private allowLocal(key: string, options: Required<RateLimitOptions>): RateLimitDecision {
+    return this.incrementLocal(key, options, 1);
+  }
+
+  /**
+   * Consumes n tokens atomically. allowLocal(key, options) is equivalent to
+   * incrementLocal(key, options, 1). Used when a single call costs more than
+   * one unit of the limit — e.g. an LLM request billed by estimated token
+   * count rather than by call count.
+   */
+  private incrementLocal(key: string, options: Required<RateLimitOptions>, n: number): RateLimitDecision {
     const rps = options.requestsPerSecond;
     const burst = options.burst;
     if (rps <= 0 || burst <= 0) {
@@ -171,8 +181,8 @@ export class RateLimiter {
     }
 
     // Deny if not enough tokens
-    if (bucket.tokens < 1.0) {
-      const deficit = (1.0 - bucket.tokens) / rps;
+    if (bucket.tokens < n) {
+      const deficit = (n - bucket.tokens) / rps;
       const retryAfterMs = Math.max(1000, Math.ceil(deficit * 1000));
       return {
         allowed: false,
@@ -184,8 +194,8 @@ export class RateLimiter {
       };
     }
 
-    // Allow: consume 1 token
-    bucket.tokens -= 1.0;
+    // Allow: consume n tokens
+    bucket.tokens -= n;
     return {
       allowed: true,
       applied: true,
@@ -194,6 +204,48 @@ export class RateLimiter {
       limit: rps,
       degraded: false,
     };
+  }
+
+  /**
+   * Consumes n tokens atomically, bypassing the optional remote control-plane
+   * fallback that allow() performs. increment(key, options, 1) behaves
+   * identically to the local decision allow() would make.
+   */
+  increment(key: string, options: Required<RateLimitOptions>, n: number): RateLimitDecision {
+    return this.incrementLocal(key, options, n);
+  }
+
+  /**
+   * Returns the current bucket state for key without consuming anything.
+   * Never creates bucket state for unseen keys.
+   */
+  get(key: string, options: Required<RateLimitOptions>): BucketState {
+    const rps = options.requestsPerSecond;
+    const burst = options.burst;
+    const bucket = this.buckets.get(key);
+    if (!bucket) {
+      return { tokens: burst, capacity: burst, limit: rps };
+    }
+
+    const now = this.clock.now();
+    let tokens = bucket.tokens;
+    if (now - bucket.last > 600_000) {
+      tokens = burst;
+    } else {
+      const elapsed = (now - bucket.last) / 1000;
+      if (elapsed > 0) {
+        tokens = Math.min(burst, tokens + elapsed * rps);
+      }
+    }
+
+    return { tokens, capacity: burst, limit: rps };
+  }
+
+  /**
+   * Clears key's bucket; the next access starts from a full bucket.
+   */
+  reset(key: string): void {
+    this.buckets.delete(key);
   }
 }
 

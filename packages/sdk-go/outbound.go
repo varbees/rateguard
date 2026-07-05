@@ -285,7 +285,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 
 	// Outbound request rate limit, scoped per provider.
 	if !t.opts.DisableRateLimit && !s.cfg.DisableRateLimit {
-		decision, err := s.limiter.Allow(req.Context(), "outbound:"+call.Provider, s.policy)
+		decision, err := s.limiter.Allow(req.Context(), "outbound:"+call.Provider, s.Policy())
 		if err == nil && decision.Applied && !decision.Allowed && enforce {
 			return synthesizedResponse(req, http.StatusTooManyRequests, "rate_limit_exceeded",
 				fmt.Sprintf("rateguard: outbound rate limit for provider %s", call.Provider), decision.RetryAfter), nil
@@ -294,7 +294,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 
 	// Token budget: reserve before, commit actual usage after.
 	budgetKey := strings.Join([]string{s.tenantID(), call.Provider, nonEmpty(call.Model, "default"), "outbound"}, ":")
-	reservation := s.tokens.reserveWithEstimate(budgetKey, s.policy, TokenBudgetMode(s.policy.TokenBudgetMode), t.opts.EstimatedTokens)
+	reservation := s.tokens.reserveWithEstimate(budgetKey, s.Policy(), TokenBudgetMode(s.Policy().TokenBudgetMode), t.opts.EstimatedTokens)
 	if reservation.Applied && !reservation.Allowed && enforce {
 		s.metrics.tokenBudgetExhausted.Add(1)
 		return synthesizedResponse(req, http.StatusTooManyRequests, "token_budget_exceeded",

@@ -41,6 +41,7 @@ from .core.token_budget import TokenBudgetManager
 from .exceptions import BudgetExceeded, RateGuardException
 from .facade import RateGuard
 from .types import (
+    BucketState,
     CircuitBreakerDecision,
     CircuitBreakerOptions,
     CircuitBreakerState,
@@ -90,6 +91,7 @@ __all__ = [
     "normalize_token_budget_mode",
     "preset_policy",
     "resolve_rateguard_options",
+    "BucketState",
     "CircuitBreakerDecision",
     "CircuitBreakerOptions",
     "CircuitBreakerState",

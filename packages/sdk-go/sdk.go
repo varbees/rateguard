@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,7 @@ const defaultMaxBufferedResponseBytes = 1 << 20 // 1 MiB
 // SDK is the top-level middleware entrypoint.
 type SDK struct {
 	cfg      Config
+	policyMu sync.RWMutex
 	policy   PolicyPreset
 	limiter  Limiter
 	adaptive *AdaptiveLimiter
@@ -34,6 +36,7 @@ type SDK struct {
 	clock    Clock
 	metrics  atomicMetrics
 	loops    *LoopDetector
+	guardLog *guardrailLog
 }
 
 // New constructs a new SDK instance with sensible defaults.
@@ -77,8 +80,10 @@ func New(cfg Config) *SDK {
 		limiter = newRedisGCRALimiterWithClock(cfg.RedisClient, clock)
 	default:
 		// Lock-free sharded limiter: decision-parity with MemoryLimiter,
-		// ~2× faster on a hot key and ~3.4× across many keys under
-		// parallel load (see sharded_limiter_test.go benchmarks).
+		// ~1.5× faster on a hot key and ~8.5× across many keys under
+		// parallel load, zero allocations either way (measured on a
+		// dev laptop, i5-9300H; see sharded_limiter_test.go benchmarks —
+		// `go test -bench=. -benchmem .` to reproduce on your own hardware).
 		limiter = newShardedLimiterWithClock(clock, defaultMemoryLimiterCacheCapacity)
 	}
 
@@ -127,6 +132,7 @@ func New(cfg Config) *SDK {
 		emitter:  emitter,
 		clock:    clock,
 		loops:    NewLoopDetector(cfg.LoopMaxDepth),
+		guardLog: newGuardrailLog(),
 	}
 }
 
@@ -138,8 +144,56 @@ func (s *SDK) Shutdown(ctx context.Context) error {
 	return s.otel.Shutdown(ctx)
 }
 
-// Policy returns the resolved policy preset for this SDK instance.
+// Policy returns the resolved policy preset for this SDK instance. Safe to
+// call concurrently with SetPolicy and with request handling.
 func (s *SDK) Policy() PolicyPreset {
+	s.policyMu.RLock()
+	defer s.policyMu.RUnlock()
+	return s.policy
+}
+
+// PolicyUpdate carries a partial override for SetPolicy: nil/zero fields
+// leave the corresponding policy field unchanged. Intended for runtime
+// admin/control-plane use (see AdminHandler) — not for the request hot path.
+type PolicyUpdate struct {
+	RequestsPerSecond   *int
+	Burst               *int
+	TokenBudgetPerHour  *int64
+	TokenBudgetPerDay   *int64
+	TokenBudgetPerMonth *int64
+	TokenBudgetMode     *TokenBudgetMode
+}
+
+// SetPolicy atomically applies a partial override on top of the current
+// policy and returns the resulting effective policy. In-memory only — it
+// does not persist across restarts, and does not reset in-flight token
+// budget or circuit breaker state (those key off the policy's limits, which
+// take effect on the next check). Safe to call concurrently with request
+// handling and with itself.
+func (s *SDK) SetPolicy(update PolicyUpdate) PolicyPreset {
+	s.policyMu.Lock()
+	defer s.policyMu.Unlock()
+
+	if update.RequestsPerSecond != nil {
+		s.policy.RequestsPerSecond = *update.RequestsPerSecond
+	}
+	if update.Burst != nil {
+		s.policy.Burst = *update.Burst
+	}
+	if update.TokenBudgetPerHour != nil {
+		s.policy.TokenBudgetPerHour = *update.TokenBudgetPerHour
+	}
+	if update.TokenBudgetPerDay != nil {
+		s.policy.TokenBudgetPerDay = *update.TokenBudgetPerDay
+	}
+	if update.TokenBudgetPerMonth != nil {
+		s.policy.TokenBudgetPerMonth = *update.TokenBudgetPerMonth
+		s.policy.MaxTokensPerMonth = *update.TokenBudgetPerMonth
+	}
+	if update.TokenBudgetMode != nil {
+		s.policy.TokenBudgetMode = NormalizeTokenBudgetMode(string(*update.TokenBudgetMode))
+	}
+
 	return s.policy
 }
 
@@ -202,9 +256,9 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 		return
 	}
 
-	decision, err := s.limiter.Allow(r.Context(), key, s.policy)
+	decision, err := s.limiter.Allow(r.Context(), key, s.Policy())
 	if err != nil {
-		decision = AdmissionDecision{Allowed: false, Applied: false, Remaining: 0, Limit: s.policy.RequestsPerSecond}
+		decision = AdmissionDecision{Allowed: false, Applied: false, Remaining: 0, Limit: s.Policy().RequestsPerSecond}
 		s.applyHeaders(w.Header(), decision)
 		s.writeRateLimitUnavailableResponse(w)
 		s.emitRequestEvent(r.Context(), r, decision, http.StatusServiceUnavailable, start, TokenUsage{}, tokenBudgetDecision{}, breakerDecision.State, 0)
@@ -229,14 +283,14 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 	}
 
 	tokenKey := s.tokenBudgetKey(r)
-	tokenDecision, err := s.tokens.waitForAvailability(r.Context(), tokenKey, s.policy, s.waiter, TokenBudgetMode(s.policy.TokenBudgetMode), s.cfg.EstimatedTokensPerRequest)
+	tokenDecision, err := s.tokens.waitForAvailability(r.Context(), tokenKey, s.Policy(), s.waiter, TokenBudgetMode(s.Policy().TokenBudgetMode), s.cfg.EstimatedTokensPerRequest)
 	if err != nil {
 		s.writeTokenBudgetResponse(w)
 		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenDecision, breakerDecision.State, tokenDecision.RetryAfter)
 		s.otel.recordRequest(r.Context(), requestAttributes(s.tenantID(), s.routeID(r), s.upstreamID(), decision.Applied, string(breakerDecision.State), 0), s.clock.Now().Sub(start), http.StatusTooManyRequests)
 		return
 	}
-	if !tokenDecision.Allowed && tokenDecision.Applied && TokenBudgetMode(s.policy.TokenBudgetMode) != TokenBudgetModeSoftStop {
+	if !tokenDecision.Allowed && tokenDecision.Applied && TokenBudgetMode(s.Policy().TokenBudgetMode) != TokenBudgetModeSoftStop {
 		s.metrics.tokenBudgetExhausted.Add(1)
 		s.writeTokenBudgetResponse(w)
 		s.emitRequestEvent(r.Context(), r, decision, http.StatusTooManyRequests, start, TokenUsage{}, tokenDecision, breakerDecision.State, tokenDecision.RetryAfter)
@@ -259,7 +313,7 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 		s.tokens.releaseReservation(tokenKey, tokenDecision.reservationID)
 	}
 
-	finalTokenDecision := s.tokens.check(tokenKey, s.policy)
+	finalTokenDecision := s.tokens.check(tokenKey, s.Policy())
 	finalTokenDecision.Queued = tokenDecision.Queued
 	if tokenDecision.RetryAfter > 0 {
 		finalTokenDecision.RetryAfter = tokenDecision.RetryAfter
@@ -338,6 +392,8 @@ func (s *SDK) checkRequestBody(w http.ResponseWriter, r *http.Request) bool {
 
 	if guardActive && len(body) > 0 {
 		if violation := s.cfg.Guardrails.Check(string(body)); violation != nil {
+			s.guardLog.record(violation)
+			s.metrics.guardrailViolations.Add(1)
 			WriteGuardrailReject(w, violation)
 			return true
 		}
@@ -373,9 +429,9 @@ func (s *SDK) admissionKey(r *http.Request) string {
 }
 
 func (s *SDK) applyHeaders(h http.Header, decision AdmissionDecision) {
-	h.Set("X-RateGuard-Preset", s.policy.Name)
-	h.Set("X-RateGuard-Limit", strconv.Itoa(s.policy.RequestsPerSecond))
-	h.Set("X-RateGuard-Burst", strconv.Itoa(s.policy.Burst))
+	h.Set("X-RateGuard-Preset", s.Policy().Name)
+	h.Set("X-RateGuard-Limit", strconv.Itoa(s.Policy().RequestsPerSecond))
+	h.Set("X-RateGuard-Burst", strconv.Itoa(s.Policy().Burst))
 	h.Set("X-RateGuard-Remaining", strconv.Itoa(decision.Remaining))
 
 	// IETF RateLimit headers (draft-ietf-httpapi-ratelimit-headers) so
@@ -466,7 +522,7 @@ func (s *SDK) emitRequestEvent(ctx context.Context, r *http.Request, decision Ad
 			RateLimitLimit:       decision.Limit,
 			RateLimitRemaining:   decision.Remaining,
 			RetryAfterMS:         retryAfter.Milliseconds(),
-			Preset:               s.policy.Name,
+			Preset:               s.Policy().Name,
 			CircuitBreakerState:  string(circuitState),
 			QueueDepth:           0,
 			TokenProvider:        tokenUsage.Provider,
@@ -474,7 +530,7 @@ func (s *SDK) emitRequestEvent(ctx context.Context, r *http.Request, decision Ad
 			TokenInputTokens:     tokenUsage.InputTokens,
 			TokenOutputTokens:    tokenUsage.OutputTokens,
 			TokenTotalTokens:     tokenUsage.TotalTokens,
-			TokenBudgetMode:      string(s.policy.TokenBudgetMode),
+			TokenBudgetMode:      string(s.Policy().TokenBudgetMode),
 			TokenBudgetApplied:   tokenDecision.Applied,
 			TokenBudgetQueued:    tokenDecision.Queued,
 			TokenBudgetWaitMS:    tokenDecision.RetryAfter.Milliseconds(),

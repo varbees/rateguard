@@ -127,3 +127,84 @@ type failingRedisLimiterClient struct{}
 func (failingRedisLimiterClient) Eval(context.Context, string, []string, ...interface{}) *redis.Cmd {
 	return redis.NewCmdResult(nil, errors.New("redis unavailable"))
 }
+
+// recordingRedisLimiterClient captures the script and args of the last Eval
+// call and returns a fixed GCRA-shaped response, so tests can assert the
+// Store methods dispatch the right script with the right arguments.
+type recordingRedisLimiterClient struct {
+	lastScript string
+	lastKeys   []string
+	lastArgs   []interface{}
+	response   []interface{}
+}
+
+func (c *recordingRedisLimiterClient) Eval(_ context.Context, script string, keys []string, args ...interface{}) *redis.Cmd {
+	c.lastScript = script
+	c.lastKeys = keys
+	c.lastArgs = args
+	return redis.NewCmdResult(c.response, nil)
+}
+
+func TestRedisStoreIncrementSendsN(t *testing.T) {
+	t.Parallel()
+
+	client := &recordingRedisLimiterClient{response: []interface{}{int64(1), int64(7), int64(0), int64(0)}}
+	clock := &fakeBudgetClock{now: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC)}
+	limiter := newRedisGCRALimiterWithClock(client, clock).(Store)
+	policy := PolicyPreset{RequestsPerSecond: 10, Burst: 20}
+
+	d, err := limiter.Increment(context.Background(), "tenant-a", policy, 5)
+	if err != nil {
+		t.Fatalf("Increment: %v", err)
+	}
+	if client.lastScript != luaRedisGCRAIncrementScript {
+		t.Fatal("Increment must dispatch luaRedisGCRAIncrementScript")
+	}
+	if len(client.lastArgs) != 5 {
+		t.Fatalf("Increment args = %v, want 5 (interval, burst, now, ttl, n)", client.lastArgs)
+	}
+	if n, ok := client.lastArgs[4].(float64); !ok || n != 5 {
+		t.Fatalf("last arg (n) = %v, want 5", client.lastArgs[4])
+	}
+	if !d.Allowed || d.Remaining != 7 {
+		t.Fatalf("Increment decision = %+v, want allowed with remaining=7", d)
+	}
+}
+
+func TestRedisStoreGetDelegatesToPeek(t *testing.T) {
+	t.Parallel()
+
+	client := &recordingRedisLimiterClient{response: []interface{}{int64(1), int64(12), int64(0), int64(0)}}
+	clock := &fakeBudgetClock{now: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC)}
+	limiter := newRedisGCRALimiterWithClock(client, clock).(Store)
+	policy := PolicyPreset{RequestsPerSecond: 10, Burst: 20}
+
+	state, err := limiter.Get(context.Background(), "tenant-a", policy)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if client.lastScript != luaRedisGCRAPeekScript {
+		t.Fatal("Get must delegate to the read-only peek script, never the mutating one")
+	}
+	if state.Tokens != 12 || state.Capacity != 20 || state.Limit != 10 {
+		t.Fatalf("Get = %+v, want tokens=12 capacity=20 limit=10", state)
+	}
+}
+
+func TestRedisStoreResetSendsDelScript(t *testing.T) {
+	t.Parallel()
+
+	client := &recordingRedisLimiterClient{response: []interface{}{}}
+	clock := &fakeBudgetClock{now: time.Date(2026, 3, 20, 10, 0, 0, 0, time.UTC)}
+	limiter := newRedisGCRALimiterWithClock(client, clock).(Store)
+
+	if err := limiter.Reset(context.Background(), "tenant-a"); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+	if client.lastScript != luaRedisGCRAResetScript {
+		t.Fatal("Reset must dispatch luaRedisGCRAResetScript")
+	}
+	if len(client.lastKeys) != 1 || client.lastKeys[0] != "tenant-a" {
+		t.Fatalf("Reset keys = %v, want [tenant-a]", client.lastKeys)
+	}
+}

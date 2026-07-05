@@ -173,6 +173,16 @@ export interface RateLimitDecision {
   degraded: boolean;
 }
 
+/**
+ * Raw, read-only bucket state for one key — the facts a RateLimitDecision
+ * is computed from, without the allow/deny framing.
+ */
+export interface BucketState {
+  tokens: number;
+  capacity: number;
+  limit: number;
+}
+
 export type AdmissionErrorCode =
   | 'circuit_open'
   | 'rate_limit_exceeded'

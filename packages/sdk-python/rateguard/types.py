@@ -154,6 +154,16 @@ class RateLimitDecision:
 
 
 @dataclass(slots=True)
+class BucketState:
+    """Raw, read-only bucket state for one key — the facts a
+    RateLimitDecision is computed from, without the allow/deny framing."""
+
+    tokens: float
+    capacity: int
+    limit: int
+
+
+@dataclass(slots=True)
 class TokenBudgetDecision:
     allowed: bool
     applied: bool

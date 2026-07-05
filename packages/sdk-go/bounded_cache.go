@@ -80,3 +80,20 @@ func (c *boundedCache[K, V]) len() int {
 
 	return c.order.Len()
 }
+
+// delete removes key, reporting whether it was present. Used by Store.Reset
+// to clear a bucket outright rather than waiting for it to age out.
+func (c *boundedCache[K, V]) delete(key K) bool {
+	if c == nil {
+		return false
+	}
+
+	elem, ok := c.items[key]
+	if !ok {
+		return false
+	}
+
+	delete(c.items, key)
+	c.order.Remove(elem)
+	return true
+}

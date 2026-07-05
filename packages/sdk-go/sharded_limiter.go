@@ -122,9 +122,9 @@ func tokensAt(fullAtNanos, nowNanos int64, policy PolicyPreset) float64 {
 }
 
 // denyDecision mirrors MemoryLimiter's Retry-After rounding exactly:
-// whole seconds, ceil((1 − tokens) / rps).
-func denyDecision(tokens float64, policy PolicyPreset) AdmissionDecision {
-	retry := time.Duration(math.Ceil((1.0-tokens)/float64(policy.RequestsPerSecond)) * float64(time.Second))
+// whole seconds, ceil((need − tokens) / rps).
+func denyDecision(tokens float64, policy PolicyPreset, need float64) AdmissionDecision {
+	retry := time.Duration(math.Ceil((need-tokens)/float64(policy.RequestsPerSecond)) * float64(time.Second))
 	if retry < 0 {
 		retry = time.Second
 	}
@@ -137,7 +137,13 @@ func denyDecision(tokens float64, policy PolicyPreset) AdmissionDecision {
 	}
 }
 
-func (l *ShardedLimiter) Allow(_ context.Context, key string, policy PolicyPreset) (AdmissionDecision, error) {
+func (l *ShardedLimiter) Allow(ctx context.Context, key string, policy PolicyPreset) (AdmissionDecision, error) {
+	return l.Increment(ctx, key, policy, 1)
+}
+
+// Increment consumes n tokens atomically via the same lock-free CAS loop as
+// Allow. Allow is Increment(ctx, key, policy, 1).
+func (l *ShardedLimiter) Increment(_ context.Context, key string, policy PolicyPreset, n float64) (AdmissionDecision, error) {
 	if policy.RequestsPerSecond <= 0 || policy.Burst <= 0 {
 		return AdmissionDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}, nil
 	}
@@ -154,13 +160,13 @@ func (l *ShardedLimiter) Allow(_ context.Context, key string, policy PolicyPrese
 		fullAt := bucket.fullAt.Load()
 		tokens := tokensAt(fullAt, now, policy)
 
-		if tokens < 1 {
+		if tokens < n {
 			// Denials do not consume and need no state write: the deficit
 			// encoded in fullAt already represents the refilled state.
-			return denyDecision(tokens, policy), nil
+			return denyDecision(tokens, policy, n), nil
 		}
 
-		newTokens := tokens - 1
+		newTokens := tokens - n
 		newFullAt := now + int64((float64(policy.Burst)-newTokens)/float64(policy.RequestsPerSecond)*1e9)
 
 		if bucket.fullAt.CompareAndSwap(fullAt, newFullAt) {
@@ -204,7 +210,7 @@ func (l *ShardedLimiter) Peek(_ context.Context, key string, policy PolicyPreset
 
 	tokens := tokensAt(bucket.fullAt.Load(), now, policy)
 	if tokens < 1 {
-		return denyDecision(tokens, policy), nil
+		return denyDecision(tokens, policy, 1), nil
 	}
 
 	return AdmissionDecision{
@@ -213,4 +219,33 @@ func (l *ShardedLimiter) Peek(_ context.Context, key string, policy PolicyPreset
 		Remaining: int(math.Floor(tokens)),
 		Limit:     policy.RequestsPerSecond,
 	}, nil
+}
+
+// Get returns the current bucket state for key without consuming anything.
+// It never creates bucket state for unseen keys.
+func (l *ShardedLimiter) Get(_ context.Context, key string, policy PolicyPreset) (BucketState, error) {
+	clock := l.clock
+	if clock == nil {
+		clock = systemClock{}
+	}
+	now := clock.Now().UTC().UnixNano()
+
+	bucket := l.bucketFor(key, false)
+	if bucket == nil {
+		return BucketState{Tokens: float64(policy.Burst), Capacity: policy.Burst, Limit: policy.RequestsPerSecond}, nil
+	}
+
+	tokens := tokensAt(bucket.fullAt.Load(), now, policy)
+	return BucketState{Tokens: tokens, Capacity: policy.Burst, Limit: policy.RequestsPerSecond}, nil
+}
+
+// Reset clears key's bucket; the next access starts from a full bucket.
+func (l *ShardedLimiter) Reset(_ context.Context, key string) error {
+	shard := l.shardFor(key)
+	shard.mu.Lock()
+	defer shard.mu.Unlock()
+	if shard.buckets != nil {
+		shard.buckets.delete(key)
+	}
+	return nil
 }
