@@ -287,7 +287,7 @@ tools = rg.mcp_tools()                             # list[MCPTool] for your MCP 
 result = rg.mcp_call("get_rate_limit_state", {"key": "tenant-1"})
 ```
 
-## Budget Attestation (Go)
+## Budget Attestation
 
 Multi-agent systems delegate: an orchestrator hands a sub-task to a tool-calling agent, which may
 hand a further sub-task to another agent, possibly across a process or trust boundary. Budget
@@ -326,6 +326,28 @@ delegated, subAgentKey, err := rateguard.Attest(root, holderKey, rateguard.Attes
 // The sub-agent proves possession by signing verifier-supplied context.
 sig, err := rateguard.Sign(delegated, subAgentKey, []byte("request-nonce"))
 grant, err := rateguard.VerifyPresentation(delegated, authorityPublicKey, []byte("request-nonce"), sig)
+```
+
+Node and Python ship the same functions, camelCase/snake_case respectively —
+`newRootBudgetToken`/`new_root_budget_token`, `attest`, `sign`, `verifyChain`/
+`verify_chain`, `verifyPresentation`/`verify_presentation`, `parseBudgetToken`/
+`parse_budget_token` — byte-identical Ed25519 signing payload across all 3
+(`expires_at` is truncated to whole seconds before signing specifically so a
+token attested in one language verifies in another; see
+`conformance/budget_attestation_expiry_vectors.json`):
+
+```ts
+// Node
+const root = newRootBudgetToken(authorityPrivateKey, { grant: { maxTokens: 100_000, providers: ['openai'], maxDepth: 3, expiresAt } });
+const sig = sign(delegated, subAgentKey, Buffer.from('request-nonce'));
+const grant = verifyPresentation(delegated, authorityPublicKey, Buffer.from('request-nonce'), sig);
+```
+
+```python
+# Python
+root, holder_key = new_root_budget_token(authority_private_key, grant=BudgetGrant(max_tokens=100_000, providers=["openai"], max_depth=3, expires_at=expires_at))
+sig = sign(delegated, sub_agent_key, b"request-nonce")
+grant = verify_presentation(delegated, authority_public_key, b"request-nonce", sig)
 ```
 
 Semantics:

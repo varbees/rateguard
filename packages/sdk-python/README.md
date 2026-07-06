@@ -93,9 +93,20 @@ client = OpenAI(http_client=rg.wrap_httpx_client())
 aclient = AsyncOpenAI(http_client=rg.wrap_httpx_async_client())
 ```
 
-`rg.mcp_tools()` and `rg.mcp_call()` expose the five pre-flight MCP tools for agent frameworks. Guardrails, loop detection, GenAI attribute helpers, and Prometheus exposition helpers are exported for app-level wiring.
+`rg.mcp_tools()` and `rg.mcp_call()` expose all 7 pre-flight MCP tools for agent frameworks (includes `attest_budget`/`verify_budget`). `serve_mcp(rg)` runs a zero-dependency stdio JSON-RPC server over the same tools — drop it straight into a Claude Code/Cursor/Claude Desktop MCP config. Guardrails, loop detection, GenAI attribute helpers (including TTFT/TPOT), and Prometheus exposition helpers are exported for app-level wiring.
+
+## Also included
+
+- **Budget attestation** (`pip install varbees-rateguard[attestation]`) — Ed25519-signed delegation chains (`new_root_budget_token`, `attest`, `verify_presentation`), byte-identical signing payload with Go and Node so a token attested in one language verifies in another. `cryptography` is a lazy, optional import — install the `attestation` extra to use it.
+- **Redis distributed limiter** — atomic Lua GCRA script for rate limits shared across processes/instances, `RedisPyClient`/`AsyncRedisPyClient` wrap `redis-py` or bring your own client shaped like `RedisLimiterClient`.
+- **Admin API** — opt-in, unauthenticated-by-design ASGI app (`AdminApp`) exposing state/policy/MCP-tool-calls; bind privately.
+- **Adaptive rate limiting** — opt-in AIMD controller that auto-tunes the effective limit from observed upstream error rate.
+- **Semantic response caching** — bring your own `Embedder`; a cosine-similarity hit skips the network call, breaker, and budget entirely.
+- **Lock-free sharded limiter** — 64-way sharding with atomic CAS, available as `ShardedLimiter`.
+- **Events/webhooks** — `HTTPEventEmitter`/`WebSocketEventEmitter`/`ConsoleEventEmitter` for shipping admission decisions out of process.
 
 ## Docs
 
 - Go SDK: `packages/sdk-go`
 - Node SDK: `packages/sdk-node`
+- Full feature parity as of v0.2.0 — see the [root README](https://github.com/varbees/rateguard#readme) for the complete capability table.

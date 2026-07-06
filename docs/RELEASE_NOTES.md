@@ -1,5 +1,122 @@
 # Release Notes
 
+## v0.2.0 — 2026-07-06
+
+RateGuard `v0.2.0` closes every Node/Python parity gap against the Go reference
+implementation. Full changelog below (parts 1-6); see [Highlights](#highlights),
+[Published Artifacts](#published-artifacts), and [Verification](#verification).
+
+### Highlights
+
+- **Full Go/Node/Python parity.** Every feature in `AGENTS.md`'s feature inventory
+  now ships in all 3 languages except the self-hosted dashboard (Go admin API only,
+  untested against Node/Python's new admin APIs). That includes: budget attestation
+  (Ed25519 delegation chains), an MCP stdio JSON-RPC server, a Redis-backed
+  distributed limiter (atomic Lua GCRA), an opt-in admin HTTP API, the lock-free
+  64-way sharded limiter, adaptive (AIMD) rate limiting, pluggable-embedder semantic
+  response caching, guardrails/loop-detection/IETF-header middleware wiring, events
+  and webhooks, estimate-based budget reservations, and guardrail violation
+  tracking with a Prometheus counter.
+- **7 MCP tools in all 3 languages** (previously 5 base + 2 Go-only): `attest_budget`
+  and `verify_budget` now ship everywhere, and Node/Python gained their own
+  zero-dependency stdio JSON-RPC server (`serveMCP`/`serve_mcp`), matching Go's
+  `ServeMCP`.
+- **Cross-language signature verification bug found and fixed.** Go, Node, and
+  Python each formatted a budget token's `expires_at` timestamp differently inside
+  the Ed25519 signing payload (Go trims trailing zero fractional digits, Python
+  emits fixed microseconds, Node emits fixed milliseconds) — same instant, three
+  different signed byte strings, so a token attested in one language would fail to
+  verify in another. Fixed by truncating to whole seconds before signing, in all 3
+  SDKs, with a new shared conformance oracle
+  (`conformance/budget_attestation_expiry_vectors.json`) so it can't silently
+  regress. Caught during this release's own verification pass, not by a user.
+- **~495 tests** across the 3 SDKs (up from 253 at last count): 151 Go (`-race`),
+  162 Node, 182 Python — plus the cross-language conformance suites.
+- **Outbound GenAI transport, provider fallback, and SSE usage extraction** shipped
+  across all 3 languages in the prior `v0.2.0-dev` cycle (July 4): `WrapClient` /
+  `wrapFetch` / `wrap_httpx_client`, 16-host provider detection, per-provider
+  circuit breakers, transparent SSE tee usage extraction.
+- **Dashboard control center** (`packages/dashboard`) rebuilt on shadcn/ui: six
+  sections (Overview, Analytics, Agents, Controls, MCP Console, Settings),
+  `docker compose up` demo. Talks to Go's admin API today.
+
+### Published Artifacts
+
+| Runtime | Package | Install |
+| --- | --- | --- |
+| Go | `github.com/varbees/rateguard/packages/sdk-go` | `go get github.com/varbees/rateguard/packages/sdk-go@v0.2.0` |
+| Node.js | `@varbees/rateguard-node` | `npm install @varbees/rateguard-node@0.2.0` |
+| Python | `varbees-rateguard` | `pip install varbees-rateguard==0.2.0` |
+
+**Note on the Python package name:** the PyPI distribution name is
+`varbees-rateguard` — the bare name `rateguard` on PyPI belongs to an unrelated
+package by a different author. `pip install rateguard` will NOT install this SDK.
+
+### Verification
+
+```bash
+cd packages/sdk-go
+CC=/usr/bin/gcc GOWORK=off go test -race ./...
+GOPROXY=proxy.golang.org go list -m github.com/varbees/rateguard/packages/sdk-go@v0.2.0
+```
+
+```bash
+cd packages/sdk-node
+bun run test
+npm publish --dry-run --access public
+npm view @varbees/rateguard-node version
+```
+
+```bash
+cd packages/sdk-python
+python3 -m pytest -q
+python3 -m build --sdist --wheel
+python3 -m twine check dist/*
+python3 -m pip index versions varbees-rateguard
+```
+
+### Known Constraints
+
+- Dashboard (`packages/dashboard`) is verified only against Go's admin API — not
+  yet tested against Node's or Python's new admin API implementations.
+- Go publishing uses the submodule tag form `packages/sdk-go/vX.Y.Z`.
+- Python installs from the distribution name `varbees-rateguard`, while the
+  import package remains `rateguard` — watch for the name-collision note above.
+
+---
+
+## Unreleased (v0.2.0-dev) — July 6, 2026, part 5 (Node/Python Wave B2 — full parity)
+
+### Budget attestation, MCP stdio server, Redis limiter, admin API — now in all 3 languages
+Closed the last 4-feature Go-only gap: Ed25519 delegation-chain budget tokens,
+a zero-dep stdio MCP JSON-RPC server (`serveMCP`/`serve_mcp`, driven by each
+SDK's existing `mcpTools`/`mcpCall`), an atomic Lua GCRA Redis limiter, and the
+opt-in unauthenticated admin HTTP API — all exported from each package's public
+entry point and exercised by tests that import only the public surface, not the
+internal modules directly (AGENTS.md rule 9).
+
+### Cross-language Ed25519 verification bug: found and fixed
+Go's `time.Time` JSON marshaling trims trailing zero fractional digits (0.5s ->
+`.5`), Python's `isoformat()` emits fixed 6-digit microseconds, Node's
+`toISOString()` emits fixed 3-digit milliseconds — three different byte strings
+for the same instant inside the budget token's Ed25519 signing payload. A token
+attested in one language would fail to verify in another. Fixed by truncating
+`expires_at` to whole seconds before it enters the signing payload, in all 3
+SDKs — zero backward-compat cost, since budget attestation was unreleased
+everywhere (postdates the Go `v0.1.0` tag; Python sat at unpublished `0.2.0`).
+Added `conformance/budget_attestation_expiry_vectors.json` as a shared oracle,
+replayed by `TestConformanceBudgetAttestationExpiry` / `conformance.test.ts` /
+`test_conformance.py` — same pattern as the existing token-bucket vectors.
+
+### AGENTS.md's feature table was stale on 8 rows beyond this wave's scope
+Verification surfaced that estimate-based budget reservations, GenAI TTFT/TPOT,
+guardrails/loop-detection/IETF-header middleware wiring, events/webhooks, the
+sharded limiter, adaptive rate limiting, semantic caching, and guardrail
+violation tracking were all already shipped and exported in Node/Python from
+earlier waves but still marked Go-only. Verified each individually (export +
+grep for the actual mechanism) before flipping. Dashboard remains the one
+legitimately Go-only row.
+
 ## Unreleased (v0.2.0-dev) — July 5, 2026, part 4 (packages/connect — universal proxy)
 
 ### The proxy pattern graduates from "hack for one instance" to sanctioned companion package

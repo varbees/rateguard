@@ -20,18 +20,20 @@ Every other rate limiting tool was built for REST APIs. RateGuard was built for 
 | **Provider fallback** | Automatic failover across OpenAI-compatible providers (DeepSeek, Groq, Cerebras, vLLM, ...) on 429/5xx/breaker-open, with credential isolation. Honest scope: cross-schema fallback is impossible at the transport layer and not claimed. |
 | **Rate limiting** | Token bucket algorithm (RFC standard). Configurable per-tenant, per-route, per-provider. |
 | **Pre-flight queries** | `Peek` semantics everywhere: agents ask "can I make this call?" without consuming budget. |
-| **MCP tools** | 5 base tools in Node and Python; Go has 7 (adds `attest_budget`/`verify_budget`). Go also ships a zero-dependency stdio server; Node/Python expose tool helpers for your MCP server framework. |
-| **Loop detection** | SHA-256 payload fingerprinting halts runaway agent loops. The primitive ships in all SDKs; Go middleware can enforce it via `X-Sequence-Depth`. |
-| **Token budgets** | Hourly, daily, monthly limits on LLM token consumption. Hard-stop or soft-stop (queue). Estimate-based reservations keep concurrency high. |
+| **MCP tools** | 7 tools, identical across Go/Node/Python (`attest_budget`/`verify_budget` included). Each SDK also ships a zero-dependency stdio JSON-RPC server (`ServeMCP`/`serveMCP`/`serve_mcp`). |
+| **Loop detection** | SHA-256 payload fingerprinting halts runaway agent loops. The primitive ships in all SDKs; middleware in all 3 languages can enforce it via `X-Sequence-Depth`. |
+| **Token budgets** | Hourly, daily, monthly limits on LLM token consumption. Hard-stop or soft-stop (queue). Estimate-based reservations keep concurrency high — all 3 languages. |
 | **Circuit breakers** | Per-provider on outbound, per-upstream on inbound. Closed → Open → Half-Open state machine. |
-| **GenAI observability** | Go emits OpenTelemetry `gen_ai.*` spans per semconv; Node/Python expose matching attribute builders and cost helpers. |
-| **Content guardrails** | PII detection, prompt injection detection, token/length limits. Go middleware can reject violations with 422; Node/Python expose the same guardrail chains for app-level wiring. |
+| **GenAI observability** | OpenTelemetry `gen_ai.*` spans per semconv in all 3 languages, including TTFT/TPOT timing. |
+| **Content guardrails** | PII detection, prompt injection detection, token/length limits. Middleware in all 3 languages can reject violations with 422; guardrail violations are tracked in a bounded log with a Prometheus counter. |
 | **Prometheus metrics** | Go `/metrics` endpoint with live counters; Node/Python expose zero-dependency exposition helpers. |
 | **Streaming-aware** | SSE bytes pass through untouched while usage, TTFT, and TPOT are extracted on the side. Bounded memory, always. |
 | **14 models priced** | Pricing table for GPT-4o/4.1, o3/o4-mini, Claude, Gemini, Llama, and DeepSeek families. Unknown models return `$0.00`; verify provider pages before release. |
-| **Adaptive rate limiting** (Go) | Opt-in AIMD controller auto-tunes the effective limit from observed upstream error rate — grows on healthy traffic, cuts before the circuit breaker has to trip. |
-| **Semantic caching** (Go) | Bring your own `Embedder` (OpenAI/Cohere/Voyage embeddings, a local model — anything). A cosine-similarity hit skips the network call, breaker, and budget entirely. Streaming requests always bypass it. |
-| **Budget attestation** (Go) | Ed25519-signed delegation chains so one agent can hand a sub-agent a cryptographic budget that only narrows, never widens — no shared secret, verifiable end-to-end. RateGuard's own extension in the shape of the IETF Agent Identity Protocol draft, not a claim of AIP compliance. |
+| **Adaptive rate limiting** | Opt-in AIMD controller auto-tunes the effective limit from observed upstream error rate — grows on healthy traffic, cuts before the circuit breaker has to trip. All 3 languages. |
+| **Semantic caching** | Bring your own `Embedder` (OpenAI/Cohere/Voyage embeddings, a local model — anything). A cosine-similarity hit skips the network call, breaker, and budget entirely. Streaming requests always bypass it. All 3 languages. |
+| **Budget attestation** | Ed25519-signed delegation chains so one agent can hand a sub-agent a cryptographic budget that only narrows, never widens — no shared secret, verifiable end-to-end, byte-identical signing across all 3 languages. RateGuard's own extension in the shape of the IETF Agent Identity Protocol draft, not a claim of AIP compliance. |
+| **Redis distributed limiter** | Atomic Lua GCRA script, byte-identical across all 3 languages — for rate limits shared across multiple processes/instances. |
+| **Admin API** | Opt-in, unauthenticated-by-design HTTP API for state/policy/MCP-tool-calls — bind privately. All 3 languages. |
 
 ## Guard the money, not just the door
 
@@ -104,12 +106,24 @@ rg := rateguard.New(rateguard.Config{Preset: "agent-orchestrator"})
 _ = rg.ServeMCP(ctx, os.Stdin, os.Stdout)
 ```
 
+```ts
+// Node — same stdio server
+const rg = new RateGuard({ preset: 'agent-orchestrator' });
+await serveMCP(rg);
+```
+
+```python
+# Python — same stdio server
+rg = RateGuard(preset="agent-orchestrator")
+await serve_mcp(rg)
+```
+
 ```jsonc
 // Claude Code / Claude Desktop / Cursor config
 { "mcpServers": { "rateguard": { "command": "your-app", "args": ["mcp"] } } }
 ```
 
-Five tools, identical across Go/Node/Python: `get_rate_limit_state`, `get_token_budget`, `get_circuit_breaker_state`, `check_loop`, `list_limits`. Go adds two more (`attest_budget`, `verify_budget`) for cryptographic budget delegation between agents — see [Budget Attestation](docs/API_REFERENCE.md#budget-attestation-go).
+Seven tools, identical across Go/Node/Python: `get_rate_limit_state`, `get_token_budget`, `get_circuit_breaker_state`, `check_loop`, `list_limits`, `attest_budget`, `verify_budget` — the last two for cryptographic budget delegation between agents, see [Budget Attestation](docs/API_REFERENCE.md#budget-attestation).
 
 ```go
 // Track any LLM call with OTel GenAI spans + automatic cost estimation
@@ -134,7 +148,7 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 | Multi-language | ✅ Go+Node+Python | ❌ JS only | ❌ Python only | ❌ |
 | Zero infrastructure | ✅ Middleware | ✅ | ❌ Proxy required | ❌ Gateway |
 | In-process outbound spend tracking | ✅ Client wrapper | ❌ | ❌ Proxy only | ❌ |
-| Agent pre-flight queries (MCP) | ✅ 5 base tools (7 in Go) + stdio server | ❌ | ❌ | ❌ |
+| Agent pre-flight queries (MCP) | ✅ 7 tools + stdio server, all 3 languages | ❌ | ❌ | ❌ |
 | Agent loop detection | ✅ Library/MCP; Go middleware | ❌ | ❌ | ❌ |
 | LLM token budgets | ✅ | ❌ | ✅ | ❌ |
 | GenAI OTel conventions | ✅ | ❌ | ❌ | ❌ |

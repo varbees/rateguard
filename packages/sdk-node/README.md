@@ -63,8 +63,18 @@ const rg = new RateGuard({ preset: 'streaming-llm' });
 const client = new OpenAI({ fetch: rg.wrapFetch() });
 ```
 
-`rg.mcpTools()` and `rg.mcpCall()` expose the five pre-flight MCP tools for agent frameworks. Guardrails, loop detection, GenAI attribute helpers, and Prometheus exposition helpers are exported for app-level wiring.
+`rg.mcpTools()` and `rg.mcpCall()` expose all 7 pre-flight MCP tools for agent frameworks (includes `attestBudget`/`verifyBudget`). `serveMCP(rg)` runs a zero-dependency stdio JSON-RPC server over the same tools — drop it straight into a Claude Code/Cursor/Claude Desktop MCP config. Guardrails, loop detection, GenAI attribute helpers (including TTFT/TPOT), and Prometheus exposition helpers are exported for app-level wiring.
+
+## Also included
+
+- **Budget attestation** — Ed25519-signed delegation chains (`newRootBudgetToken`, `attest`, `verifyPresentation`), byte-identical signing payload with Go and Python so a token attested in one language verifies in another.
+- **Redis distributed limiter** — atomic Lua GCRA script for rate limits shared across processes/instances, pass any client shaped like `RedisLimiterClient`.
+- **Admin API** — opt-in, unauthenticated-by-design HTTP handler (`createAdminHandler`) exposing state/policy/MCP-tool-calls; bind privately.
+- **Adaptive rate limiting** — opt-in AIMD controller that auto-tunes the effective limit from observed upstream error rate.
+- **Semantic response caching** — bring your own `Embedder`; a cosine-similarity hit skips the network call, breaker, and budget entirely.
+- **Lock-free sharded limiter** — 64-way sharding with atomic CAS, the default under `ShardedLimiter`.
+- **Events/webhooks** — `HTTPEventEmitter`/`WebSocketEventEmitter`/`ConsoleEventEmitter` for shipping admission decisions out of process.
 
 ## Status
 
-This package is the Node middleware counterpart to the Go and Python SDKs.
+This package is the Node middleware counterpart to the Go and Python SDKs — full feature parity as of v0.2.0, see the [root README](https://github.com/varbees/rateguard#readme) for the complete capability table.
