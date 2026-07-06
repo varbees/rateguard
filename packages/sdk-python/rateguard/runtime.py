@@ -151,19 +151,19 @@ class RateGuardRuntime:
         with self._policy_lock:
             rps = patch.get("requests_per_second")
             if rps is not None:
-                self.config.rate_limit.requests_per_second = int(rps)  # type: ignore[arg-type]
+                self.config.rate_limit.requests_per_second = int(rps)  # type: ignore[call-overload]
             burst = patch.get("burst")
             if burst is not None:
-                self.config.rate_limit.burst = int(burst)  # type: ignore[arg-type]
+                self.config.rate_limit.burst = int(burst)  # type: ignore[call-overload]
             hour_limit = patch.get("token_budget_per_hour")
             if hour_limit is not None:
-                self.config.token_budget.hour_limit = int(hour_limit)  # type: ignore[arg-type]
+                self.config.token_budget.hour_limit = int(hour_limit)  # type: ignore[call-overload]
             day_limit = patch.get("token_budget_per_day")
             if day_limit is not None:
-                self.config.token_budget.day_limit = int(day_limit)  # type: ignore[arg-type]
+                self.config.token_budget.day_limit = int(day_limit)  # type: ignore[call-overload]
             month_limit = patch.get("token_budget_per_month")
             if month_limit is not None:
-                self.config.token_budget.month_limit = int(month_limit)  # type: ignore[arg-type]
+                self.config.token_budget.month_limit = int(month_limit)  # type: ignore[call-overload]
             mode = patch.get("token_budget_mode")
             if mode is not None:
                 from .config import normalize_token_budget_mode

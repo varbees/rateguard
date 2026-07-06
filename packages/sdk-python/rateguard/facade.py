@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, AsyncIterable, AsyncIterator, Callable
+from typing import TYPE_CHECKING, Any, AsyncIterable, AsyncIterator, Callable
 
 from .exceptions import RateGuardException
 from .runtime import RateGuardRuntime
@@ -17,6 +17,8 @@ from .types import (
 )
 
 if TYPE_CHECKING:
+    import httpx
+
     from .adapters.asgi import ASGIApp
     from .adapters.wsgi import WSGIApp
     from .core.adaptive import AdaptiveLimiter, AdaptiveOptions
@@ -137,7 +139,7 @@ class RateGuard:
             self._mcp_tools = create_mcp_tools(self.runtime, self.loop_detector, self.guardrail_log)
         return self._mcp_tools
 
-    def mcp_call(self, tool_name: str, args: dict | None = None) -> "MCPToolResult":
+    def mcp_call(self, tool_name: str, args: dict[str, Any] | None = None) -> "MCPToolResult":
         """Execute an MCP tool by name and wrap the result as MCP content."""
         from .core.mcp import mcp_call
 
@@ -158,7 +160,7 @@ class RateGuard:
 
         return start_genai_call(self.runtime, call)
 
-    def httpx_transport(self, **kwargs) -> object:
+    def httpx_transport(self, **kwargs: Any) -> "httpx.BaseTransport":
         """Sync httpx transport with outbound GenAI tracking.
 
         client = httpx.Client(transport=rg.httpx_transport())
@@ -166,9 +168,10 @@ class RateGuard:
         """
         from .core.outbound import create_httpx_transport
 
-        return create_httpx_transport(self.runtime, **kwargs)
+        transport: httpx.BaseTransport = create_httpx_transport(self.runtime, **kwargs)
+        return transport
 
-    def wrap_httpx_client(self, client: object = None, **kwargs) -> object:
+    def wrap_httpx_client(self, client: "httpx.Client | None" = None, **kwargs: Any) -> "httpx.Client":
         """Return an httpx.Client whose transport tracks outbound LLM calls.
 
         Budgets, per-provider circuit breakers, and real token usage metering
@@ -189,7 +192,7 @@ class RateGuard:
             base_url=client.base_url,
         )
 
-    def httpx_async_transport(self, **kwargs) -> object:
+    def httpx_async_transport(self, **kwargs: Any) -> "httpx.AsyncBaseTransport":
         """Async httpx transport with outbound GenAI tracking.
 
         client = httpx.AsyncClient(transport=rg.httpx_async_transport())
@@ -197,9 +200,10 @@ class RateGuard:
         """
         from .core.outbound import create_httpx_async_transport
 
-        return create_httpx_async_transport(self.runtime, **kwargs)
+        transport: httpx.AsyncBaseTransport = create_httpx_async_transport(self.runtime, **kwargs)
+        return transport
 
-    def wrap_httpx_async_client(self, client: object = None, **kwargs) -> object:
+    def wrap_httpx_async_client(self, client: "httpx.AsyncClient | None" = None, **kwargs: Any) -> "httpx.AsyncClient":
         """Return an httpx.AsyncClient whose transport tracks outbound LLM calls.
 
         Agent frameworks are async-first — pass the result to AsyncOpenAI /

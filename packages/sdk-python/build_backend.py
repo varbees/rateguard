@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from base64 import urlsafe_b64encode
 from csv import writer as csv_writer
 from dataclasses import dataclass
@@ -13,15 +14,23 @@ from zipfile import ZIP_DEFLATED, ZipFile
 DIST_NAME = "varbees-rateguard"
 NORMALIZED_NAME = DIST_NAME.replace("-", "_")
 IMPORT_PACKAGE = "rateguard"
-# Kept in sync with pyproject.toml's [project] version by hand — this build
-# backend has no TOML parser (py3.10 predates stdlib tomllib, and adding a
-# dependency just to read one field violates the zero-dependency rule this
-# file itself exists to follow). Confirmed diverged from pyproject.toml once
-# already (stuck at 0.1.0 while pyproject.toml moved to 0.2.0) — check both
-# on every version bump.
-VERSION = "0.2.0"
 TAG = "py3-none-any"
 ROOT = Path(__file__).resolve().parent
+
+
+def _read_version() -> str:
+    # rateguard/__init__.py is the single version source; pyproject.toml must
+    # agree (a hardcoded VERSION constant here diverged from pyproject.toml
+    # once already — stuck at 0.1.0 while pyproject.toml had moved to 0.2.0 —
+    # so derive it instead of hand-syncing a second copy).
+    source = (ROOT / IMPORT_PACKAGE / "__init__.py").read_text(encoding="utf-8")
+    match = re.search(r'^__version__ = "([^"]+)"$', source, re.MULTILINE)
+    if match is None:
+        raise RuntimeError("rateguard/__init__.py must define __version__")
+    return match.group(1)
+
+
+VERSION = _read_version()
 REPO_ROOT = ROOT.parent.parent
 LICENSE_FILE = REPO_ROOT / "LICENSE"
 DIST_INFO = f"{NORMALIZED_NAME}-{VERSION}.dist-info"

@@ -1,6 +1,6 @@
 """RateGuard Python middleware SDK."""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .adapters.asgi import RateGuardMiddleware as ASGIRateGuardMiddleware
 from .adapters.decorators import rate_limited, token_budget
@@ -8,6 +8,7 @@ from .adapters.wsgi import RateGuardMiddleware as WSGIRateGuardMiddleware
 from .config import known_presets, normalize_preset, normalize_token_budget_mode, preset_policy, resolve_rateguard_options
 from .core.adaptive import AdaptiveLimiter, AdaptiveOptions
 from .core.admin import AdminApp
+from .core.bounded_cache import BoundedCache
 # budget_attestation itself imports `cryptography` lazily (inside the
 # functions that sign/verify), so this top-level import keeps
 # `import rateguard` zero-dependency; only CALLING attestation functions
@@ -26,7 +27,17 @@ from .core.budget_attestation import (
 )
 from .core.circuit_breaker import CircuitBreaker
 from .core.event_emitter import ConsoleEventEmitter, HTTPEventEmitter, WebSocketEventEmitter
-from .core.genai import GenAICall, GenAISpan, estimate_cost, genai_span_attributes, genai_span_end_attributes, priced_models, start_genai_call
+from .core.genai import (
+    GenAICall,
+    GenAISpan,
+    classify_error_type,
+    estimate_cost,
+    genai_span_attributes,
+    genai_span_end_attributes,
+    genai_span_name,
+    priced_models,
+    start_genai_call,
+)
 from .core.guardrail_log import GuardrailEvent, GuardrailLog
 from .core.guardrails import (
     Guardrail,
@@ -71,6 +82,7 @@ from .core.sharded_limiter import ShardedLimiter
 from .core.token_budget import TokenBudgetManager
 from .exceptions import BudgetExceeded, RateGuardException
 from .facade import RateGuard
+from .runtime import RateGuardRuntime
 from .types import (
     BucketState,
     CircuitBreakerDecision,
@@ -81,6 +93,7 @@ from .types import (
     EventEmitterLike,
     HeadersLike,
     PolicyPreset,
+    PreflightDecision,
     PresetName,
     RateGuardEvent,
     RateGuardEventEnvelope,
@@ -110,6 +123,9 @@ __all__ = [
     "WebSocketEventEmitter",
     "CircuitBreaker",
     "RateGuard",
+    "RateGuardRuntime",
+    "BoundedCache",
+    "PreflightDecision",
     "BudgetExceeded",
     "RateGuardException",
     "RateGuardMiddleware",
@@ -153,9 +169,11 @@ __all__ = [
     # GenAI observability
     "GenAICall",
     "GenAISpan",
+    "classify_error_type",
     "estimate_cost",
     "genai_span_attributes",
     "genai_span_end_attributes",
+    "genai_span_name",
     "priced_models",
     "start_genai_call",
     # Guardrails

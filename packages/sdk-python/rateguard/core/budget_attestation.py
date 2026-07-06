@@ -52,6 +52,7 @@ import base64
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from types import ModuleType
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -65,7 +66,7 @@ else:  # pragma: no cover - typing alias only
     PublicKeyLike = Any
 
 
-def _ed25519():  # lazy: keeps `import rateguard` zero-dependency
+def _ed25519() -> ModuleType:  # lazy: keeps `import rateguard` zero-dependency
     from cryptography.hazmat.primitives.asymmetric import ed25519
 
     return ed25519
