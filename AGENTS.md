@@ -34,27 +34,27 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Pre-flight Peek (non-consuming query) | ✅ | ✅ | ✅ | `limiter.go` |
 | Store primitives (Get/Increment(n)/Reset — variable-cost consumption, key clearing) | ✅ | ✅ | ✅ | `limiter.go`, `sharded_limiter.go`, `redis_limiter.go` |
 | LLM token budgets (hr/day/mo) | ✅ | ✅ | ✅ | `token_budget.go` |
-| Estimate-based budget reservations | ✅ | — | — | `token_budget.go` |
+| Estimate-based budget reservations | ✅ | ✅ | ✅ | `token_budget.go` |
 | Circuit breakers | ✅ | ✅ | ✅ | `circuit_breaker.go` |
 | GenAI OTel helpers (semconv span names, input/output tokens, error.type classes) | ✅ | ✅ | ✅ | `genai_observability.go` |
-| Public GenAI API (StartGenAICall/GenAISpan, TTFT/TPOT) | ✅ | — | — | Same file |
+| Public GenAI API (StartGenAICall/GenAISpan, TTFT/TPOT) | ✅ | ✅ | ✅ | Same file |
 | 14-model pricing table | ✅ | ✅ | ✅ | Same file |
 | Prometheus exposition | ✅ endpoint | ✅ helpers | ✅ helpers | `prometheus.go` |
 | Provider chain (routing decisions) | ✅ | ✅ | ✅ | `provider_chain.go` |
 | Content guardrails (PII, injection) | ✅ | ✅ | ✅ | `guardrails.go` |
-| Guardrails wired into middleware (422) | ✅ | — | — | `sdk.go` |
+| Guardrails wired into middleware (422) | ✅ | ✅ | ✅ | `sdk.go` |
 | 8 presets | ✅ | ✅ | ✅ | `presets.go` |
-| Redis distributed limiter (atomic Lua GCRA) | ✅ | ❌ | ❌ | `redis_limiter.go` |
-| Events/webhooks | ✅ | — | — | `events.go` |
+| Redis distributed limiter (atomic Lua GCRA) | ✅ | ✅ | ✅ | `redis_limiter.go` |
+| Events/webhooks | ✅ | ✅ | ✅ | `events.go` |
 | MCP tools (7: rate limit, budget, breaker, loop, list, attest, verify) | ✅ | ✅ | ✅ | `mcp.go` |
-| Lock-free sharded limiter (64-way, atomic CAS) | ✅ | — | — | `sharded_limiter.go` |
-| Adaptive rate limiting (AIMD controller) | ✅ | — | — | `adaptive.go` |
-| Semantic response caching (pluggable Embedder) | ✅ | — | — | `semantic_cache.go` |
-| Budget attestation (Ed25519 delegation chains) | ✅ | — | — | `budget_attestation.go` |
-| MCP stdio server (zero-dep JSON-RPC) | ✅ | — | — | `mcp_server.go` |
+| Lock-free sharded limiter (64-way, atomic CAS) | ✅ | ✅ | ✅ | `sharded_limiter.go` |
+| Adaptive rate limiting (AIMD controller) | ✅ | ✅ | ✅ | `adaptive.go` |
+| Semantic response caching (pluggable Embedder) | ✅ | ✅ | ✅ | `semantic_cache.go` |
+| Budget attestation (Ed25519 delegation chains) | ✅ | ✅ | ✅ | `budget_attestation.go` |
+| MCP stdio server (zero-dep JSON-RPC) | ✅ | ✅ | ✅ | `mcp_server.go` |
 | Loop detection (SHA-256, max-depth, LRU-bounded) | ✅ | ✅ | ✅ | `loop_detector.go` |
-| Loop detection wired into middleware (X-Sequence-Depth) | ✅ | — | — | `sdk.go` |
-| IETF RateLimit-* response headers | ✅ | — | — | `sdk.go` |
+| Loop detection wired into middleware (X-Sequence-Depth) | ✅ | ✅ | ✅ | `sdk.go` |
+| IETF RateLimit-* response headers | ✅ | ✅ | ✅ | `sdk.go` |
 | Outbound GenAI transport (WrapClient/wrapFetch/httpx) | ✅ | ✅ | ✅ | `outbound.go` |
 | SSE streaming usage extraction (transparent tee) | ✅ | ✅ | ✅ | `sse_usage.go` |
 | Provider fallback (OpenAI-compatible, credential-isolated) | ✅ | ✅ | ✅ | `outbound.go` |
@@ -62,8 +62,8 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Provider detection (16 hosts + Azure/Bedrock/Vertex + self-hosted) | ✅ | ✅ | ✅ | `outbound.go` |
 | Async outbound transport (agent frameworks are async-first) | n/a | n/a | ✅ | `core/outbound.py` |
 | Framework integration recipes (INTEGRATIONS.md, doc-verified) | ✅ | ✅ | ✅ | `INTEGRATIONS.md` |
-| Admin API — state/policy/MCP-tool-call over HTTP (opt-in, unauthenticated by design — bind privately) | ✅ | ❌ | ❌ | `admin.go` |
-| Guardrail violation tracking (bounded log + counts by code + Prometheus counter) | ✅ | ❌ | ❌ | `guardrail_log.go` |
+| Admin API — state/policy/MCP-tool-call over HTTP (opt-in, unauthenticated by design — bind privately) | ✅ | ✅ | ✅ | `admin.go` |
+| Guardrail violation tracking (bounded log + counts by code + Prometheus counter) | ✅ | ✅ | ✅ | `guardrail_log.go` |
 | Dashboard control center (`packages/dashboard`: Overview/Analytics/Agents/Controls/MCP Console/Settings, `docker compose up` demo) | ✅ (via Go admin API) | ❌ | ❌ | `packages/dashboard/` |
 
 ## 8 Presets
@@ -122,7 +122,7 @@ opensrc path github.com/varbees/rateguard/packages/sdk-go
 10. **Pre-flight queries must never consume.** Anything advertised as a "check before you call" (MCP tools, dashboards) must use Peek/read-only paths — never `Allow()`, which consumes a token, and never `breaker.Allow()`, which claims the half-open probe.
 11. **Transports must be byte-transparent.** The outbound wrapper delivers the exact bytes the provider sent — never rewrite line endings, never buffer a stream whole, never alter framing. Usage extraction happens on a bounded side-scan (see `sse_usage.go`).
 12. **Streaming usage events must be decoded individually and merged with MAX semantics.** OpenAI sends `"usage":null` in every intermediate chunk; Anthropic splits input (message_start) from output (message_delta) and repeats fields. Concatenating chunks or summing fields double-counts — all three SDKs merge per-event maxima.
-13. **Parity claims must be conformance-tested, not assumed.** `conformance/token_bucket_vectors.json` is the shared oracle all 3 SDKs replay (`TestConformanceTokenBucket`, `conformance.test.ts`, `test_conformance.py`) — a passing per-language test suite does not by itself prove cross-language behavioral parity. `retry_after_ms` rounding is unified across all 3 SDKs (ceil to the nearest whole second, floored at 1000ms) and asserted by the conformance vectors on every deny step, including a >1s-deficit case that distinguishes whole-second ceiling from millisecond ceiling.
+13. **Parity claims must be conformance-tested, not assumed.** `conformance/token_bucket_vectors.json` is the shared oracle all 3 SDKs replay (`TestConformanceTokenBucket`, `conformance.test.ts`, `test_conformance.py`) — a passing per-language test suite does not by itself prove cross-language behavioral parity. `retry_after_ms` rounding is unified across all 3 SDKs (ceil to the nearest whole second, floored at 1000ms) and asserted by the conformance vectors on every deny step, including a >1s-deficit case that distinguishes whole-second ceiling from millisecond ceiling. `conformance/budget_attestation_expiry_vectors.json` is the same idea for budget attestation: Go's time.Time JSON marshaling trims trailing zero fractional digits, Python's isoformat emits fixed microseconds, and Node's toISOString emits fixed milliseconds — three different byte strings for the same instant, silently breaking cross-language Ed25519 verification. `expires_at` is truncated to whole seconds before it enters the signing payload in all 3 SDKs (`TestConformanceBudgetAttestationExpiry`, `conformance.test.ts`, `test_conformance.py`) specifically to remove the fractional component that caused the mismatch.
 
 ## Domain types
 
