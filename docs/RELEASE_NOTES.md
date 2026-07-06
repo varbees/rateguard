@@ -30,8 +30,9 @@ implementation. Full changelog below (parts 1-6); see [Highlights](#highlights),
   SDKs, with a new shared conformance oracle
   (`conformance/budget_attestation_expiry_vectors.json`) so it can't silently
   regress. Caught during this release's own verification pass, not by a user.
-- **~495 tests** across the 3 SDKs (up from 253 at last count): 151 Go (`-race`),
-  162 Node, 182 Python — plus the cross-language conformance suites.
+- **~498 tests** across the 3 SDKs (up from 253 at last count): 151 Go (`-race`),
+  162 Node, 185 Python — plus the cross-language conformance suites. `mypy --strict`
+  passes clean on all 39 Python source files.
 - **Outbound GenAI transport, provider fallback, and SSE usage extraction** shipped
   across all 3 languages in the prior `v0.2.0-dev` cycle (July 4): `WrapClient` /
   `wrapFetch` / `wrap_httpx_client`, 16-host provider detection, per-provider

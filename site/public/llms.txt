@@ -53,25 +53,28 @@ Every limiter also implements Peek — a non-consuming pre-flight query.
 | strict-upstream-protection | 50 | 5K | hard-stop |
 
 ## Features
-- MCP tools (5 base, all SDKs; Go adds attest_budget + verify_budget = 7): get_rate_limit_state, get_token_budget, get_circuit_breaker_state, check_loop, list_limits — peek semantics, querying never consumes budget
-- MCP stdio server (Go): zero-dependency JSON-RPC 2.0, plugs into any MCP client config
-- Loop detection: SHA-256 payload fingerprinting + max sequence depth, LRU-bounded; wired into Go middleware via X-Sequence-Depth header (429 loop_detected)
-- Token budgets (hour/day/month, hard-stop or soft-stop); estimate-based reservations (Go: EstimatedTokensPerRequest) keep concurrency high under hard-stop
+- MCP tools (7, all 3 SDKs): get_rate_limit_state, get_token_budget, get_circuit_breaker_state, check_loop, list_limits, attest_budget, verify_budget — peek semantics, querying never consumes budget
+- MCP stdio server (all 3 SDKs): zero-dependency JSON-RPC 2.0, plugs into any MCP client config
+- Loop detection: SHA-256 payload fingerprinting + max sequence depth, LRU-bounded; wired into middleware via X-Sequence-Depth header (429 loop_detected) in all 3 SDKs
+- Token budgets (hour/day/month, hard-stop or soft-stop); estimate-based reservations (all SDKs — Go EstimatedTokensPerRequest, Node/Python estimated_tokens) keep concurrency high under hard-stop
 - Circuit breakers (closed → open → half-open)
-- GenAI OTel per semconv: span name "{operation} {model}", gen_ai.usage.input_tokens/output_tokens, low-cardinality error.type; public API rg.StartGenAICall → span.End with auto cost estimation, TTFT/TPOT
+- GenAI OTel per semconv: span name "{operation} {model}", gen_ai.usage.input_tokens/output_tokens, low-cardinality error.type; public API rg.StartGenAICall → span.End with auto cost estimation, TTFT/TPOT — all 3 SDKs
 - 14-model pricing table, verified against provider pricing pages
-- Content guardrails: PII, prompt injection (5 vectors), token/length limits; wired into Go middleware (422)
+- Content guardrails: PII, prompt injection (5 vectors), token/length limits; wired into middleware (422) in all 3 SDKs
 - Prometheus /metrics endpoint (stdlib only): live counters — requests, rate limit hits, budget exhaustion, breaker trips, tokens consumed, loop stats
-- IETF RateLimit-* response headers (draft-ietf-httpapi-ratelimit-headers)
-- Events/webhooks for every request (Go)
-- Redis distributed limiter: atomic Lua GCRA, read-only peek script (Go) + generalized-cost Increment script for variable-token consumption
+- IETF RateLimit-* response headers (draft-ietf-httpapi-ratelimit-headers), all 3 SDKs
+- Events/webhooks for every request, all 3 SDKs
+- Redis distributed limiter: atomic Lua GCRA, read-only peek script + generalized-cost Increment script for variable-token consumption — byte-identical script across all 3 SDKs
 - Store interface (all 3 SDKs): Get (raw bucket state, never consumes) / Increment(n) (consume n tokens atomically — for a call billed by estimated token count, not by call count) / Reset (clear a key outright). Additive alongside Limiter.Allow/Peek.
-- Admin API (Go): `rg.AdminHandler()` — GET /admin/state?key=, GET/PATCH /admin/policy (live policy tweaks via SDK.SetPolicy), GET /admin/mcp/tools + POST /admin/mcp/call (invoke any MCP tool directly over HTTP). Opt-in, unauthenticated by design (same posture as pprof) — bind to localhost/internal network or add your own auth. Not yet ported to Node/Python.
-- Guardrail violation tracking: bounded log (50 events, code+message+timestamp, never the content) + cumulative counts by code + `rateguard_guardrail_violations_total` Prometheus counter. Reachable via list_limits/admin/state.
-- Dashboard (packages/dashboard): self-hosted control center, six sections (Overview, Analytics, Agents, Controls, MCP Console, Settings) behind a persistent sidebar — live budget/rate-limit/circuit-breaker/loop/guardrail state, live time-series traffic charts, an interactive MCP tool console, a policy tweak panel. `docker compose up` for a one-command demo against a synthetic-traffic instance.
+- Adaptive rate limiting (AIMD controller, all 3 SDKs): auto-tunes the effective limit from observed upstream error rate
+- Semantic response caching (pluggable Embedder, all 3 SDKs): cosine-similarity hit skips network/breaker/budget entirely; streaming always bypasses
+- Budget attestation (Ed25519 delegation chains, all 3 SDKs): narrowing-only sub-agent budget delegation, byte-identical signing payload across languages (expires_at truncated to whole seconds specifically to guarantee this)
+- Admin API (all 3 SDKs): state/policy/MCP-tool-call over HTTP — GET /admin/state?key=, GET/PATCH /admin/policy (live policy tweaks), GET /admin/mcp/tools + POST /admin/mcp/call (invoke any MCP tool directly over HTTP). Opt-in, unauthenticated by design (same posture as pprof) — bind to localhost/internal network or add your own auth.
+- Guardrail violation tracking (all 3 SDKs): bounded log (50 events, code+message+timestamp, never the content) + cumulative counts by code + `rateguard_guardrail_violations_total` Prometheus counter. Reachable via list_limits/admin/state.
+- Dashboard (packages/dashboard): self-hosted control center, six sections (Overview, Analytics, Agents, Controls, MCP Console, Settings) behind a persistent sidebar — live budget/rate-limit/circuit-breaker/loop/guardrail state, live time-series traffic charts, an interactive MCP tool console, a policy tweak panel. `docker compose up` for a one-command demo against a synthetic-traffic instance. Verified only against Go's admin API so far.
 
 ## Tests
-All 3 SDKs green — 253 total: `go test ./...` (147 test funcs), `bun run test` (52 passing), `pytest -q` (54 passing). Plus a cross-language conformance suite (`conformance/token_bucket_vectors.json`) that replays one shared oracle against all 3 SDKs to prove real behavioral parity, not just per-language test counts. Known current gap: `retry_after_ms` rounds to the nearest second in Go vs. nearest millisecond (floored at 1000ms) in Node/Python — not yet unified.
+All 3 SDKs green — ~498 total: `go test ./...` (151 test funcs, all with -race), `bun run test` (162 passing), `pytest -q` (185 passing). Plus cross-language conformance suites (`conformance/token_bucket_vectors.json`, `conformance/budget_attestation_expiry_vectors.json`) that replay shared oracles against all 3 SDKs to prove real behavioral parity, not just per-language test counts. `retry_after_ms` rounding (ceil to nearest whole second, floored at 1000ms) and budget-attestation `expires_at` formatting (truncated to whole seconds) are both unified across Go/Node/Python and asserted by conformance vectors. `mypy --strict` passes clean on all 39 Python source files.
 
 ## Docs
 - AGENTS.md: full agent contract with architecture, domain types, rules, commands
