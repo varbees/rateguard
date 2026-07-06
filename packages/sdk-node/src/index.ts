@@ -4,11 +4,15 @@ export * from './runtime.js';
 export * from './core/bounded-cache.js';
 export * from './core/rate-limiter.js';
 export * from './core/sharded-limiter.js';
+export * from './core/redis-limiter.js';
 export * from './core/adaptive.js';
 export * from './core/token-budget.js';
 export * from './core/circuit-breaker.js';
 export * from './core/event-emitter.js';
 export * from './core/mcp.js';
+export * from './core/mcp-server.js';
+export * from './core/budget-attestation.js';
+export * from './core/admin.js';
 export * from './core/guardrails.js';
 export * from './core/guardrail-log.js';
 export * from './core/genai.js';
@@ -38,7 +42,7 @@ import { middleware as expressMiddleware } from './adapters/express.js';
 import { rateguardPlugin } from './adapters/fastify.js';
 import { rateguard } from './adapters/hono.js';
 import { withRateGuard } from './adapters/next.js';
-import type { RateGuardOptions } from './types.js';
+import type { PolicyPreset, PolicyUpdate, RateGuardOptions } from './types.js';
 
 /**
  * Convenience class that mirrors the Go SDK's top-level ergonomics.
@@ -76,6 +80,20 @@ export class RateGuard {
   /** Execute an MCP tool by name and wrap the result as MCP content. */
   mcpCall(toolName: string, args: Record<string, unknown> = {}): Promise<MCPToolResult> {
     return mcpCall(this.mcpTools(), toolName, args);
+  }
+
+  /** Current effective policy preset. Mirrors Go's SDK.Policy(). */
+  policy(): PolicyPreset {
+    return this.runtime.policy();
+  }
+
+  /**
+   * Applies a partial policy override (in-memory only) and returns the
+   * resulting effective policy. The admission hot path reads the updated
+   * limits on its next decision. Mirrors Go's SDK.SetPolicy.
+   */
+  setPolicy(update: PolicyUpdate): PolicyPreset {
+    return this.runtime.setPolicy(update);
   }
 
   /**

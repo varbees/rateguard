@@ -110,6 +110,12 @@ export class AdaptiveLimiter implements RateLimiterLike {
   }
 
   peek(key: string, options: Required<RateLimitOptions>): RateLimitDecision {
-    return this.inner.peek(key, this.scaled(options));
+    // AdaptiveLimiter's `inner` is always an in-process limiter in current
+    // wiring (RateGuardRuntime never composes it with RedisGCRALimiter — see
+    // redis-limiter.ts), so this cast reflects the actual runtime contract.
+    // The cast exists purely because RateLimiterLike.peek's return type was
+    // widened to accommodate Redis's genuinely-async peek; it does not change
+    // behavior here.
+    return this.inner.peek(key, this.scaled(options)) as RateLimitDecision;
   }
 }

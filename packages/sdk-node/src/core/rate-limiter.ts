@@ -42,7 +42,15 @@ export interface RateLimiterLike {
     key: string,
     options: Required<RateLimitOptions> & { apiKey: string | undefined },
   ): Promise<RateLimitDecision> | RateLimitDecision;
-  peek(key: string, options: Required<RateLimitOptions>): RateLimitDecision;
+  /**
+   * Widened to allow an async implementation (`Promise<RateLimitDecision>`)
+   * alongside the original sync one: `RedisGCRALimiter.peek` is a real Redis
+   * round-trip and cannot honestly be synchronous the way the in-memory
+   * `RateLimiter`/`ShardedLimiter`/`AdaptiveLimiter` peeks are. Existing sync
+   * implementations are unaffected — returning a plain `RateLimitDecision`
+   * still satisfies this type.
+   */
+  peek(key: string, options: Required<RateLimitOptions>): Promise<RateLimitDecision> | RateLimitDecision;
 }
 
 /**

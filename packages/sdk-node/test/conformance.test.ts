@@ -1,16 +1,27 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { RateLimiter } from '../src/core/rate-limiter.js';
 import { ShardedLimiter } from '../src/core/sharded-limiter.js';
+import { signingPayload } from '../src/core/budget-attestation.js';
 
 interface ConformanceVectors {
   policy: { requests_per_second: number; burst: number };
   steps: Array<{ note: string; advance_ms: number; n: number; allowed: boolean; remaining: number; retry_after_ms: number }>;
 }
 
+interface ExpiryVectors {
+  cases: Array<{ note: string; epoch_ms: number; expected: string }>;
+}
+
 const vectorsPath = fileURLToPath(new URL('../../../conformance/token_bucket_vectors.json', import.meta.url));
 const vectors: ConformanceVectors = JSON.parse(readFileSync(vectorsPath, 'utf-8'));
+
+const expiryVectorsPath = fileURLToPath(
+  new URL('../../../conformance/budget_attestation_expiry_vectors.json', import.meta.url),
+);
+const expiryVectors: ExpiryVectors = JSON.parse(readFileSync(expiryVectorsPath, 'utf-8'));
 
 function fakeClock(startMs: number) {
   let now = startMs;
@@ -78,6 +89,30 @@ describe('Conformance: token bucket', () => {
       } else {
         expect(d.retryAfterMs, `step ${i} (${step.note})`).toBe(step.retry_after_ms);
       }
+    }
+  });
+});
+
+/**
+ * Replays the shared oracle in conformance/budget_attestation_expiry_vectors.json
+ * against signingPayload, proving Node formats expires_at identically to Go
+ * and Python inside the Ed25519 signing payload — not just that Node's own
+ * round-trip tests pass. A failure here means a cross-language attested
+ * budget token would fail to verify.
+ */
+describe('Conformance: budget attestation expiry formatting', () => {
+  it('matches the shared oracle', () => {
+    const { publicKey } = generateKeyPairSync('ed25519');
+
+    for (const [i, tc] of expiryVectors.cases.entries()) {
+      const grant = {
+        maxTokens: 100,
+        maxDepth: 1,
+        expiresAt: new Date(tc.epoch_ms),
+      };
+      const raw = signingPayload(grant, publicKey);
+      const decoded = JSON.parse(raw.toString('utf8'));
+      expect(decoded.expires_at, `case ${i} (${tc.note})`).toBe(tc.expected);
     }
   });
 });

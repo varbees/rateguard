@@ -263,6 +263,7 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
         : 0,
     adaptiveRateLimit: options.adaptiveRateLimit ?? false,
     adaptive: normalizeAdaptiveOptions(options.adaptive),
+    redisClient: options.redisClient,
   };
 }
 

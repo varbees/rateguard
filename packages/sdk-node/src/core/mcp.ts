@@ -148,7 +148,7 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector, 
     if (!key) {
       throw new Error('mcp: key is required');
     }
-    const decision = runtime.rateLimiter.peek(key, rateLimitOptions());
+    const decision = await runtime.rateLimiter.peek(key, rateLimitOptions());
     return {
       key,
       allowed: decision.allowed,

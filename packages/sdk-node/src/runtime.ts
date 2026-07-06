@@ -5,14 +5,17 @@ import {
 import { CircuitBreaker } from './core/circuit-breaker.js';
 import { RateLimiter, type RateLimiterLike } from './core/rate-limiter.js';
 import { AdaptiveLimiter } from './core/adaptive.js';
+import { RedisGCRALimiter } from './core/redis-limiter.js';
 import { TokenBudgetManager } from './core/token-budget.js';
 import { LoopDetector } from './core/mcp.js';
 import { GuardrailLog } from './core/guardrail-log.js';
 import { readFirstHeader } from './core/utils.js';
-import { resolveRateGuardOptions, systemClock } from './config.js';
+import { normalizeTokenBudgetMode, resolveRateGuardOptions, systemClock } from './config.js';
 import {
   type CompletionObservation,
   type CircuitBreakerState,
+  type PolicyPreset,
+  type PolicyUpdate,
   type PreflightDecision,
   type RateGuardEventPayload,
   type RateGuardEventType,
@@ -50,13 +53,27 @@ export class RateGuardRuntime {
   constructor(options: RateGuardOptions = {}) {
     this.config = resolveRateGuardOptions(options);
 
-    let rateLimiter: RateLimiterLike = new RateLimiter({ clock: this.config.clock, capacity: 50_000 });
-    if (this.config.adaptiveRateLimit) {
-      // Mirrors Go's New(): `if cfg.AdaptiveRateLimit { limiter =
-      // newAdaptiveLimiterWithClock(limiter, cfg.Adaptive, clock) }` — the
-      // configured RateLimiter becomes the AIMD controller's inner limiter,
-      // never replaced, only scaled.
-      rateLimiter = new AdaptiveLimiter(rateLimiter, this.config.adaptive, this.config.clock);
+    let rateLimiter: RateLimiterLike;
+    if (this.config.redisClient) {
+      // Mirrors Go's New(): `case cfg.RedisClient != nil: limiter =
+      // newRedisGCRALimiterWithClock(cfg.RedisClient, clock)` — a distributed
+      // limiter replaces the in-process one entirely. Unlike Go, this SDK
+      // does not additionally wrap it in AdaptiveLimiter even when
+      // adaptiveRateLimit is also set: AdaptiveLimiter's peek is a sync
+      // contract in this SDK (see adaptive.ts), and composing it over a
+      // genuinely-async Redis limiter would either lie about that or force
+      // every in-memory caller to start awaiting a peek that never blocks.
+      // Redis is a complete replacement limiter, not an inner one to scale.
+      rateLimiter = new RedisGCRALimiter(this.config.redisClient, this.config.clock);
+    } else {
+      rateLimiter = new RateLimiter({ clock: this.config.clock, capacity: 50_000 });
+      if (this.config.adaptiveRateLimit) {
+        // Mirrors Go's New(): `if cfg.AdaptiveRateLimit { limiter =
+        // newAdaptiveLimiterWithClock(limiter, cfg.Adaptive, clock) }` — the
+        // configured RateLimiter becomes the AIMD controller's inner limiter,
+        // never replaced, only scaled.
+        rateLimiter = new AdaptiveLimiter(rateLimiter, this.config.adaptive, this.config.clock);
+      }
     }
     this.rateLimiter = rateLimiter;
 
@@ -65,6 +82,57 @@ export class RateGuardRuntime {
     this.eventEmitter = createEventEmitter(this.config);
     this.loopDetector = new LoopDetector();
     this.guardrailLog = new GuardrailLog();
+  }
+
+  /**
+   * Current effective policy preset for this runtime. A snapshot copy —
+   * mutating the returned object does not change live policy (use setPolicy).
+   * Mirrors Go's SDK.Policy().
+   */
+  policy(): PolicyPreset {
+    return { ...this.config.preset };
+  }
+
+  /**
+   * Atomically applies a partial override on top of the current policy and
+   * returns the resulting effective policy. In-memory only — it does not
+   * persist across restarts, and does not reset in-flight token budget or
+   * circuit breaker state (those key off the policy's limits, which take
+   * effect on the next check). Mirrors Go's SDK.SetPolicy.
+   *
+   * Updates BOTH the preset snapshot and the resolved rateLimit/tokenBudget
+   * option objects the admission hot path actually reads, so a patched
+   * policy changes real admission decisions, not just what GET /admin/policy
+   * reports.
+   */
+  setPolicy(update: PolicyUpdate): PolicyPreset {
+    if (typeof update.requestsPerSecond === 'number') {
+      this.config.preset.requestsPerSecond = update.requestsPerSecond;
+      this.config.rateLimit.requestsPerSecond = update.requestsPerSecond;
+    }
+    if (typeof update.burst === 'number') {
+      this.config.preset.burst = update.burst;
+      this.config.rateLimit.burst = update.burst;
+    }
+    if (typeof update.tokenBudgetPerHour === 'number') {
+      this.config.preset.tokenBudgetPerHour = update.tokenBudgetPerHour;
+      this.config.tokenBudget.hourLimit = update.tokenBudgetPerHour;
+    }
+    if (typeof update.tokenBudgetPerDay === 'number') {
+      this.config.preset.tokenBudgetPerDay = update.tokenBudgetPerDay;
+      this.config.tokenBudget.dayLimit = update.tokenBudgetPerDay;
+    }
+    if (typeof update.tokenBudgetPerMonth === 'number') {
+      this.config.preset.tokenBudgetPerMonth = update.tokenBudgetPerMonth;
+      this.config.preset.maxTokensPerMonth = update.tokenBudgetPerMonth;
+      this.config.tokenBudget.monthLimit = update.tokenBudgetPerMonth;
+    }
+    if (typeof update.tokenBudgetMode === 'string') {
+      const mode = normalizeTokenBudgetMode(update.tokenBudgetMode);
+      this.config.preset.tokenBudgetMode = mode;
+      this.config.tokenBudget.mode = mode;
+    }
+    return this.policy();
   }
 
   /**

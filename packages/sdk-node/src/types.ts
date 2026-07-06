@@ -1,4 +1,5 @@
 import type { Guardrail } from './core/guardrails.js';
+import type { RedisLimiterClient } from './core/redis-limiter.js';
 
 /**
  * Canonical RateGuard preset names.
@@ -47,6 +48,21 @@ export interface PolicyPreset {
   webhooks: boolean;
   apiAccess: boolean;
   analyticsRetentionDays: number;
+}
+
+/**
+ * Partial policy override for RateGuardRuntime.setPolicy: omitted fields
+ * leave the corresponding policy field unchanged. Intended for runtime
+ * admin/control-plane use (see createAdminHandler) — not for the request
+ * hot path. Mirrors Go's PolicyUpdate in sdk.go.
+ */
+export interface PolicyUpdate {
+  requestsPerSecond?: number;
+  burst?: number;
+  tokenBudgetPerHour?: number;
+  tokenBudgetPerDay?: number;
+  tokenBudgetPerMonth?: number;
+  tokenBudgetMode?: TokenBudgetMode | string;
 }
 
 /**
@@ -151,6 +167,16 @@ export interface RateGuardOptions {
   adaptiveRateLimit?: boolean;
   /** Tunes the adaptive controller. Mirrors Go's cfg.Adaptive. */
   adaptive?: AdaptiveOptions;
+  /**
+   * When set, rate limiting is served by a distributed Redis-backed GCRA
+   * limiter instead of the default in-process one — every RateGuard
+   * instance sharing the same Redis key space observes the same admission
+   * state. Mirrors Go's cfg.RedisClient. Bring your own already-constructed
+   * client adapted to this minimal structural interface (see
+   * core/redis-limiter.ts for an ioredis adapter example); RateGuard has no
+   * Redis runtime dependency of its own.
+   */
+  redisClient?: RedisLimiterClient;
 }
 
 /**
@@ -178,6 +204,7 @@ export interface ResolvedRateGuardOptions {
   estimatedTokensPerRequest: number;
   adaptiveRateLimit: boolean;
   adaptive: Required<AdaptiveOptions>;
+  redisClient: RedisLimiterClient | undefined;
 }
 
 /**
