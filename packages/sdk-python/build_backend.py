@@ -13,7 +13,13 @@ from zipfile import ZIP_DEFLATED, ZipFile
 DIST_NAME = "varbees-rateguard"
 NORMALIZED_NAME = DIST_NAME.replace("-", "_")
 IMPORT_PACKAGE = "rateguard"
-VERSION = "0.1.0"
+# Kept in sync with pyproject.toml's [project] version by hand — this build
+# backend has no TOML parser (py3.10 predates stdlib tomllib, and adding a
+# dependency just to read one field violates the zero-dependency rule this
+# file itself exists to follow). Confirmed diverged from pyproject.toml once
+# already (stuck at 0.1.0 while pyproject.toml moved to 0.2.0) — check both
+# on every version bump.
+VERSION = "0.2.0"
 TAG = "py3-none-any"
 ROOT = Path(__file__).resolve().parent
 REPO_ROOT = ROOT.parent.parent
@@ -59,6 +65,9 @@ def _metadata_text() -> str:
             "Requires-Dist: mypy; extra == 'dev'",
             "Requires-Dist: openai; extra == 'dev'",
             "Requires-Dist: anthropic; extra == 'dev'",
+            "Requires-Dist: redis; extra == 'dev'",
+            "Provides-Extra: attestation",
+            "Requires-Dist: cryptography>=41.0.0; extra == 'attestation'",
             "",
             _read_readme(),
         ]
