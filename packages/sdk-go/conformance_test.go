@@ -2,6 +2,8 @@ package rateguard
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/json"
 	"os"
 	"testing"
@@ -82,5 +84,47 @@ func TestConformanceTokenBucket(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestConformanceBudgetAttestationExpiry replays the shared oracle in
+// conformance/budget_attestation_expiry_vectors.json against signingPayload,
+// proving Go formats expires_at identically to Node and Python inside the
+// Ed25519 signing payload — not just that each SDK's own round-trip tests
+// pass. A failure here means a cross-language attested budget token would
+// fail to verify.
+func TestConformanceBudgetAttestationExpiry(t *testing.T) {
+	data, err := os.ReadFile("../../conformance/budget_attestation_expiry_vectors.json")
+	if err != nil {
+		t.Fatalf("read expiry vectors: %v", err)
+	}
+	var vectors struct {
+		Cases []struct {
+			Note     string `json:"note"`
+			EpochMs  int64  `json:"epoch_ms"`
+			Expected string `json:"expected"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(data, &vectors); err != nil {
+		t.Fatalf("parse expiry vectors: %v", err)
+	}
+
+	delegatePub, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate delegate key: %v", err)
+	}
+
+	for i, tc := range vectors.Cases {
+		grant := BudgetGrant{MaxTokens: 100, MaxDepth: 1, ExpiresAt: time.UnixMilli(tc.EpochMs).UTC()}
+		raw := signingPayload(grant, delegatePub)
+		var decoded struct {
+			ExpiresAt string `json:"expires_at"`
+		}
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			t.Fatalf("case %d (%s): decode signing payload: %v", i, tc.Note, err)
+		}
+		if decoded.ExpiresAt != tc.Expected {
+			t.Fatalf("case %d (%s): expires_at = %q, want %q", i, tc.Note, decoded.ExpiresAt, tc.Expected)
+		}
 	}
 }

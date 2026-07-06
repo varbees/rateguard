@@ -136,9 +136,17 @@ type BudgetToken struct {
 
 // signingPayload is the canonical, deterministic byte encoding a block's
 // signature commits to. Slices are normalized (nil == empty) and timestamps
-// are normalized to UTC so the same logical grant always signs and verifies
-// identically regardless of how it was constructed or how it round-tripped
-// through Marshal/ParseBudgetToken.
+// are normalized to a whole-second UTC instant (sub-second precision
+// dropped) so the same logical grant always signs and verifies identically
+// regardless of how it was constructed or how it round-tripped through
+// Marshal/ParseBudgetToken — AND so that Go, Node, and Python compute
+// byte-identical payloads for the same instant. Without truncation, Go's
+// time.Time JSON marshaling trims trailing zero fractional digits (0.5s ->
+// ".5"), Python's isoformat emits fixed 6-digit microseconds, and Node's
+// toISOString emits fixed 3-digit milliseconds — three different byte
+// strings for the same moment, which breaks cross-language Ed25519
+// verification. Truncating to whole seconds sidesteps the formatting
+// mismatch entirely (no fractional component ever appears).
 func signingPayload(grant BudgetGrant, delegatePub ed25519.PublicKey) []byte {
 	payload := struct {
 		MaxTokens         int64     `json:"max_tokens"`
@@ -152,7 +160,7 @@ func signingPayload(grant BudgetGrant, delegatePub ed25519.PublicKey) []byte {
 		Providers:         normalizeStrings(grant.Providers),
 		Models:            normalizeStrings(grant.Models),
 		MaxDepth:          grant.MaxDepth,
-		ExpiresAt:         grant.ExpiresAt.UTC(),
+		ExpiresAt:         grant.ExpiresAt.UTC().Truncate(time.Second),
 		DelegatePublicKey: base64.StdEncoding.EncodeToString(delegatePub),
 	}
 	// Marshal of this fixed, map-free struct cannot fail.

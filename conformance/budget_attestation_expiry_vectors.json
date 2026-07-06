@@ -1,0 +1,11 @@
+{
+  "$schema": "RateGuard cross-language conformance vectors — budget attestation expiry formatting.",
+  "description": "Proves Go, Node, and Python format a BudgetGrant's expires_at identically inside the Ed25519 signing payload. Each SDK's own time.Time/Date/datetime JSON serialization disagrees on fractional-second rendering (Go trims trailing zeros, Python emits fixed microseconds, Node emits fixed milliseconds) — three different byte strings for the same instant, which breaks cross-language signature verification. The fix truncates to whole seconds before formatting, so the fractional component never appears. See AGENTS.md rule 13.",
+  "cases": [
+    { "note": "exact whole second — no fractional part to begin with", "epoch_ms": 1785542400000, "expected": "2026-08-01T00:00:00Z" },
+    { "note": "half-second — truncated away, NOT rounded to :01", "epoch_ms": 1785542400500, "expected": "2026-08-01T00:00:00Z" },
+    { "note": "999ms — truncated down, stays in the same second", "epoch_ms": 1785542400999, "expected": "2026-08-01T00:00:00Z" },
+    { "note": "next whole second boundary", "epoch_ms": 1785542401000, "expected": "2026-08-01T00:00:01Z" },
+    { "note": "arbitrary sub-second value, different date", "epoch_ms": 1805118330123, "expected": "2027-03-15T13:45:30Z" }
+  ]
+}
