@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from inspect import isawaitable
+from threading import Lock
 from typing import Awaitable, cast
 import asyncio
 import logging
@@ -12,6 +13,7 @@ from .core.event_emitter import build_event_envelope, create_event_emitter
 from .core.guardrail_log import GuardrailLog
 from .core.mcp import LoopDetector
 from .core.rate_limiter import RateLimiter
+from .core.redis_limiter import RedisEvalError, RedisGCRALimiter
 from .core.token_budget import TokenBudgetManager
 from .core.utils import read_first_header
 from .types import CircuitBreakerState, CompletionObservation, PreflightDecision, RateGuardEventPayload, RateGuardEventType, RateGuardOptions, RateLimitDecision, RequestBodyRejection, RequestContext, TokenBudgetDecision, TokenUsage
@@ -27,14 +29,23 @@ MAX_INSPECTED_BODY_BYTES = 256 * 1024
 class RateGuardRuntime:
     def __init__(self, options: RateGuardOptions) -> None:
         self.config = resolve_rateguard_options(options)
-        base_limiter = RateLimiter(self.config.clock, capacity=50_000)
+        base_limiter: RateLimiter | RedisGCRALimiter
+        if self.config.redis_client is not None:
+            # Mirrors Go's New(): `case cfg.RedisClient != nil` swaps the
+            # in-process limiter for a Redis-backed distributed GCRA
+            # limiter — same admission Lua Go/Node submit, so multiple
+            # process instances sharing this Redis key get synchronized
+            # rate limiting instead of one bucket per process.
+            base_limiter = RedisGCRALimiter(self.config.redis_client, self.config.clock, self.config.redis_async_client)
+        else:
+            base_limiter = RateLimiter(self.config.clock, capacity=50_000)
         # Adaptive rate limiting wraps the configured limiter with an AIMD
         # controller that auto-tunes the effective policy from observed
         # upstream outcomes — same wrapping pattern as Go's New(). None
         # when disabled: adaptive_limiter is the introspection handle
         # (factor()/error_rate()), self.rate_limiter is what admit() calls
         # either way.
-        self.rate_limiter: RateLimiter | AdaptiveLimiter = base_limiter
+        self.rate_limiter: RateLimiter | RedisGCRALimiter | AdaptiveLimiter = base_limiter
         self.adaptive_limiter: AdaptiveLimiter | None = None
         if self.config.adaptive_rate_limit:
             self.adaptive_limiter = AdaptiveLimiter(base_limiter, self.config.adaptive, self.config.clock)
@@ -53,6 +64,10 @@ class RateGuardRuntime:
         self.event_emitter = create_event_emitter(self.config)
         self.loop_detector = LoopDetector()
         self.guardrail_log = GuardrailLog()
+        # Serializes policy mutation (set_policy) so a multi-field patch
+        # applies atomically even under multi-threaded WSGI servers —
+        # mirrors Go's sdk.go policyMu.
+        self._policy_lock = Lock()
 
     def wants_request_body(self, request: RequestContext) -> bool:
         """Whether this request needs its body read for loop detection or
@@ -106,6 +121,56 @@ class RateGuardRuntime:
                 return resolved
         return ":".join((request.tenant_id, request.route_id, request.upstream_id, request.method))
 
+    def get_policy(self) -> dict[str, object]:
+        """Return the current effective policy — mirrors Go's SDK.Policy().
+        Safe to call concurrently with set_policy and with request handling
+        (Python's GIL serializes the dict reads/writes below; there is no
+        separate lock the way Go's sdk.go uses policyMu, since nothing here
+        does more than one attribute access at a time)."""
+        return {
+            "name": self.config.preset.name,
+            "requests_per_second": self.config.rate_limit.requests_per_second,
+            "burst": self.config.rate_limit.burst,
+            "token_budget_per_hour": self.config.token_budget.hour_limit,
+            "token_budget_per_day": self.config.token_budget.day_limit,
+            "token_budget_per_month": self.config.token_budget.month_limit,
+            "token_budget_mode": self.config.token_budget.mode,
+        }
+
+    def set_policy(self, patch: dict[str, object]) -> dict[str, object]:
+        """Apply a partial override on top of the current policy and return
+        the resulting effective policy. In-memory only — mirrors Go's
+        SDK.SetPolicy/PolicyUpdate: nil/absent fields leave the
+        corresponding value unchanged, and this does not reset in-flight
+        token budget or circuit breaker state (those key off the policy's
+        limits, which take effect on the next check). The multi-field merge
+        is applied under a lock so concurrent patches (multi-threaded WSGI
+        admin servers) can't interleave. Intended for runtime
+        admin/control-plane use (see core/admin.py) — not the request hot
+        path. Raises ValueError/TypeError on non-numeric numeric fields."""
+        with self._policy_lock:
+            rps = patch.get("requests_per_second")
+            if rps is not None:
+                self.config.rate_limit.requests_per_second = int(rps)  # type: ignore[arg-type]
+            burst = patch.get("burst")
+            if burst is not None:
+                self.config.rate_limit.burst = int(burst)  # type: ignore[arg-type]
+            hour_limit = patch.get("token_budget_per_hour")
+            if hour_limit is not None:
+                self.config.token_budget.hour_limit = int(hour_limit)  # type: ignore[arg-type]
+            day_limit = patch.get("token_budget_per_day")
+            if day_limit is not None:
+                self.config.token_budget.day_limit = int(day_limit)  # type: ignore[arg-type]
+            month_limit = patch.get("token_budget_per_month")
+            if month_limit is not None:
+                self.config.token_budget.month_limit = int(month_limit)  # type: ignore[arg-type]
+            mode = patch.get("token_budget_mode")
+            if mode is not None:
+                from .config import normalize_token_budget_mode
+
+                self.config.token_budget.mode = normalize_token_budget_mode(str(mode))
+            return self.get_policy()
+
     def admit(self, request: RequestContext, body_text: str | None = None) -> PreflightDecision:
         return self._admit_sync(request, body_text)
 
@@ -123,7 +188,22 @@ class RateGuardRuntime:
                 circuit_breaker=breaker_decision,
             )
 
-        rate_decision = await self.rate_limiter.allow_async(key, self.config.rate_limit, api_key=self.config.api_key)
+        try:
+            rate_decision = await self.rate_limiter.allow_async(key, self.config.rate_limit, api_key=self.config.api_key)
+        except RedisEvalError as exc:
+            # Fail closed, exactly like Go's handleHTTP does when
+            # s.limiter.Allow returns an error: an unreachable/erroring
+            # Redis-backed limiter must not silently admit unlimited
+            # traffic. Mirrors writeRateLimitUnavailableResponse.
+            logger.warning("RateGuard rate limiter unavailable: %s", exc)
+            await self.emit("request.completed", request, breaker_decision.state, 503, start_ms, None, None, 0)
+            return PreflightDecision(
+                allowed=False,
+                status_code=503,
+                error_code="rate_limit_unavailable",
+                retry_after_ms=0,
+                circuit_breaker=breaker_decision,
+            )
         if not rate_decision.allowed:
             await self.emit("request.rate_limited", request, breaker_decision.state, 429, start_ms, rate_decision, None, rate_decision.retry_after_ms)
             return PreflightDecision(
@@ -286,7 +366,20 @@ class RateGuardRuntime:
                 circuit_breaker=breaker_decision,
             )
 
-        rate_decision = self.rate_limiter.allow(key, self.config.rate_limit, api_key=self.config.api_key)
+        try:
+            rate_decision = self.rate_limiter.allow(key, self.config.rate_limit, api_key=self.config.api_key)
+        except RedisEvalError as exc:
+            # Fail closed — see the matching comment in admit_async.
+            logger.warning("RateGuard rate limiter unavailable: %s", exc)
+            payload = self.build_payload(request, breaker_decision.state, 503, start_ms, None, None, None, 0)
+            self._emit_event_sync("request.completed", request, payload)
+            return PreflightDecision(
+                allowed=False,
+                status_code=503,
+                error_code="rate_limit_unavailable",
+                retry_after_ms=0,
+                circuit_breaker=breaker_decision,
+            )
         if not rate_decision.allowed:
             payload = self.build_payload(request, breaker_decision.state, 429, start_ms, rate_decision, None, None, rate_decision.retry_after_ms)
             self._emit_event_sync("request.rate_limited", request, payload)

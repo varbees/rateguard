@@ -128,6 +128,8 @@ def resolve_rateguard_options(options: RateGuardOptions) -> ResolvedRateGuardOpt
         ),
         adaptive_rate_limit=bool(options.adaptive_rate_limit),
         adaptive=options.adaptive,
+        redis_client=options.redis_client,
+        redis_async_client=options.redis_async_client,
     )
 
 

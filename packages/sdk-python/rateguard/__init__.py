@@ -7,6 +7,23 @@ from .adapters.decorators import rate_limited, token_budget
 from .adapters.wsgi import RateGuardMiddleware as WSGIRateGuardMiddleware
 from .config import known_presets, normalize_preset, normalize_token_budget_mode, preset_policy, resolve_rateguard_options
 from .core.adaptive import AdaptiveLimiter, AdaptiveOptions
+from .core.admin import AdminApp
+# budget_attestation itself imports `cryptography` lazily (inside the
+# functions that sign/verify), so this top-level import keeps
+# `import rateguard` zero-dependency; only CALLING attestation functions
+# without the `attestation` extra installed raises ImportError.
+from .core.budget_attestation import (
+    BudgetBlock,
+    BudgetGrant,
+    BudgetToken,
+    attest,
+    new_root_budget_token,
+    parse_budget_token,
+    sign,
+    signing_payload,
+    verify_chain,
+    verify_presentation,
+)
 from .core.circuit_breaker import CircuitBreaker
 from .core.event_emitter import ConsoleEventEmitter, HTTPEventEmitter, WebSocketEventEmitter
 from .core.genai import GenAICall, GenAISpan, estimate_cost, genai_span_attributes, genai_span_end_attributes, priced_models, start_genai_call
@@ -23,6 +40,7 @@ from .core.guardrails import (
     strict_guardrails,
 )
 from .core.mcp import LoopDetector, MCPTool, MCPToolResult, create_mcp_tools, mcp_call
+from .core.mcp_server import serve_mcp
 from .core.outbound import (
     FallbackProvider,
     OutboundCall,
@@ -39,6 +57,15 @@ from .core.provider_chain import (
     quality_provider_chain,
 )
 from .core.rate_limiter import RateLimiter
+from .core.redis_limiter import (
+    AsyncRedisLimiterClient,
+    AsyncRedisPyClient,
+    RedisEvalError,
+    RedisGCRALimiter,
+    RedisLimiterClient,
+    RedisPyClient,
+    build_redis_gcra_tier,
+)
 from .core.semantic_cache import CachedResponse, Embedder, SemanticCache, SemanticCacheOptions, is_streaming_request_body, prompt_text_from_request_body
 from .core.sharded_limiter import ShardedLimiter
 from .core.token_budget import TokenBudgetManager
@@ -150,6 +177,9 @@ __all__ = [
     "MCPToolResult",
     "create_mcp_tools",
     "mcp_call",
+    "serve_mcp",
+    # Admin control-plane API (unauthenticated by design — bind privately)
+    "AdminApp",
     # Outbound GenAI transport
     "FallbackProvider",
     "OutboundCall",
@@ -171,4 +201,24 @@ __all__ = [
     "budget_provider_chain",
     "default_provider_chain",
     "quality_provider_chain",
+    # Redis distributed limiter
+    "AsyncRedisLimiterClient",
+    "AsyncRedisPyClient",
+    "RedisEvalError",
+    "RedisGCRALimiter",
+    "RedisLimiterClient",
+    "RedisPyClient",
+    "build_redis_gcra_tier",
+    # Budget attestation (Ed25519 delegation chains; needs the
+    # `attestation` extra at call time)
+    "BudgetBlock",
+    "BudgetGrant",
+    "BudgetToken",
+    "attest",
+    "new_root_budget_token",
+    "parse_budget_token",
+    "sign",
+    "signing_payload",
+    "verify_chain",
+    "verify_presentation",
 ]

@@ -7,14 +7,20 @@ just from its own past test suite.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
-from rateguard import RateLimiter, ShardedLimiter
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+from rateguard import BudgetGrant, RateLimiter, ShardedLimiter, signing_payload
 from rateguard.types import RateLimitOptions
 
 from .helpers import FixedClock
 
 VECTORS_PATH = Path(__file__).resolve().parents[3] / "conformance" / "token_bucket_vectors.json"
+EXPIRY_VECTORS_PATH = (
+    Path(__file__).resolve().parents[3] / "conformance" / "budget_attestation_expiry_vectors.json"
+)
 
 
 def test_matches_shared_oracle() -> None:
@@ -35,6 +41,23 @@ def test_matches_shared_oracle() -> None:
             assert d.remaining == step["remaining"], f"step {i} ({step['note']})"
         else:
             assert d.retry_after_ms == step["retry_after_ms"], f"step {i} ({step['note']})"
+
+
+def test_budget_attestation_expiry_matches_shared_oracle() -> None:
+    """Replays conformance/budget_attestation_expiry_vectors.json against
+    signing_payload, proving Python formats expires_at identically to Go and
+    Node inside the Ed25519 signing payload — not just that Python's own
+    round-trip tests pass. A failure here means a cross-language attested
+    budget token would fail to verify."""
+    vectors = json.loads(EXPIRY_VECTORS_PATH.read_text())
+    delegate_public_key = Ed25519PrivateKey.generate().public_key()
+
+    for i, case in enumerate(vectors["cases"]):
+        expires_at = datetime.fromtimestamp(case["epoch_ms"] / 1000, tz=timezone.utc)
+        grant = BudgetGrant(max_tokens=100, max_depth=1, expires_at=expires_at)
+        raw = signing_payload(grant, delegate_public_key)
+        decoded = json.loads(raw)
+        assert decoded["expires_at"] == case["expected"], f"case {i} ({case['note']})"
 
 
 def test_sharded_limiter_matches_shared_oracle() -> None:

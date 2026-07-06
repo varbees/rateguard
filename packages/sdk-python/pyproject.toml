@@ -21,7 +21,8 @@ Issues = "https://github.com/varbees/rateguard/issues"
 fastapi = ["fastapi>=0.100.0", "starlette>=0.27.0"]
 flask = ["flask>=2.0.0"]
 django = ["django>=4.0"]
-dev = ["pytest", "pytest-asyncio", "httpx", "anyio", "mypy", "openai", "anthropic"]
+dev = ["pytest", "pytest-asyncio", "httpx", "anyio", "mypy", "openai", "anthropic", "redis"]
+attestation = ["cryptography>=41.0.0"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

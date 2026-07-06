@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable, Literal, Mapping, Protoco
 if TYPE_CHECKING:
     from .core.adaptive import AdaptiveOptions
     from .core.guardrails import GuardrailChain
+    from .core.redis_limiter import AsyncRedisLimiterClient, RedisLimiterClient
 
 PresetName = Literal["dev", "standard", "high-throughput", "llm-heavy", "strict-upstream-protection", "streaming-llm", "agent-orchestrator", "mcp-server"]
 TokenBudgetMode = Literal["hard-stop", "soft-stop"]
@@ -122,6 +123,14 @@ class RateGuardOptions:
     # adaptive overrides the adaptive control loop defaults. Ignored unless
     # adaptive_rate_limit is True. Mirrors Go's cfg.Adaptive.
     adaptive: "AdaptiveOptions | None" = None
+    # redis_client, when set, switches the rate limiter backend from the
+    # default in-process limiter to a Redis-backed distributed GCRA
+    # limiter (see core/redis_limiter.py) — mirrors Go's cfg.RedisClient
+    # and New()'s `case cfg.RedisClient != nil` branch. Bring your own
+    # already-constructed client adapted to RedisLimiterClient (sync) and
+    # optionally redis_async_client for a real async path.
+    redis_client: "RedisLimiterClient | None" = None
+    redis_async_client: "AsyncRedisLimiterClient | None" = None
 
 
 @dataclass(slots=True)
@@ -147,6 +156,8 @@ class ResolvedRateGuardOptions:
     estimated_tokens_per_request: int
     adaptive_rate_limit: bool
     adaptive: "AdaptiveOptions | None"
+    redis_client: "RedisLimiterClient | None"
+    redis_async_client: "AsyncRedisLimiterClient | None"
 
 
 @dataclass(slots=True)

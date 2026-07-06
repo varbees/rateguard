@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from .adapters.asgi import ASGIApp
     from .adapters.wsgi import WSGIApp
     from .core.adaptive import AdaptiveLimiter, AdaptiveOptions
+    from .core.admin import AdminApp
     from .core.genai import GenAICall, GenAISpan
     from .core.guardrail_log import GuardrailLog
     from .core.guardrails import GuardrailChain
@@ -76,6 +77,8 @@ class RateGuard:
         estimated_tokens_per_request: int = 0,
         adaptive_rate_limit: bool = False,
         adaptive: "AdaptiveOptions | None" = None,
+        redis_client: object | None = None,
+        redis_async_client: object | None = None,
     ) -> None:
         self.options = RateGuardOptions(
             api_key=api_key,
@@ -99,6 +102,8 @@ class RateGuard:
             estimated_tokens_per_request=estimated_tokens_per_request,
             adaptive_rate_limit=adaptive_rate_limit,
             adaptive=adaptive,
+            redis_client=redis_client,  # type: ignore[arg-type]
+            redis_async_client=redis_async_client,  # type: ignore[arg-type]
         )
         self.runtime = RateGuardRuntime(self.options)
         self._mcp_tools: list["MCPTool"] | None = None
@@ -224,6 +229,17 @@ class RateGuard:
                 super().__init__(app, runtime)
 
         return BoundMiddleware
+
+    @property
+    def admin_asgi_app(self) -> "AdminApp":
+        """Standalone admin/control-plane ASGI app for this instance —
+        GET/PATCH policy, state snapshots, MCP tool catalog + invocation.
+        Mirrors Go's SDK.AdminHandler(). UNAUTHENTICATED by design: bind it
+        to localhost or an internal network only (same posture as pprof) —
+        never mount it on the public app. See core/admin.py."""
+        from .core.admin import AdminApp
+
+        return AdminApp(self)
 
     @property
     def wsgi_middleware(self) -> type:
