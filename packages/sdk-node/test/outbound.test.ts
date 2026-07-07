@@ -194,6 +194,43 @@ describe('wrapFetch', () => {
     expect(seen[1]!.model).toBe('deepseek-chat');
   });
 
+  // Reproduces a real credential-leak bug: Azure OpenAI authenticates via
+  // a bare "api-key" header (not "authorization" or "x-api-key"), which
+  // retarget's credential-stripping list previously missed entirely.
+  // Failing over from Azure to another provider that doesn't set its own
+  // api-key header used to forward the Azure key verbatim.
+  it('strips the Azure api-key header on fallback instead of leaking it', async () => {
+    const seen: Array<{ url: string; apiKey: string | null; model: string }> = [];
+    const mockFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const body = typeof init?.body === 'string' ? init.body : '';
+      const headers = new Headers(init?.headers);
+      seen.push({ url, apiKey: headers.get('api-key'), model: JSON.parse(body || '{}').model ?? '' });
+      if (body.includes('deepseek-chat')) {
+        return jsonResponse(openAIBody('deepseek-chat', 10, 5));
+      }
+      return new Response('{"error":{"message":"rate limited"}}', { status: 429 });
+    }) as typeof fetch;
+
+    const rg = new RateGuard({ preset: 'dev' });
+    // Deliberately no `headers` on the fallback target — the only way
+    // this test can fail is if the primary's Azure key leaks through.
+    const wrapped = rg.wrapFetch({
+      fetch: mockFetch,
+      chain: [{ name: 'deepseek', model: 'deepseek-chat', baseURL: 'https://api.deepseek.com/v1', weight: 0 }],
+    });
+
+    const resp = await wrapped('https://my-resource.openai.azure.com/openai/deployments/gpt-4o/chat/completions', {
+      method: 'POST',
+      headers: { 'api-key': 'azure-secret-key' },
+      body: JSON.stringify({ model: 'gpt-4o', messages: [] }),
+    });
+
+    expect(resp.status).toBe(200);
+    expect(seen).toHaveLength(2);
+    expect(seen[1]!.apiKey).toBeNull();
+  });
+
   it('passes non-LLM traffic through untouched', async () => {
     let baseCalls = 0;
     const rg = new RateGuard({ preset: 'dev' });

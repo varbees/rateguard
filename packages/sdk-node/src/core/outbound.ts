@@ -252,9 +252,15 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
           : '/chat/completions';
       const nextURL = new URL(target.baseURL.replace(/\/$/, '') + suffix);
       const headers = new Headers(init.headers);
-      // Provider credentials never transfer across providers.
+      // Provider credentials never transfer across providers. Strip every
+      // known provider auth header convention, not just Authorization —
+      // Azure OpenAI authenticates via a bare "api-key" header (not
+      // "x-api-key"), which this list previously missed entirely, leaking
+      // the Azure key to whichever provider was failed over to.
       headers.delete('authorization');
       headers.delete('x-api-key');
+      headers.delete('api-key');
+      headers.delete('x-goog-api-key');
       for (const [key, value] of Object.entries(target.headers ?? {})) {
         headers.set(key, value);
       }
