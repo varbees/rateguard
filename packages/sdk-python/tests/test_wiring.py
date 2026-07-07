@@ -11,7 +11,9 @@ from rateguard import RateGuard
 from rateguard.adapters.asgi import ASGIMessage, ASGIReceive, ASGISend, RateGuardMiddleware as ASGIRateGuardMiddleware
 from rateguard.adapters.wsgi import ExcInfo, RateGuardMiddleware as WSGIRateGuardMiddleware, StartResponse, WSGIEnviron
 from rateguard.core.guardrails import standard_guardrails
-from rateguard.types import RateLimitOptions, RequestContext, TokenBudgetOptions
+from rateguard.types import CircuitBreakerOptions, CompletionObservation, RateLimitOptions, RequestContext, TokenBudgetOptions
+
+from .helpers import FixedClock
 
 
 # ── IETF RateLimit-* headers ──
@@ -206,6 +208,83 @@ def test_wsgi_loop_detection_429s_on_repeated_fingerprint_at_higher_depth() -> N
     assert calls == 1  # handler must NOT run for the rejected request
     parsed = json.loads(second)
     assert parsed["error"] == "loop_detected"
+
+
+# ── Circuit breaker half-open probe leak (regression) ──
+
+
+@pytest.mark.asyncio
+async def test_circuit_breaker_does_not_wedge_when_half_open_probe_denied_by_guardrail() -> None:
+    """Reproduces the exact production scenario: the breaker opens on
+    upstream failures, the open timeout elapses, and the very first
+    recovery request happens to trip a content guardrail before it ever
+    reaches upstream. That request must NOT consume the breaker's probe
+    permanently — a subsequent clean request has to get a real shot at
+    testing upstream, not be wedged in half-open forever."""
+    clock = FixedClock()
+    guard = RateGuard(
+        preset="dev",
+        clock=clock,
+        rate_limit=RateLimitOptions(requests_per_second=1_000, burst=1_000),
+        token_budget=TokenBudgetOptions(hour_limit=1_000_000, day_limit=1_000_000, month_limit=1_000_000),
+        guardrails=standard_guardrails(),
+        circuit_breaker=CircuitBreakerOptions(
+            error_rate_threshold=0.5,
+            open_timeout_ms=60_000,
+            half_open_successes_required=1,
+            sample_size=1,
+        ),
+    )
+
+    def request_context(request_id: str) -> RequestContext:
+        return RequestContext(
+            method="POST",
+            path="/chat",
+            headers={},
+            request_id=request_id,
+            trace_id=request_id,
+            tenant_id="global",
+            route_id="root",
+            upstream_id="local",
+        )
+
+    upstream_calls = 0
+
+    # Trip the breaker open with a clean request that fails upstream.
+    tripped = request_context("trip")
+    decision = await guard.runtime.admit_async(tripped, "summarize this document")
+    assert decision.allowed is True
+    upstream_calls += 1
+    await guard.runtime.observe_async(
+        tripped,
+        CompletionObservation(status_code=500, token_budget_reservation_id=decision.token_budget_reservation_id),
+        clock.now(),
+    )
+
+    clock.advance(61_000)
+
+    # This request claims the half-open probe, then gets denied by the
+    # guardrail before it ever reaches upstream — observe_async never runs.
+    blocked = request_context("blocked")
+    blocked_decision = await guard.runtime.admit_async(blocked, "email me at attacker@example.com")
+    assert blocked_decision.allowed is False
+    assert blocked_decision.status_code == 422
+
+    # The bug: without releasing the probe, every request from here on
+    # would see the breaker permanently wedged in half-open and never
+    # reach upstream again, no matter how much time passes.
+    recovered = request_context("recovered")
+    recovered_decision = await guard.runtime.admit_async(recovered, "what is the weather today")
+    assert recovered_decision.status_code != 503
+    assert recovered_decision.allowed is True
+    upstream_calls += 1
+    await guard.runtime.observe_async(
+        recovered,
+        CompletionObservation(status_code=200, token_budget_reservation_id=recovered_decision.token_budget_reservation_id),
+        clock.now(),
+    )
+
+    assert upstream_calls == 2
 
 
 # ── Guardrails wiring ──

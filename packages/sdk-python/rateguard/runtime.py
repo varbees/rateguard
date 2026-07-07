@@ -178,72 +178,82 @@ class RateGuardRuntime:
         start_ms = self.config.clock.now()
         key = self.resolve_key(request)
         breaker_decision = await self.circuit_breaker.allow_async()
-        if not breaker_decision.allowed:
-            await self.emit("request.completed", request, breaker_decision.state, 503, start_ms, None, None, breaker_decision.retry_after_ms)
-            return PreflightDecision(
-                allowed=False,
-                status_code=503,
-                error_code="circuit_open",
-                retry_after_ms=breaker_decision.retry_after_ms,
-                circuit_breaker=breaker_decision,
-            )
-
+        # See the matching comment in _admit_sync: a half-open probe grant
+        # must be released if any later gate denies the request before it
+        # ever reaches upstream, or the breaker wedges in half-open forever.
+        probe_consumed = False
         try:
-            rate_decision = await self.rate_limiter.allow_async(key, self.config.rate_limit, api_key=self.config.api_key)
-        except RedisEvalError as exc:
-            # Fail closed, exactly like Go's handleHTTP does when
-            # s.limiter.Allow returns an error: an unreachable/erroring
-            # Redis-backed limiter must not silently admit unlimited
-            # traffic. Mirrors writeRateLimitUnavailableResponse.
-            logger.warning("RateGuard rate limiter unavailable: %s", exc)
-            await self.emit("request.completed", request, breaker_decision.state, 503, start_ms, None, None, 0)
-            return PreflightDecision(
-                allowed=False,
-                status_code=503,
-                error_code="rate_limit_unavailable",
-                retry_after_ms=0,
-                circuit_breaker=breaker_decision,
-            )
-        if not rate_decision.allowed:
-            await self.emit("request.rate_limited", request, breaker_decision.state, 429, start_ms, rate_decision, None, rate_decision.retry_after_ms)
-            return PreflightDecision(
-                allowed=False,
-                status_code=429,
-                error_code="rate_limit_exceeded",
-                retry_after_ms=rate_decision.retry_after_ms,
-                rate_limit=rate_decision,
-                circuit_breaker=breaker_decision,
-            )
-
-        # Agent loop detection + content guardrails inspect the request
-        # body. Runs after rate limiting but before token budget
-        # reservation — same order as Go's handleHTTP/checkRequestBody.
-        if body_text is not None:
-            rejection = self.check_request_body(request, body_text)
-            if rejection is not None:
+            if not breaker_decision.allowed:
+                await self.emit("request.completed", request, breaker_decision.state, 503, start_ms, None, None, breaker_decision.retry_after_ms)
                 return PreflightDecision(
                     allowed=False,
-                    status_code=rejection.status_code,
+                    status_code=503,
+                    error_code="circuit_open",
+                    retry_after_ms=breaker_decision.retry_after_ms,
+                    circuit_breaker=breaker_decision,
+                )
+
+            try:
+                rate_decision = await self.rate_limiter.allow_async(key, self.config.rate_limit, api_key=self.config.api_key)
+            except RedisEvalError as exc:
+                # Fail closed, exactly like Go's handleHTTP does when
+                # s.limiter.Allow returns an error: an unreachable/erroring
+                # Redis-backed limiter must not silently admit unlimited
+                # traffic. Mirrors writeRateLimitUnavailableResponse.
+                logger.warning("RateGuard rate limiter unavailable: %s", exc)
+                await self.emit("request.completed", request, breaker_decision.state, 503, start_ms, None, None, 0)
+                return PreflightDecision(
+                    allowed=False,
+                    status_code=503,
+                    error_code="rate_limit_unavailable",
                     retry_after_ms=0,
-                    rejection_payload={"error": rejection.error, "message": rejection.message},
+                    circuit_breaker=breaker_decision,
+                )
+            if not rate_decision.allowed:
+                await self.emit("request.rate_limited", request, breaker_decision.state, 429, start_ms, rate_decision, None, rate_decision.retry_after_ms)
+                return PreflightDecision(
+                    allowed=False,
+                    status_code=429,
+                    error_code="rate_limit_exceeded",
+                    retry_after_ms=rate_decision.retry_after_ms,
                     rate_limit=rate_decision,
                     circuit_breaker=breaker_decision,
                 )
 
-        reservation = await self.token_budget.reserve_async(key, self.config.token_budget, self.config.estimated_tokens_per_request)
-        token_decision = reservation.decision
-        if not token_decision.allowed:
-            await self.emit("request.token_budget_exceeded", request, breaker_decision.state, 429, start_ms, rate_decision, token_decision, token_decision.retry_after_ms)
-            return PreflightDecision(
-                allowed=False,
-                status_code=429,
-                error_code="token_budget_exceeded",
-                retry_after_ms=token_decision.retry_after_ms,
-                rate_limit=rate_decision,
-                token_budget=token_decision,
-                circuit_breaker=breaker_decision,
-            )
-        return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision, token_budget_reservation_id=reservation.reservation_id)
+            # Agent loop detection + content guardrails inspect the request
+            # body. Runs after rate limiting but before token budget
+            # reservation — same order as Go's handleHTTP/checkRequestBody.
+            if body_text is not None:
+                rejection = self.check_request_body(request, body_text)
+                if rejection is not None:
+                    return PreflightDecision(
+                        allowed=False,
+                        status_code=rejection.status_code,
+                        retry_after_ms=0,
+                        rejection_payload={"error": rejection.error, "message": rejection.message},
+                        rate_limit=rate_decision,
+                        circuit_breaker=breaker_decision,
+                    )
+
+            reservation = await self.token_budget.reserve_async(key, self.config.token_budget, self.config.estimated_tokens_per_request)
+            token_decision = reservation.decision
+            if not token_decision.allowed:
+                await self.emit("request.token_budget_exceeded", request, breaker_decision.state, 429, start_ms, rate_decision, token_decision, token_decision.retry_after_ms)
+                return PreflightDecision(
+                    allowed=False,
+                    status_code=429,
+                    error_code="token_budget_exceeded",
+                    retry_after_ms=token_decision.retry_after_ms,
+                    rate_limit=rate_decision,
+                    token_budget=token_decision,
+                    circuit_breaker=breaker_decision,
+                )
+
+            probe_consumed = True
+            return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision, token_budget_reservation_id=reservation.reservation_id)
+        finally:
+            if not probe_consumed and breaker_decision.probe_in_flight:
+                await self.circuit_breaker.release_probe_async()
 
     def observe(self, request: RequestContext, observation: CompletionObservation, started_at_ms: float) -> None:
         self._observe_sync(request, observation, started_at_ms)
@@ -355,73 +365,91 @@ class RateGuardRuntime:
         start_ms = self.config.clock.now()
         key = self.resolve_key(request)
         breaker_decision = self.circuit_breaker.allow()
-        if not breaker_decision.allowed:
-            payload = self.build_payload(request, breaker_decision.state, 503, start_ms, None, None, None, breaker_decision.retry_after_ms)
-            self._emit_event_sync("request.completed", request, payload)
-            return PreflightDecision(
-                allowed=False,
-                status_code=503,
-                error_code="circuit_open",
-                retry_after_ms=breaker_decision.retry_after_ms,
-                circuit_breaker=breaker_decision,
-            )
-
+        # A half-open probe grant must be released if any later gate (rate
+        # limit, guardrail, token budget) denies the request before it ever
+        # reaches upstream — otherwise the probe slot leaks and the breaker
+        # wedges in half-open forever (see CircuitBreaker.release_probe).
+        # probe_consumed is set True right before returning the final
+        # allowed decision; every early return falls through to the
+        # finally block, including any added later.
+        probe_consumed = False
         try:
-            rate_decision = self.rate_limiter.allow(key, self.config.rate_limit, api_key=self.config.api_key)
-        except RedisEvalError as exc:
-            # Fail closed — see the matching comment in admit_async.
-            logger.warning("RateGuard rate limiter unavailable: %s", exc)
-            payload = self.build_payload(request, breaker_decision.state, 503, start_ms, None, None, None, 0)
-            self._emit_event_sync("request.completed", request, payload)
-            return PreflightDecision(
-                allowed=False,
-                status_code=503,
-                error_code="rate_limit_unavailable",
-                retry_after_ms=0,
-                circuit_breaker=breaker_decision,
-            )
-        if not rate_decision.allowed:
-            payload = self.build_payload(request, breaker_decision.state, 429, start_ms, rate_decision, None, None, rate_decision.retry_after_ms)
-            self._emit_event_sync("request.rate_limited", request, payload)
-            return PreflightDecision(
-                allowed=False,
-                status_code=429,
-                error_code="rate_limit_exceeded",
-                retry_after_ms=rate_decision.retry_after_ms,
-                rate_limit=rate_decision,
-                circuit_breaker=breaker_decision,
-            )
-
-        # Agent loop detection + content guardrails inspect the request
-        # body. Runs after rate limiting but before token budget
-        # reservation — same order as Go's handleHTTP/checkRequestBody.
-        if body_text is not None:
-            rejection = self.check_request_body(request, body_text)
-            if rejection is not None:
+            if not breaker_decision.allowed:
+                payload = self.build_payload(request, breaker_decision.state, 503, start_ms, None, None, None, breaker_decision.retry_after_ms)
+                self._emit_event_sync("request.completed", request, payload)
                 return PreflightDecision(
                     allowed=False,
-                    status_code=rejection.status_code,
+                    status_code=503,
+                    error_code="circuit_open",
+                    retry_after_ms=breaker_decision.retry_after_ms,
+                    circuit_breaker=breaker_decision,
+                )
+
+            try:
+                rate_decision = self.rate_limiter.allow(key, self.config.rate_limit, api_key=self.config.api_key)
+            except RedisEvalError as exc:
+                # Fail closed — see the matching comment in admit_async.
+                logger.warning("RateGuard rate limiter unavailable: %s", exc)
+                payload = self.build_payload(request, breaker_decision.state, 503, start_ms, None, None, None, 0)
+                self._emit_event_sync("request.completed", request, payload)
+                return PreflightDecision(
+                    allowed=False,
+                    status_code=503,
+                    error_code="rate_limit_unavailable",
                     retry_after_ms=0,
-                    rejection_payload={"error": rejection.error, "message": rejection.message},
+                    circuit_breaker=breaker_decision,
+                )
+            if not rate_decision.allowed:
+                payload = self.build_payload(request, breaker_decision.state, 429, start_ms, rate_decision, None, None, rate_decision.retry_after_ms)
+                self._emit_event_sync("request.rate_limited", request, payload)
+                return PreflightDecision(
+                    allowed=False,
+                    status_code=429,
+                    error_code="rate_limit_exceeded",
+                    retry_after_ms=rate_decision.retry_after_ms,
                     rate_limit=rate_decision,
                     circuit_breaker=breaker_decision,
                 )
 
-        reservation = self.token_budget.reserve(key, self.config.token_budget, self.config.estimated_tokens_per_request)
-        token_decision = reservation.decision
-        if not token_decision.allowed:
-            payload = self.build_payload(request, breaker_decision.state, 429, start_ms, rate_decision, token_decision, None, token_decision.retry_after_ms)
-            self._emit_event_sync("request.token_budget_exceeded", request, payload)
-            return PreflightDecision(
-                allowed=False,
-                status_code=429,
-                error_code="token_budget_exceeded",
-                retry_after_ms=token_decision.retry_after_ms,
-                rate_limit=rate_decision,
-                token_budget=token_decision,
-                circuit_breaker=breaker_decision,
-            )
-        return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision, token_budget_reservation_id=reservation.reservation_id)
+            # Agent loop detection + content guardrails inspect the request
+            # body. Runs after rate limiting but before token budget
+            # reservation — same order as Go's handleHTTP/checkRequestBody.
+            if body_text is not None:
+                rejection = self.check_request_body(request, body_text)
+                if rejection is not None:
+                    return PreflightDecision(
+                        allowed=False,
+                        status_code=rejection.status_code,
+                        retry_after_ms=0,
+                        rejection_payload={"error": rejection.error, "message": rejection.message},
+                        rate_limit=rate_decision,
+                        circuit_breaker=breaker_decision,
+                    )
+
+            reservation = self.token_budget.reserve(key, self.config.token_budget, self.config.estimated_tokens_per_request)
+            token_decision = reservation.decision
+            if not token_decision.allowed:
+                payload = self.build_payload(request, breaker_decision.state, 429, start_ms, rate_decision, token_decision, None, token_decision.retry_after_ms)
+                self._emit_event_sync("request.token_budget_exceeded", request, payload)
+                return PreflightDecision(
+                    allowed=False,
+                    status_code=429,
+                    error_code="token_budget_exceeded",
+                    retry_after_ms=token_decision.retry_after_ms,
+                    rate_limit=rate_decision,
+                    token_budget=token_decision,
+                    circuit_breaker=breaker_decision,
+                )
+
+            # From here on the caller is responsible for making the actual
+            # upstream call and reporting its outcome via observe() (which
+            # calls record_outcome) — that's what will eventually clear a
+            # half-open probe.
+            probe_consumed = True
+            return PreflightDecision(allowed=True, rate_limit=rate_decision, token_budget=token_decision, circuit_breaker=breaker_decision, token_budget_reservation_id=reservation.reservation_id)
+        finally:
+            if not probe_consumed and breaker_decision.probe_in_flight:
+                self.circuit_breaker.release_probe()
 
     def _observe_sync(self, request: RequestContext, observation: CompletionObservation, started_at_ms: float) -> None:
         key = self.resolve_key(request)

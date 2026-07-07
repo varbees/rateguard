@@ -415,46 +415,58 @@ def create_httpx_transport(
         def _execute(self, request: Any, body: bytes, call: OutboundCall, depth: int) -> Any:
             breaker = core.breaker_for(call.provider)
             breaker_decision = breaker.allow()
-            if not breaker_decision.allowed:
-                target = core.fallback_target(call, depth, body)
-                if target is not None:
-                    return self._retarget(request, body, call, target, depth)
-                if core.enforce:
-                    return synthesized(request, 503, "circuit_open",
-                                       f"rateguard: circuit open for provider {call.provider}",
-                                       breaker_decision.retry_after_ms)
-
-            blocked, retry_after_ms = core.rate_limit_blocked(call)
-            if blocked and core.enforce:
-                return synthesized(request, 429, "rate_limit_exceeded",
-                                   f"rateguard: outbound rate limit for provider {call.provider}", retry_after_ms)
-
-            reservation = core.reserve(call)
-            if reservation.decision.applied and not reservation.decision.allowed and core.enforce:
-                return synthesized(request, 429, "token_budget_exceeded",
-                                   f"rateguard: outbound token budget exhausted for {call.provider}",
-                                   reservation.decision.retry_after_ms)
-
+            # A half-open probe grant must be released if the rate limit or
+            # token budget check below denies the request before it ever
+            # reaches upstream — otherwise the probe slot leaks and this
+            # provider's breaker wedges in half-open forever (see
+            # CircuitBreaker.release_probe). probe_consumed is set True
+            # right before the actual request goes out.
+            probe_consumed = False
             try:
-                response = inner.handle_request(request)
-            except Exception:
-                breaker.record_outcome(False)
-                core.finish(call, reservation.reservation_id, None)
-                target = core.fallback_target(call, depth, body)
-                if target is not None:
-                    return self._retarget(request, body, call, target, depth)
-                raise
+                if not breaker_decision.allowed:
+                    target = core.fallback_target(call, depth, body)
+                    if target is not None:
+                        return self._retarget(request, body, call, target, depth)
+                    if core.enforce:
+                        return synthesized(request, 503, "circuit_open",
+                                           f"rateguard: circuit open for provider {call.provider}",
+                                           breaker_decision.retry_after_ms)
 
-            if core.is_provider_failure(response.status_code):
-                breaker.record_outcome(False)
-                core.finish(call, reservation.reservation_id, None)
-                target = core.fallback_target(call, depth, body)
-                if target is not None:
-                    response.close()
-                    return self._retarget(request, body, call, target, depth)
-                return response
+                blocked, retry_after_ms = core.rate_limit_blocked(call)
+                if blocked and core.enforce:
+                    return synthesized(request, 429, "rate_limit_exceeded",
+                                       f"rateguard: outbound rate limit for provider {call.provider}", retry_after_ms)
 
-            breaker.record_outcome(True)
+                reservation = core.reserve(call)
+                if reservation.decision.applied and not reservation.decision.allowed and core.enforce:
+                    return synthesized(request, 429, "token_budget_exceeded",
+                                       f"rateguard: outbound token budget exhausted for {call.provider}",
+                                       reservation.decision.retry_after_ms)
+
+                probe_consumed = True
+                try:
+                    response = inner.handle_request(request)
+                except Exception:
+                    breaker.record_outcome(False)
+                    core.finish(call, reservation.reservation_id, None)
+                    target = core.fallback_target(call, depth, body)
+                    if target is not None:
+                        return self._retarget(request, body, call, target, depth)
+                    raise
+
+                if core.is_provider_failure(response.status_code):
+                    breaker.record_outcome(False)
+                    core.finish(call, reservation.reservation_id, None)
+                    target = core.fallback_target(call, depth, body)
+                    if target is not None:
+                        response.close()
+                        return self._retarget(request, body, call, target, depth)
+                    return response
+
+                breaker.record_outcome(True)
+            finally:
+                if not probe_consumed and breaker_decision.probe_in_flight:
+                    breaker.release_probe()
 
             content_type = response.headers.get("content-type", "")
             if content_type.startswith("text/event-stream"):
@@ -641,46 +653,57 @@ def create_httpx_async_transport(
         async def _execute(self, request: Any, body: bytes, call: OutboundCall, depth: int) -> Any:
             breaker = core.breaker_for(call.provider)
             breaker_decision = breaker.allow()
-            if not breaker_decision.allowed:
-                target = core.fallback_target(call, depth, body)
-                if target is not None:
-                    return await self._retarget(request, body, call, target, depth)
-                if core.enforce:
-                    return synthesized(request, 503, "circuit_open",
-                                       f"rateguard: circuit open for provider {call.provider}",
-                                       breaker_decision.retry_after_ms)
-
-            blocked, retry_after_ms = core.rate_limit_blocked(call)
-            if blocked and core.enforce:
-                return synthesized(request, 429, "rate_limit_exceeded",
-                                   f"rateguard: outbound rate limit for provider {call.provider}", retry_after_ms)
-
-            reservation = core.reserve(call)
-            if reservation.decision.applied and not reservation.decision.allowed and core.enforce:
-                return synthesized(request, 429, "token_budget_exceeded",
-                                   f"rateguard: outbound token budget exhausted for {call.provider}",
-                                   reservation.decision.retry_after_ms)
-
+            # See the matching comment in the sync _execute above: a
+            # half-open probe grant must be released if the rate limit or
+            # token budget check below denies the request before it ever
+            # reaches upstream, or this provider's breaker wedges in
+            # half-open forever.
+            probe_consumed = False
             try:
-                response = await inner.handle_async_request(request)
-            except Exception:
-                breaker.record_outcome(False)
-                core.finish(call, reservation.reservation_id, None)
-                target = core.fallback_target(call, depth, body)
-                if target is not None:
-                    return await self._retarget(request, body, call, target, depth)
-                raise
+                if not breaker_decision.allowed:
+                    target = core.fallback_target(call, depth, body)
+                    if target is not None:
+                        return await self._retarget(request, body, call, target, depth)
+                    if core.enforce:
+                        return synthesized(request, 503, "circuit_open",
+                                           f"rateguard: circuit open for provider {call.provider}",
+                                           breaker_decision.retry_after_ms)
 
-            if core.is_provider_failure(response.status_code):
-                breaker.record_outcome(False)
-                core.finish(call, reservation.reservation_id, None)
-                target = core.fallback_target(call, depth, body)
-                if target is not None:
-                    await response.aclose()
-                    return await self._retarget(request, body, call, target, depth)
-                return response
+                blocked, retry_after_ms = core.rate_limit_blocked(call)
+                if blocked and core.enforce:
+                    return synthesized(request, 429, "rate_limit_exceeded",
+                                       f"rateguard: outbound rate limit for provider {call.provider}", retry_after_ms)
 
-            breaker.record_outcome(True)
+                reservation = core.reserve(call)
+                if reservation.decision.applied and not reservation.decision.allowed and core.enforce:
+                    return synthesized(request, 429, "token_budget_exceeded",
+                                       f"rateguard: outbound token budget exhausted for {call.provider}",
+                                       reservation.decision.retry_after_ms)
+
+                probe_consumed = True
+                try:
+                    response = await inner.handle_async_request(request)
+                except Exception:
+                    breaker.record_outcome(False)
+                    core.finish(call, reservation.reservation_id, None)
+                    target = core.fallback_target(call, depth, body)
+                    if target is not None:
+                        return await self._retarget(request, body, call, target, depth)
+                    raise
+
+                if core.is_provider_failure(response.status_code):
+                    breaker.record_outcome(False)
+                    core.finish(call, reservation.reservation_id, None)
+                    target = core.fallback_target(call, depth, body)
+                    if target is not None:
+                        await response.aclose()
+                        return await self._retarget(request, body, call, target, depth)
+                    return response
+
+                breaker.record_outcome(True)
+            finally:
+                if not probe_consumed and breaker_decision.probe_in_flight:
+                    breaker.release_probe()
 
             content_type = response.headers.get("content-type", "")
             if content_type.startswith("text/event-stream"):

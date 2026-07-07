@@ -72,6 +72,26 @@ class CircuitBreaker:
                     self._open_locked()
             return CircuitBreakerDecision(self._state != "open", self._state, self._open_timeout_ms if self._state == "open" else 0, self._probe_in_flight)
 
+    def release_probe(self) -> None:
+        """Clears an in-flight half-open probe WITHOUT recording a success
+        or failure outcome. Use this when a request that allow() granted
+        the probe slot to never actually reached upstream — denied instead
+        by an earlier, unrelated gate (rate limit, guardrail, token
+        budget). That request tested nothing about upstream health, so
+        counting it as either a success or a failure via record_outcome
+        would corrupt the breaker's signal. Without this, the probe slot
+        leaks forever: allow() never grants another one while
+        probe_in_flight is stuck True, so the breaker is wedged in
+        half-open, denying every request, until the process restarts."""
+        with self._lock:
+            if self._state == "half-open":
+                self._probe_in_flight = False
+
+    async def release_probe_async(self) -> None:
+        async with self._async_lock:
+            if self._state == "half-open":
+                self._probe_in_flight = False
+
     def _allow_locked(self) -> CircuitBreakerDecision:
         self._maybe_transition_to_half_open()
         if self._state == "open":
