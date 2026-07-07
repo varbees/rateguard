@@ -39,17 +39,17 @@ export default function AgentsMcpPage() {
         ]}
       />
       <P>
-        Go adds two more — <code>attest_budget</code> and <code>verify_budget</code> — for
-        cryptographic budget delegation between agents. See{" "}
+        All three languages add two more — <code>attest_budget</code> and <code>verify_budget</code> —
+        for cryptographic budget delegation between agents. See{" "}
         <Link href="/docs/budget-attestation">Budget attestation</Link>.
       </P>
 
       <DocH2 id="serve">Serve the tools</DocH2>
       <P>
-        The Go SDK ships a <strong>zero-dependency MCP stdio server</strong> — newline-delimited
-        JSON-RPC 2.0 implementing <code>initialize</code>, <code>tools/list</code>,{" "}
-        <code>tools/call</code>, and <code>ping</code>. Node and Python return tool definitions
-        ready to register in your MCP server framework:
+        Every language ships its own <strong>zero-dependency MCP stdio server</strong> —
+        newline-delimited JSON-RPC 2.0 implementing <code>initialize</code>, <code>tools/list</code>,{" "}
+        <code>tools/call</code>, and <code>ping</code>. Or skip the server and call tools directly
+        in-process, or register the raw definitions in your own MCP framework — whichever fits:
       </P>
       <CodeTabs
         tabs={[
@@ -68,8 +68,11 @@ res := rg.MCPCall("get_token_budget",
             label: "Node.js",
             code: `const rg = new RateGuard({ preset: 'agent-orchestrator' });
 
-const tools = rg.mcpTools();  // MCPTool[] for your MCP server framework
+// Serve over stdio — plugs into any MCP client config
+await serveMCP(rg);
 
+// Or call tools directly, in-process:
+const tools = rg.mcpTools();  // MCPTool[] for your MCP server framework
 const result = await rg.mcpCall('check_loop', {
   system_prompt: s,
   user_input: u,
@@ -80,8 +83,11 @@ const result = await rg.mcpCall('check_loop', {
             label: "Python",
             code: `rg = RateGuard(preset="agent-orchestrator")
 
-tools = rg.mcp_tools()  # list[MCPTool] for your MCP server framework
+# Serve over stdio — plugs into any MCP client config
+serve_mcp(rg)
 
+# Or call tools directly, in-process:
+tools = rg.mcp_tools()  # list[MCPTool] for your MCP server framework
 result = rg.mcp_call("get_rate_limit_state", {"key": "tenant-1"})`,
           },
         ]}

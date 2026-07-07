@@ -42,13 +42,13 @@ mux.Handle("/", rg.HTTPMiddleware(yourHandler))
 http.ListenAndServe(":8080", mux)`}
       />
       <Callout kind="note">
-        Node and Python don&apos;t have an admin handler yet — this is Go-only today. The dashboard
-        will show a connection error against a Node/Python instance until that ships.
+        Node and Python ship the identical admin API surface (same routes, same shapes) — but the
+        dashboard itself has only been run against Go. If you point it at a Node or Python
+        instance, expect rough edges until that pairing gets its own verification pass.
       </Callout>
       <P>
-        The dashboard talks to the Go admin API at <code>/admin/</code>. Node and Python don&apos;t
-        have an admin handler yet — the dashboard will show a connection error against a
-        Node/Python instance until that ships.
+        The dashboard talks to the admin API at <code>/admin/</code> — any of the three SDKs expose
+        it the same way. Go is the one this dashboard has actually been tested against end to end.
       </P>
 
       <DocH2 id="sections">What each section shows</DocH2>

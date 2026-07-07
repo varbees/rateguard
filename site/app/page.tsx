@@ -56,7 +56,7 @@ const codeTabs = [
 const features = [
   {
     title: "Ask before you call",
-    desc: "Five MCP tools let Claude Code, Cursor, or any MCP client check its own limit before making a request. The agent asks permission instead of hitting a 429.",
+    desc: "Seven MCP tools let Claude Code, Cursor, or any MCP client check its own limit — or mint a cryptographic sub-budget — before making a request. The agent asks permission instead of hitting a 429.",
     micro: <MicroHandshake />,
   },
   {
@@ -71,7 +71,7 @@ const features = [
   },
   {
     title: "One algorithm, three runtimes",
-    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 498 tests — including shared conformance suites that replay identical admission sequences across all three — hold them to real behavioral parity, not just similar APIs.",
+    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 533 tests — including shared conformance suites that replay identical admission sequences across all three — hold them to real behavioral parity, not just similar APIs.",
     micro: <MicroParity />,
   },
   {
@@ -224,8 +224,8 @@ export default function Page() {
       {/* Stats */}
       <section className="mx-auto max-w-3xl px-6 pb-32">
         <Reveal className="grid grid-cols-2 sm:grid-cols-4 gap-8 rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
-          <StatCounter value={498} label="Tests" />
-          <StatCounter value={16} label="Providers" />
+          <StatCounter value={533} label="Tests" />
+          <StatCounter value={20} label="Providers" />
           <StatCounter value={3} label="Languages" />
           <div className="text-center">
             <div className="font-display text-2xl font-bold">MIT</div>
