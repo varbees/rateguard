@@ -59,7 +59,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | SSE streaming usage extraction (transparent tee) | ✅ | ✅ | ✅ | `sse_usage.go` |
 | Provider fallback (OpenAI-compatible, credential-isolated) | ✅ | ✅ | ✅ | `outbound.go` |
 | Per-provider circuit breakers (outbound) | ✅ | ✅ | ✅ | `outbound.go` |
-| Provider detection (16 hosts + Azure/Bedrock/Vertex + self-hosted) | ✅ | ✅ | ✅ | `outbound.go` |
+| Provider detection (26 hosts + Azure/Bedrock/Vertex + self-hosted) | ✅ | ✅ | ✅ | `outbound.go` |
 | Async outbound transport (agent frameworks are async-first) | n/a | n/a | ✅ | `core/outbound.py` |
 | Framework integration recipes (INTEGRATIONS.md, doc-verified) | ✅ | ✅ | ✅ | `INTEGRATIONS.md` |
 | Admin API — state/policy/MCP-tool-call over HTTP (opt-in, unauthenticated by design — bind privately; CORS same-origin-only by default, configurable single origin, never a wildcard) | ✅ | ✅ | ✅ | `admin.go` |
@@ -84,13 +84,13 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (160 test funcs, all with -race)
+# Go tests (162 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (178 passing)
+# Node tests (179 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (198 passing)
+# Python tests (199 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Python strict typecheck (mypy --strict passes clean on all 39 source files)

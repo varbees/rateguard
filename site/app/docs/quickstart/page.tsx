@@ -104,8 +104,9 @@ client = OpenAI(http_client=rg.wrap_httpx_client())
         ]}
       />
       <Callout kind="tip">
-        This is the headline feature. Anthropic, Gemini, Vertex, Azure OpenAI, Bedrock, and 16
-        OpenAI-compatible hosts (DeepSeek, Groq, vLLM, …) are detected out of the box. See{" "}
+        This is the headline feature. Anthropic, Gemini, Vertex, Azure OpenAI, Bedrock, and 26
+        OpenAI-compatible hosts across 23 providers (DeepSeek, Groq, DeepInfra, Hugging Face, and
+        more — plus any self-hosted vLLM/Ollama/llama.cpp server) are detected out of the box. See{" "}
         <Link href="/docs/outbound">Track LLM spend</Link> for enforce vs observe modes and
         fallback chains.
       </Callout>

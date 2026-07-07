@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Callout, DocH1, DocH2, DocsPager, P } from "../../../components/docs/Docs";
 import { CodeTabs } from "../../../components/docs/CodeTabs";
-import { CodeBlock } from "../../../components/docs/CodeBlock";
 
 export const metadata: Metadata = {
   title: "Provider fallback",
@@ -73,20 +72,44 @@ export default function ProviderFallbackPage() {
         providers; each chain entry carries its own headers.
       </Callout>
 
-      <DocH2 id="built-in">Built-in chains (Go)</DocH2>
-      <CodeBlock
-        title="Go"
-        code={`chain := rateguard.DefaultProviderChain()
-// OpenAI → Anthropic → Google (cost-optimized)
+      <DocH2 id="built-in">Built-in chains</DocH2>
+      <P>
+        Every entry in these three is a genuinely OpenAI-compatible endpoint — Anthropic is
+        deliberately absent despite being a top-tier model, for the exact reason in the callout
+        above: a fallback to it would send an OpenAI-shaped body to the wrong path. Google is
+        included via its own OpenAI-compatible endpoint (<code>/v1beta/openai</code>), not its
+        native one. Want Claude in your own fallback logic anyway? That has to happen at the
+        application layer — catch the error, call Anthropic&apos;s own SDK yourself.
+      </P>
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `chain := rateguard.DefaultProviderChain()
+// OpenAI → Google Gemini Flash (cost-optimized)
 
 chain = rateguard.BudgetProviderChain()
-// Gemini Flash → GPT-4o Mini → Claude Haiku (cheapest first)
+// Gemini Flash → GPT-4o Mini → DeepSeek (cheapest first)
 
 chain = rateguard.QualityProviderChain()
-// Claude Opus → GPT-4o → Gemini Pro (best quality first)
+// GPT-4o → Gemini Pro (best quality among compatible options)
 
 entry, provider, fallback := chain.Route("openai", CircuitBreakerOpen)
-// entry = Anthropic provider, fallback = true`}
+// entry = Google provider, fallback = true`,
+          },
+          {
+            label: "Node.js",
+            code: `const chain = defaultProviderChain();
+// OpenAI → Google Gemini Flash — a plain ProviderEntry[],
+// pass straight to wrapFetch({ chain })`,
+          },
+          {
+            label: "Python",
+            code: `chain = default_provider_chain()
+# OpenAI → Google Gemini Flash — a plain list[FallbackProvider],
+# pass straight to wrap_httpx_client(chain=chain)`,
+          },
+        ]}
       />
 
       <DocH2 id="breakers">Per-provider circuit breakers</DocH2>

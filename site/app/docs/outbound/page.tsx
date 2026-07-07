@@ -54,8 +54,12 @@ aclient = AsyncOpenAI(http_client=rg.wrap_httpx_async_client())  # async
       <P>
         Every call through the wrapped client is budgeted, breaker-protected per provider, and
         metered with <strong>real token usage from the provider&apos;s own response</strong> —
-        including streaming. 16 OpenAI-compatible hosts are detected out of the box, plus
-        Anthropic, Gemini, Vertex, Azure OpenAI, AWS Bedrock, and self-hosted vLLM / llama.cpp.
+        including streaming. 26 OpenAI-compatible hosts across 23 providers are detected out of the
+        box — OpenAI, DeepSeek, Groq, Mistral, Together, OpenRouter, xAI, Perplexity, Moonshot,
+        Fireworks, Cerebras, Cohere, DashScope, SambaNova, NVIDIA NIM, DeepInfra, Hugging Face,
+        Baseten, Nebius, Z.AI, SiliconFlow, Requesty, and GitHub Models — plus Anthropic, Gemini,
+        Vertex, Azure OpenAI, AWS Bedrock, and any self-hosted <code>/chat/completions</code> server
+        (vLLM, Ollama, llama.cpp, LocalAI, ...).
       </P>
 
       <DocH2 id="why-wire">Why count at the wire?</DocH2>
