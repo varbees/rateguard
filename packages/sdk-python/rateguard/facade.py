@@ -81,6 +81,7 @@ class RateGuard:
         adaptive: "AdaptiveOptions | None" = None,
         redis_client: object | None = None,
         redis_async_client: object | None = None,
+        admin_cors_origin: str | None = None,
     ) -> None:
         self.options = RateGuardOptions(
             api_key=api_key,
@@ -106,6 +107,7 @@ class RateGuard:
             adaptive=adaptive,
             redis_client=redis_client,  # type: ignore[arg-type]
             redis_async_client=redis_async_client,  # type: ignore[arg-type]
+            admin_cors_origin=admin_cors_origin,
         )
         self.runtime = RateGuardRuntime(self.options)
         self._mcp_tools: list["MCPTool"] | None = None
@@ -240,10 +242,12 @@ class RateGuard:
         GET/PATCH policy, state snapshots, MCP tool catalog + invocation.
         Mirrors Go's SDK.AdminHandler(). UNAUTHENTICATED by design: bind it
         to localhost or an internal network only (same posture as pprof) —
-        never mount it on the public app. See core/admin.py."""
+        never mount it on the public app. See core/admin.py. CORS is
+        controlled by the admin_cors_origin constructor option — omitted
+        (the default) means no CORS headers at all, same-origin only."""
         from .core.admin import AdminApp
 
-        return AdminApp(self)
+        return AdminApp(self, cors_origin=self.runtime.config.admin_cors_origin)
 
     @property
     def wsgi_middleware(self) -> type:

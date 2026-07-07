@@ -130,6 +130,7 @@ def resolve_rateguard_options(options: RateGuardOptions) -> ResolvedRateGuardOpt
         adaptive=options.adaptive,
         redis_client=options.redis_client,
         redis_async_client=options.redis_async_client,
+        admin_cors_origin=options.admin_cors_origin,
     )
 
 

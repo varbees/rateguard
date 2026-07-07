@@ -37,9 +37,13 @@ public app):
     guard = RateGuard(preset="standard")
     admin = guard.admin_asgi_app          # e.g. uvicorn on 127.0.0.1:9090
 
-CORS allows a dashboard on a different local port (RateGuard on :8080,
-dashboard on :3001) — scoped to this admin app only, never applied to the
-rate-limited request path.
+Browser threat model: unlike pprof/metrics (read-only), this app accepts
+state-mutating requests (PATCH /admin/policy, POST /admin/mcp/call).
+Without cors_origin set, no cross-origin fetch from a browser can reach
+it — same-origin only. Pass cors_origin (e.g. "http://localhost:3001" for
+a locally-run dashboard) to allow that one origin — never "*", which
+would let any webpage open in the same browser reach this unauthenticated
+API via a cross-origin fetch.
 """
 
 from __future__ import annotations
@@ -55,19 +59,25 @@ if TYPE_CHECKING:
 ASGIReceive = Callable[[], Awaitable[dict[str, Any]]]
 ASGISend = Callable[[dict[str, Any]], Awaitable[None]]
 
-_CORS_HEADERS = [
-    (b"access-control-allow-origin", b"*"),
-    (b"access-control-allow-methods", b"GET, PATCH, POST, OPTIONS"),
-    (b"access-control-allow-headers", b"Content-Type"),
-]
+
+def _cors_headers(cors_origin: str | None) -> list[tuple[bytes, bytes]]:
+    if not cors_origin:
+        return []
+    return [
+        (b"access-control-allow-origin", cors_origin.encode("utf-8")),
+        (b"access-control-allow-methods", b"GET, PATCH, POST, OPTIONS"),
+        (b"access-control-allow-headers", b"Content-Type"),
+        (b"vary", b"Origin"),
+    ]
 
 
 class AdminApp:
     """Standalone ASGI application serving the 4 fixed admin routes for a
     RateGuard instance. Raw ASGI protocol — no framework required."""
 
-    def __init__(self, guard: "RateGuard") -> None:
+    def __init__(self, guard: "RateGuard", cors_origin: str | None = None) -> None:
         self._guard = guard
+        self._cors_origin = cors_origin
 
     async def __call__(self, scope: dict[str, Any], receive: ASGIReceive, send: ASGISend) -> None:
         if scope["type"] == "lifespan":
@@ -84,6 +94,13 @@ class AdminApp:
 
         method: str = scope["method"].upper()
         path: str = scope["path"]
+
+        # Every response in this request goes through a send wrapper that
+        # injects the configured CORS headers (or none) into
+        # http.response.start — so the ~15 call sites below that build
+        # responses never need to know about CORS at all.
+        cors_headers = _cors_headers(self._cors_origin)
+        send = _cors_wrapped_send(send, cors_headers)
 
         # CORS preflight is answered for every path, mirroring Go's
         # withAdminCORS wrapping the whole mux.
@@ -222,13 +239,29 @@ async def _read_body(receive: ASGIReceive) -> bytes:
     return b"".join(chunks)
 
 
+def _cors_wrapped_send(send: ASGISend, cors_headers: list[tuple[bytes, bytes]]) -> ASGISend:
+    """Wraps an ASGI send callable so every http.response.start message
+    gets the configured CORS headers appended — the ~15 response-building
+    call sites below never need to know about CORS at all. A no-op
+    (returns send unchanged) when cors_headers is empty."""
+    if not cors_headers:
+        return send
+
+    async def wrapped(message: dict[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            message = {**message, "headers": [*message.get("headers", []), *cors_headers]}
+        await send(message)
+
+    return wrapped
+
+
 async def _send_json(send: ASGISend, status: int, body: Any) -> None:
     payload = json.dumps(body).encode("utf-8")
     await send(
         {
             "type": "http.response.start",
             "status": status,
-            "headers": [(b"content-type", b"application/json"), *_CORS_HEADERS],
+            "headers": [(b"content-type", b"application/json")],
         }
     )
     await send({"type": "http.response.body", "body": payload})
@@ -239,5 +272,5 @@ async def _send_error(send: ASGISend, status: int, message: str) -> None:
 
 
 async def _send_empty(send: ASGISend, status: int) -> None:
-    await send({"type": "http.response.start", "status": status, "headers": list(_CORS_HEADERS)})
+    await send({"type": "http.response.start", "status": status, "headers": []})
     await send({"type": "http.response.body", "body": b""})

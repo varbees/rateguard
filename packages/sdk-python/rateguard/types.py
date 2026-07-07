@@ -131,6 +131,12 @@ class RateGuardOptions:
     # optionally redis_async_client for a real async path.
     redis_client: "RedisLimiterClient | None" = None
     redis_async_client: "AsyncRedisLimiterClient | None" = None
+    # Sets Access-Control-Allow-Origin on admin_asgi_app's responses to this
+    # exact value (e.g. "http://localhost:3001" for a locally-run
+    # dashboard) — never "*". None (default) omits CORS headers entirely:
+    # the admin API then only answers same-origin requests. Mirrors Go's
+    # cfg.AdminCORSOrigin.
+    admin_cors_origin: str | None = None
 
 
 @dataclass(slots=True)
@@ -158,6 +164,7 @@ class ResolvedRateGuardOptions:
     adaptive: "AdaptiveOptions | None"
     redis_client: "RedisLimiterClient | None"
     redis_async_client: "AsyncRedisLimiterClient | None"
+    admin_cors_origin: str | None
 
 
 @dataclass(slots=True)

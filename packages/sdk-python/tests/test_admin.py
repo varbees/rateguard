@@ -170,8 +170,8 @@ async def test_admin_mcp_call_requires_tool_field() -> None:
 
 
 @pytest.mark.asyncio
-async def test_admin_cors_preflight_and_headers_on_every_response() -> None:
-    guard = _guard()
+async def test_admin_cors_preflight_and_headers_only_when_origin_configured() -> None:
+    guard = _guard(admin_cors_origin="http://localhost:3001")
     async with _client(guard) as client:
         preflight = await client.options("/admin/policy")
         assert preflight.status_code == 204
@@ -181,10 +181,32 @@ async def test_admin_cors_preflight_and_headers_on_every_response() -> None:
         missing = await client.get("/admin/nope")
 
     for response in (preflight, ok, missing):
-        assert response.headers["access-control-allow-origin"] == "*"
+        assert response.headers["access-control-allow-origin"] == "http://localhost:3001"
         assert response.headers["access-control-allow-methods"] == "GET, PATCH, POST, OPTIONS"
         assert response.headers["access-control-allow-headers"] == "Content-Type"
     assert missing.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_sets_no_cors_headers_by_default() -> None:
+    """Security regression: without admin_cors_origin explicitly
+    configured, the admin API must not set a wildcard (or any) CORS
+    header — a browser then refuses cross-origin fetches, so no arbitrary
+    webpage open in the same browser can reach this unauthenticated,
+    state-mutating API. This was a real bug: the previous unconditional
+    "Access-Control-Allow-Origin: *" let any page in any browser on the
+    same machine/LAN PATCH policy via preflight."""
+    guard = _guard()
+    async with _client(guard) as client:
+        preflight = await client.options("/admin/policy")
+        ok = await client.get("/admin/policy")
+
+    assert preflight.status_code == 204
+    assert ok.status_code == 200
+    for response in (preflight, ok):
+        assert "access-control-allow-origin" not in response.headers
+        assert "access-control-allow-methods" not in response.headers
+        assert "access-control-allow-headers" not in response.headers
 
 
 @pytest.mark.asyncio
