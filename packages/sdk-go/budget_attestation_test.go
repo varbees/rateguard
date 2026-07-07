@@ -209,6 +209,39 @@ func TestVerifyChainRejectsExpiredToken(t *testing.T) {
 	}
 }
 
+// TestVerifyChainEnforcesTheSameTruncatedExpiryItSigned reproduces a real
+// gap: the signature commits to ExpiresAt truncated to whole seconds (see
+// signingPayload), but the expiry CHECK used to compare against the raw,
+// untruncated value. A grant expiring at T.999 was signed as if it expired
+// at T, but verifyChainAt would still accept it up to 999ms past T — the
+// enforced statement was looser than the signed one.
+func TestVerifyChainEnforcesTheSameTruncatedExpiryItSigned(t *testing.T) {
+	authorityPub, authorityPriv := genKey(t)
+	// .999999999s past the whole second — signingPayload truncates this to
+	// exactly `base`, so the signature commits to `base`, not `base+999ms`.
+	base := time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC)
+	grant := rootGrant(base)
+	grant.ExpiresAt = base.Add(999999999 * time.Nanosecond)
+	token, _, err := NewRootBudgetToken(authorityPriv, AttestOptions{Grant: grant})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 500ms past `base`: still before the RAW expiry (base+999999999ns), so
+	// the old buggy check (comparing against the raw value) would have
+	// accepted this — but it's already after the TRUNCATED expiry the
+	// signature actually committed to, so it must be rejected.
+	if _, err := verifyChainAt(token, authorityPub, base.Add(500*time.Millisecond)); err == nil {
+		t.Fatal("expected verification to reject a token past the truncated expiry instant the signature actually committed to, even though it's before the raw sub-second expiry")
+	}
+
+	// At exactly `base` (the truncated/signed instant itself), it must
+	// still verify — not yet expired.
+	if _, err := verifyChainAt(token, authorityPub, base); err != nil {
+		t.Fatalf("expected verification to succeed exactly at the truncated expiry instant: %v", err)
+	}
+}
+
 func TestSignAndVerifyPresentation(t *testing.T) {
 	authorityPub, authorityPriv := genKey(t)
 	// VerifyPresentation checks expiry against real wall-clock time (unlike

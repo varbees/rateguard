@@ -365,7 +365,12 @@ def verify_chain(
             raise ValueError(f"rateguard: budget token block {index}: invalid signature")
         if index > 0 and not block.grant.narrows(effective):
             raise ValueError(f"rateguard: budget token block {index}: grant does not narrow its parent")
-        expires_at = _normalize_expiry(_require_expiry(block.grant))
+        # Check against the SAME truncated-to-whole-seconds instant the
+        # signature committed to (see _format_expiry/signing_payload), not
+        # the raw expires_at — otherwise a holder could edit the token's
+        # sub-second expiry digits (which the signature never covered) to
+        # stretch validity by up to 1s beyond what was actually signed.
+        expires_at = _normalize_expiry(_require_expiry(block.grant)).replace(microsecond=0)
         if now > expires_at:
             raise ValueError(f"rateguard: budget token block {index}: expired at {expires_at.isoformat()}")
         effective = block.grant

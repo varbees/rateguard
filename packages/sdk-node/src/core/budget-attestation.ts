@@ -376,7 +376,13 @@ export function verifyChain(token: BudgetToken, rootPublicKey: KeyObject, nowMs:
     if (i > 0 && !budgetGrantNarrows(block.grant, effective)) {
       throw new Error(`rateguard: budget token block ${i}: grant does not narrow its parent`);
     }
-    if (nowMs > block.grant.expiresAt.getTime()) {
+    // Check against the SAME truncated-to-whole-seconds instant the
+    // signature committed to (see formatExpiryCanonical/signingPayload),
+    // not the raw expiresAt — otherwise a holder could edit the token's
+    // sub-second expiry digits (which the signature never covered) to
+    // stretch validity by up to 1s beyond what was actually signed.
+    const truncatedExpiryMs = Math.floor(block.grant.expiresAt.getTime() / 1000) * 1000;
+    if (nowMs > truncatedExpiryMs) {
       throw new Error(`rateguard: budget token block ${i}: expired at ${block.grant.expiresAt.toISOString()}`);
     }
     effective = block.grant;

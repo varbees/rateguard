@@ -268,7 +268,12 @@ func verifyChainAt(token *BudgetToken, rootPublicKey ed25519.PublicKey, now time
 		if i > 0 && !block.Grant.narrows(effective) {
 			return BudgetGrant{}, fmt.Errorf("rateguard: budget token block %d: grant does not narrow its parent", i)
 		}
-		if now.After(block.Grant.ExpiresAt) {
+		// Check against the SAME truncated-to-whole-seconds instant the
+		// signature committed to (see signingPayload), not the raw
+		// ExpiresAt — otherwise a holder could edit the token's
+		// sub-second expiry digits (which the signature never covered)
+		// to stretch validity by up to 1s beyond what was actually signed.
+		if now.After(block.Grant.ExpiresAt.UTC().Truncate(time.Second)) {
 			return BudgetGrant{}, fmt.Errorf("rateguard: budget token block %d: expired at %s", i, block.Grant.ExpiresAt)
 		}
 		effective = block.Grant

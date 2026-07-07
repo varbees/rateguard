@@ -186,6 +186,28 @@ describe('budget attestation', () => {
     expect(() => verifyChain(token, authority.publicKey, future)).toThrow(/expired/);
   });
 
+  // Reproduces a real gap: the signature commits to expiresAt truncated to
+  // whole seconds (see formatExpiryCanonical/signingPayload), but the
+  // expiry CHECK used to compare against the raw, untruncated millisecond
+  // value. A grant expiring at T+999ms was signed as if it expired at T,
+  // but verifyChain would still accept it up to 999ms past T — the
+  // enforced statement was looser than the signed one.
+  it('enforces the same truncated expiry it signed, not the raw sub-second value', () => {
+    const authority = genKey();
+    const base = FIXED_NOW;
+    const grant = { ...rootGrant(base), expiresAt: new Date(base + 999) };
+    const { token } = newRootBudgetToken(authority.privateKey, { grant });
+
+    // 500ms past `base`: before the RAW expiry (base+999ms), so the old
+    // buggy check would have accepted this — but it's already after the
+    // TRUNCATED expiry the signature actually committed to.
+    expect(() => verifyChain(token, authority.publicKey, base + 500)).toThrow(/expired/);
+
+    // At exactly `base` (the truncated/signed instant itself), it must
+    // still verify — not yet expired.
+    expect(() => verifyChain(token, authority.publicKey, base)).not.toThrow();
+  });
+
   it('signs and verifies a presentation with the correct holder', () => {
     const authority = genKey();
     // verifyPresentation defaults to real wall-clock time, so the grant must

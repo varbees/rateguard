@@ -18,6 +18,7 @@ fixed July 2026 — don't reintroduce it.)
 
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -213,6 +214,29 @@ def test_verify_chain_rejects_expired_token() -> None:
 
     with pytest.raises(ValueError, match="expired"):
         verify_chain(token, authority.public_key(), now=FIXED_NOW + timedelta(hours=2))
+
+
+def test_verify_chain_enforces_the_same_truncated_expiry_it_signed() -> None:
+    # Reproduces a real gap: the signature commits to expires_at truncated
+    # to whole seconds (see _format_expiry/signing_payload), but the expiry
+    # CHECK used to compare against the raw, untruncated microsecond value.
+    # A grant expiring at T+999999us was signed as if it expired at T, but
+    # verify_chain would still accept it up to ~1s past T — the enforced
+    # statement was looser than the signed one.
+    authority = Ed25519PrivateKey.generate()
+    base = FIXED_NOW
+    grant = dataclasses.replace(_root_grant(base), expires_at=base + timedelta(microseconds=999_999))
+    token, _ = new_root_budget_token(authority, grant)
+
+    # 500ms past `base`: before the RAW expiry (base+999999us), so the old
+    # buggy check would have accepted this — but it's already after the
+    # TRUNCATED expiry the signature actually committed to.
+    with pytest.raises(ValueError, match="expired"):
+        verify_chain(token, authority.public_key(), now=base + timedelta(milliseconds=500))
+
+    # At exactly `base` (the truncated/signed instant itself), it must
+    # still verify — not yet expired.
+    verify_chain(token, authority.public_key(), now=base)
 
 
 def test_sign_and_verify_presentation() -> None:
