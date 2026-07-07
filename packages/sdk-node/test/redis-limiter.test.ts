@@ -358,6 +358,13 @@ describe.skipIf(!redisReady || Boolean(process.env.CI))('RedisGCRALimiter agains
     expect(third.allowed).toBe(true);
     expect(fourth.allowed).toBe(false);
     expect(fourth.retryAfterMs).toBeGreaterThan(0);
+    // Regression guard for a real bug: the Lua script used to ceil to the
+    // nearest MILLISECOND, while the in-memory limiter ceils to the
+    // nearest whole SECOND (AGENTS.md rule 13) — switching a deployment
+    // from in-process to Redis silently changed deny behavior. Against a
+    // real Redis server (not a fake client), this must come back as a
+    // whole-second multiple.
+    expect(fourth.retryAfterMs % 1000).toBe(0);
 
     await limiter.reset(key);
     const afterReset = await limiter.increment(key, options, 1);
