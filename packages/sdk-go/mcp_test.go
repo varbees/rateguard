@@ -84,6 +84,7 @@ func TestMCPCheckLoop(t *testing.T) {
 		"system_prompt":  "you are a helpful agent",
 		"user_input":     "book the flight",
 		"sequence_depth": float64(1),
+		"record":         true,
 	}
 	result, err := sdk.mcpCheckLoop(args)
 	if err != nil {
@@ -104,6 +105,39 @@ func TestMCPCheckLoop(t *testing.T) {
 	}
 	if result["reason"] == nil {
 		t.Error("blocked check should include a reason")
+	}
+}
+
+// TestMCPCheckLoopDefaultsToPeekNotRecord reproduces a real gap: the tool's
+// own description says "Does not record the fingerprint unless 'record' is
+// true," but the handler defaulted 'record' to true when the field was
+// omitted — a caller trusting the tool's own docs and calling it as a bare
+// pre-flight check was silently mutating loop-detector state on every call
+// (AGENTS.md rule 5: pre-flight queries must never consume/record).
+func TestMCPCheckLoopDefaultsToPeekNotRecord(t *testing.T) {
+	sdk := New(Config{Preset: "dev"})
+
+	args := map[string]any{
+		"system_prompt":  "you are a helpful agent",
+		"user_input":     "book the flight",
+		"sequence_depth": float64(1),
+		// 'record' deliberately omitted — must behave as a passive peek.
+	}
+	if _, err := sdk.mcpCheckLoop(args); err != nil {
+		t.Fatalf("first bare check: unexpected error: %v", err)
+	}
+
+	// Same fingerprint at a deeper sequence depth: if the first call had
+	// been recorded (the bug), this trips "loop detected". Since the
+	// first call must NOT have recorded anything, this must still report
+	// allowed — nothing exists yet for this fingerprint to compare against.
+	args["sequence_depth"] = float64(3)
+	result, err := sdk.mcpCheckLoop(args)
+	if err != nil {
+		t.Fatalf("second bare check: unexpected error: %v", err)
+	}
+	if allowed, _ := result["allowed"].(bool); !allowed {
+		t.Fatalf("bare checks (no 'record') must never trip the loop detector, got %v", result)
 	}
 }
 

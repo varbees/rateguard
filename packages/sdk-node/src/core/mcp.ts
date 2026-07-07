@@ -225,7 +225,13 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector, 
       fingerprint = LoopDetector.fingerprint(systemPrompt, userInput, toolDefs);
     }
 
-    const record = typeof args.record === 'boolean' ? args.record : true;
+    // Defaults to false — a "check" tool is a pre-flight query (AGENTS.md
+    // rule 5: "Pre-flight queries never consume. Peek, never Allow"), and
+    // this tool's own description says exactly that ("Does not record...
+    // unless 'record' is true"). A caller that omits the field entirely
+    // must get the passive peek behavior its own docs promise, not a
+    // silent check that records/mutates state on their behalf.
+    const record = typeof args.record === 'boolean' ? args.record : false;
     const outcome = record ? detector.check(fingerprint, depth) : detector.peek(fingerprint, depth);
 
     const result: Record<string, unknown> = {
@@ -425,7 +431,7 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector, 
           user_input: { type: 'string', description: "User input to fingerprint (used when 'fingerprint' is absent)" },
           tool_definitions: { type: 'string', description: "Serialized tool definitions to fingerprint (used when 'fingerprint' is absent)" },
           sequence_depth: { type: 'integer', description: 'Current agent sequence depth (how many chained steps deep this call is)' },
-          record: { type: 'boolean', description: 'When true, record this fingerprint+depth so future checks can detect repeats. Defaults to true.' },
+          record: { type: 'boolean', description: 'When true, record this fingerprint+depth so future checks can detect repeats. Defaults to false — a bare check never mutates state.' },
         },
         required: ['sequence_depth'],
       },

@@ -117,7 +117,7 @@ describe('MCP tools', () => {
 
   it('check_loop blocks repeats at higher depth', async () => {
     const rg = new RateGuard({ preset: 'dev' });
-    const args = { system_prompt: 'agent', user_input: 'book flight', sequence_depth: 1 };
+    const args = { system_prompt: 'agent', user_input: 'book flight', sequence_depth: 1, record: true };
     const first = await rg.mcpCall('check_loop', args);
     expect(JSON.parse(first.content[0]!.text).allowed).toBe(true);
 
@@ -125,6 +125,26 @@ describe('MCP tools', () => {
     const parsed = JSON.parse(second.content[0]!.text) as { allowed: boolean; reason?: string };
     expect(parsed.allowed).toBe(false);
     expect(parsed.reason).toContain('loop detected');
+  });
+
+  // Reproduces a real gap: the tool's own description says "Does not
+  // record the fingerprint unless 'record' is true," but the handler
+  // defaulted 'record' to true when the field was omitted — a caller
+  // trusting the tool's own docs and calling it as a bare pre-flight check
+  // was silently mutating loop-detector state on every call (AGENTS.md
+  // rule 5: pre-flight queries must never consume/record).
+  it('check_loop defaults to peek (record omitted never mutates state)', async () => {
+    const rg = new RateGuard({ preset: 'dev' });
+    const args = { system_prompt: 'agent', user_input: 'book flight', sequence_depth: 1 };
+    await rg.mcpCall('check_loop', args); // record deliberately omitted
+
+    // Same fingerprint at a deeper sequence depth: if the first call had
+    // been recorded (the bug), this trips "loop detected". It must still
+    // report allowed — nothing exists yet for this fingerprint to compare
+    // against.
+    const second = await rg.mcpCall('check_loop', { ...args, sequence_depth: 4 });
+    const parsed = JSON.parse(second.content[0]!.text) as { allowed: boolean };
+    expect(parsed.allowed).toBe(true);
   });
 
   it('list_limits aggregates all state', async () => {

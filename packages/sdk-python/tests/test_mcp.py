@@ -193,7 +193,7 @@ def test_mcp_check_loop_blocks_repeat_at_higher_depth():
     import json
 
     rg = RateGuard(preset="dev")
-    args = {"system_prompt": "agent", "user_input": "book flight", "sequence_depth": 1}
+    args = {"system_prompt": "agent", "user_input": "book flight", "sequence_depth": 1, "record": True}
     first = json.loads(rg.mcp_call("check_loop", args).content[0]["text"])
     assert first["allowed"] is True
 
@@ -202,6 +202,29 @@ def test_mcp_check_loop_blocks_repeat_at_higher_depth():
     )
     assert second["allowed"] is False
     assert "loop detected" in second["reason"]
+
+
+def test_mcp_check_loop_defaults_to_peek_not_record():
+    """Reproduces a real gap: the tool's own description says "Does not
+    record the fingerprint unless 'record' is true," but the handler
+    defaulted 'record' to True when the field was omitted — a caller
+    trusting the tool's own docs and calling it as a bare pre-flight check
+    was silently mutating loop-detector state on every call (AGENTS.md
+    rule 5: pre-flight queries must never consume/record)."""
+    import json
+
+    rg = RateGuard(preset="dev")
+    args = {"system_prompt": "agent", "user_input": "book flight", "sequence_depth": 1}
+    rg.mcp_call("check_loop", args)  # 'record' deliberately omitted
+
+    # Same fingerprint at a deeper sequence depth: if the first call had
+    # been recorded (the bug), this trips "loop detected". It must still
+    # report allowed — nothing exists yet for this fingerprint to compare
+    # against.
+    second = json.loads(
+        rg.mcp_call("check_loop", {**args, "sequence_depth": 4}).content[0]["text"]
+    )
+    assert second["allowed"] is True
 
 
 def test_mcp_list_limits_aggregates_state():

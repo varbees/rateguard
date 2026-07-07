@@ -219,7 +219,14 @@ def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = N
                 raise ValueError("mcp: fingerprint or prompt fields are required")
             fingerprint = LoopDetector.fingerprint(system_prompt, user_input, tool_defs)
 
-        record = args.get("record", True)
+        # Defaults to False — a "check" tool is a pre-flight query
+        # (AGENTS.md rule 5: "Pre-flight queries never consume. Peek,
+        # never Allow"), and this tool's own description says exactly
+        # that ("Does not record... unless 'record' is true"). A caller
+        # that omits the field entirely must get the passive peek
+        # behavior its own docs promise, not a silent check that
+        # records/mutates state on their behalf.
+        record = args.get("record", False)
         if record:
             allowed, reason = detector.check(fingerprint, depth)
         else:
@@ -417,7 +424,7 @@ def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = N
                     "user_input": {"type": "string", "description": "User input to fingerprint (used when 'fingerprint' is absent)"},
                     "tool_definitions": {"type": "string", "description": "Serialized tool definitions to fingerprint (used when 'fingerprint' is absent)"},
                     "sequence_depth": {"type": "integer", "description": "Current agent sequence depth (how many chained steps deep this call is)"},
-                    "record": {"type": "boolean", "description": "When true, record this fingerprint+depth so future checks can detect repeats. Defaults to true."},
+                    "record": {"type": "boolean", "description": "When true, record this fingerprint+depth so future checks can detect repeats. Defaults to false — a bare check never mutates state."},
                 },
                 "required": ["sequence_depth"],
             },

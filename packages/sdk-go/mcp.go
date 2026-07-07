@@ -120,7 +120,7 @@ func (s *SDK) MCPTools() []MCPTool {
 					},
 					"record": map[string]any{
 						"type":        "boolean",
-						"description": "When true, record this fingerprint+depth so future checks can detect repeats. Defaults to true.",
+						"description": "When true, record this fingerprint+depth so future checks can detect repeats. Defaults to false — a bare check never mutates state.",
 					},
 				},
 				"required": []string{"sequence_depth"},
@@ -333,7 +333,13 @@ func (s *SDK) mcpCheckLoop(args map[string]any) (map[string]any, error) {
 		fingerprint = Fingerprint(systemPrompt, userInput, toolDefs)
 	}
 
-	record := true
+	// Defaults to false — a "check" tool is a pre-flight query (AGENTS.md
+	// rule 5: "Pre-flight queries never consume. Peek, never Allow"), and
+	// this tool's own description says exactly that ("Does not record...
+	// unless 'record' is true"). A caller that omits the field entirely
+	// must get the passive Peek behavior its own docs promise, not a
+	// silent Check that records/mutates state on their behalf.
+	record := false
 	if v, ok := args["record"].(bool); ok {
 		record = v
 	}
