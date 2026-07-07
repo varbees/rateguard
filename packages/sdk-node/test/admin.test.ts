@@ -59,6 +59,18 @@ describe('admin HTTP API', () => {
       expect(state, `missing section ${section}`).toHaveProperty(section);
     }
 
+    // Reproduces a real gap: list_limits's inline "preset" object only
+    // carried name/requests_per_second/burst — an agent calling this tool
+    // for initialization (its documented purpose) got an incomplete token
+    // budget picture, unlike Go's mcpListLimits.
+    const preset = state.preset as Record<string, unknown>;
+    for (const field of [
+      'name', 'requests_per_second', 'burst',
+      'token_budget_per_hour', 'token_budget_per_day', 'token_budget_per_month', 'token_budget_mode',
+    ]) {
+      expect(preset, `preset missing ${field}`).toHaveProperty(field);
+    }
+
     const withKey = await fetch(`${base}/admin/state?key=tenant-42`);
     const keyed = (await withKey.json()) as Record<string, unknown>;
     expect(keyed.key).toBe('tenant-42');
@@ -69,9 +81,14 @@ describe('admin HTTP API', () => {
     const guard = new RateGuard({ preset: 'dev', clock: { now: () => nowMs } });
     const base = await startAdmin(guard);
 
+    // Wire shape is snake_case — matching Go's json struct tags exactly,
+    // which is what the dashboard's Policy type (and any other consumer)
+    // actually reads. This used to be camelCase (PolicyPreset serialized
+    // directly), which silently broke every field on this endpoint.
     const before = (await (await fetch(`${base}/admin/policy`)).json()) as Record<string, unknown>;
-    expect(before.requestsPerSecond).toBe(10); // dev preset
+    expect(before.requests_per_second).toBe(10); // dev preset
     expect(before.burst).toBe(20);
+    expect(before).not.toHaveProperty('requestsPerSecond');
 
     const patchResponse = await fetch(`${base}/admin/policy`, {
       method: 'PATCH',
@@ -80,12 +97,12 @@ describe('admin HTTP API', () => {
     });
     expect(patchResponse.status).toBe(200);
     const updated = (await patchResponse.json()) as Record<string, unknown>;
-    expect(updated.requestsPerSecond).toBe(1);
+    expect(updated.requests_per_second).toBe(1);
     expect(updated.burst).toBe(1);
-    expect(updated.tokenBudgetMode).toBe('soft-stop');
+    expect(updated.token_budget_mode).toBe('soft-stop');
 
     const after = (await (await fetch(`${base}/admin/policy`)).json()) as Record<string, unknown>;
-    expect(after.requestsPerSecond).toBe(1);
+    expect(after.requests_per_second).toBe(1);
     expect(after.burst).toBe(1);
 
     // The wiring is real, not cosmetic: with burst patched from 20 down to 1
@@ -97,6 +114,20 @@ describe('admin HTTP API', () => {
     expect(second.allowed).toBe(false);
     expect(second.statusCode).toBe(429);
     void nowMs;
+  });
+
+  it('GET /admin/policy returns the full 17-field PolicyPreset shape, matching Go', async () => {
+    const base = await startAdmin(new RateGuard({ preset: 'standard' }));
+    const policy = (await (await fetch(`${base}/admin/policy`)).json()) as Record<string, unknown>;
+    for (const field of [
+      'name', 'requests_per_second', 'burst', 'max_apis', 'monthly_request_limit',
+      'max_requests_per_day', 'max_requests_per_month', 'max_tokens_per_month',
+      'token_budget_per_hour', 'token_budget_per_day', 'token_budget_per_month',
+      'token_budget_mode', 'advanced_analytics', 'priority_support',
+      'custom_rate_limits', 'webhooks', 'api_access', 'analytics_retention_days',
+    ]) {
+      expect(policy, `missing ${field}`).toHaveProperty(field);
+    }
   });
 
   it('PATCH /admin/policy rejects an unparseable body with 400', async () => {

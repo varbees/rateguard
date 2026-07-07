@@ -150,10 +150,43 @@ interface AdminPolicyPatch {
   token_budget_mode?: unknown;
 }
 
+/**
+ * Wire shape for GET/PATCH /admin/policy responses: PolicyPreset's fields,
+ * verbatim, in snake_case — matching Go's json struct tags exactly (Policy
+ * is a plain Go struct with `json:"snake_case"` tags, so Go's wire format
+ * was always snake_case; PolicyPreset here is camelCase, the idiomatic TS
+ * convention, so serializing it directly used to leak camelCase onto the
+ * wire). The dashboard's Policy type — and any other consumer of this
+ * endpoint — reads snake_case only; this was a real gap, not cosmetic:
+ * every field silently read as undefined.
+ */
+function serializePolicy(policy: PolicyPreset): Record<string, unknown> {
+  return {
+    name: policy.name,
+    requests_per_second: policy.requestsPerSecond,
+    burst: policy.burst,
+    max_apis: policy.maxApis,
+    monthly_request_limit: policy.monthlyRequestLimit,
+    max_requests_per_day: policy.maxRequestsPerDay,
+    max_requests_per_month: policy.maxRequestsPerMonth,
+    max_tokens_per_month: policy.maxTokensPerMonth,
+    token_budget_per_hour: policy.tokenBudgetPerHour,
+    token_budget_per_day: policy.tokenBudgetPerDay,
+    token_budget_per_month: policy.tokenBudgetPerMonth,
+    token_budget_mode: policy.tokenBudgetMode,
+    advanced_analytics: policy.advancedAnalytics,
+    priority_support: policy.prioritySupport,
+    custom_rate_limits: policy.customRateLimits,
+    webhooks: policy.webhooks,
+    api_access: policy.apiAccess,
+    analytics_retention_days: policy.analyticsRetentionDays,
+  };
+}
+
 async function handleAdminPolicy(guard: AdminHost, req: IncomingMessage, res: ServerResponse): Promise<void> {
   switch (req.method) {
     case 'GET':
-      writeAdminJSON(res, 200, guard.policy());
+      writeAdminJSON(res, 200, serializePolicy(guard.policy()));
       return;
     case 'PATCH': {
       let patch: AdminPolicyPatch;
@@ -175,7 +208,7 @@ async function handleAdminPolicy(guard: AdminHost, req: IncomingMessage, res: Se
       const perMonth = numberOrUndefined(patch.token_budget_per_month);
       if (perMonth !== undefined) update.tokenBudgetPerMonth = perMonth;
       if (typeof patch.token_budget_mode === 'string') update.tokenBudgetMode = patch.token_budget_mode;
-      writeAdminJSON(res, 200, guard.setPolicy(update));
+      writeAdminJSON(res, 200, serializePolicy(guard.setPolicy(update)));
       return;
     }
     default:
