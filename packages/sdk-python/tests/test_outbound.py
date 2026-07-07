@@ -181,6 +181,41 @@ def test_outbound_provider_fallback():
     assert seen[1]["model"] == "deepseek-chat"
 
 
+def test_outbound_fallback_strips_azure_api_key():
+    """Reproduces a real credential-leak bug: Azure OpenAI authenticates
+    via a bare "api-key" header (not "authorization" or "x-api-key"),
+    which retarget's credential-stripping list previously missed
+    entirely. Failing over from Azure to another provider that doesn't
+    set its own api-key header used to forward the Azure key verbatim."""
+    seen: list[dict] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content or b"{}")
+        seen.append({"url": str(request.url), "api_key": request.headers.get("api-key"), "model": body.get("model", "")})
+        if body.get("model") == "deepseek-chat":
+            return httpx.Response(200, json=openai_body("deepseek-chat", 10, 5))
+        return httpx.Response(429, json={"error": {"message": "rate limited"}})
+
+    rg = RateGuard(preset="dev")
+    # Deliberately no headers on the fallback target — the only way this
+    # test can fail is if the primary's Azure key leaks through uncleaned.
+    client = make_client(
+        rg,
+        handler,
+        chain=[FallbackProvider(name="deepseek", base_url="https://api.deepseek.com/v1", model="deepseek-chat")],
+    )
+
+    resp = client.post(
+        "https://myres.openai.azure.com/openai/deployments/gpt4o/chat/completions",
+        json={"model": "gpt-4o", "messages": []},
+        headers={"api-key": "azure-secret-key"},
+    )
+
+    assert resp.status_code == 200
+    assert len(seen) == 2
+    assert seen[1]["api_key"] is None
+
+
 def test_outbound_passthrough_non_llm():
     calls = []
 

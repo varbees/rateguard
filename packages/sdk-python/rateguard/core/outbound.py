@@ -494,9 +494,16 @@ def create_httpx_transport(
         def _retarget(self, request: Any, body: bytes, call: OutboundCall, target: FallbackProvider, depth: int) -> Any:
             url, new_body = core.retarget_url_and_body(target, call, body)
             headers = dict(request.headers)
-            # Provider credentials never transfer across providers.
+            # Provider credentials never transfer across providers. Strip
+            # every known provider auth header convention, not just
+            # authorization/x-api-key — Azure OpenAI authenticates via a
+            # bare "api-key" header, which this list previously missed
+            # entirely, leaking the Azure key to whichever provider was
+            # failed over to.
             headers.pop("authorization", None)
             headers.pop("x-api-key", None)
+            headers.pop("api-key", None)
+            headers.pop("x-goog-api-key", None)
             headers.pop("content-length", None)
             headers.update(target.headers)
             headers["x-rateguard-fallback-from"] = call.provider
@@ -729,9 +736,16 @@ def create_httpx_async_transport(
         async def _retarget(self, request: Any, body: bytes, call: OutboundCall, target: FallbackProvider, depth: int) -> Any:
             url, new_body = core.retarget_url_and_body(target, call, body)
             headers = dict(request.headers)
-            # Provider credentials never transfer across providers.
+            # Provider credentials never transfer across providers. Strip
+            # every known provider auth header convention, not just
+            # authorization/x-api-key — Azure OpenAI authenticates via a
+            # bare "api-key" header, which this list previously missed
+            # entirely, leaking the Azure key to whichever provider was
+            # failed over to.
             headers.pop("authorization", None)
             headers.pop("x-api-key", None)
+            headers.pop("api-key", None)
+            headers.pop("x-goog-api-key", None)
             headers.pop("content-length", None)
             headers.update(target.headers)
             headers["x-rateguard-fallback-from"] = call.provider
