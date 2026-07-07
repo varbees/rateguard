@@ -125,18 +125,23 @@ _ = rg.ServeMCP(ctx, os.Stdin, os.Stdout)`,
           },
           {
             label: "Node.js",
-            code: `const rg = new RateGuard({ preset: 'agent-orchestrator' });
-const tools = rg.mcpTools(); // register in your MCP server framework`,
+            code: `// Zero-dependency MCP stdio server (JSON-RPC 2.0)
+const rg = new RateGuard({ preset: 'agent-orchestrator' });
+await serveMCP(rg);`,
           },
           {
             label: "Python",
-            code: `rg = RateGuard(preset="agent-orchestrator")
-tools = rg.mcp_tools()  # register in your MCP server framework`,
+            code: `# Zero-dependency MCP stdio server (JSON-RPC 2.0)
+rg = RateGuard(preset="agent-orchestrator")
+serve_mcp(rg)`,
           },
         ]}
       />
       <P>
-        Then point Claude Code, Claude Desktop, or Cursor at it — full walkthrough in{" "}
+        Point Claude Code, Claude Desktop, or Cursor straight at that — every language ships its
+        own stdio server, no MCP framework required. Prefer to wire the tool definitions into a
+        framework you already run instead? <code>rg.mcpTools()</code> /{" "}
+        <code>rg.mcp_tools()</code> return them directly. Full walkthrough in{" "}
         <Link href="/docs/agents-mcp">Agents &amp; MCP</Link>.
       </P>
       <DocsPager slug="quickstart" />

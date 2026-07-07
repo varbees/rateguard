@@ -71,7 +71,7 @@ const features = [
   },
   {
     title: "One algorithm, three runtimes",
-    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 533 tests — including shared conformance suites that replay identical admission sequences across all three — hold them to real behavioral parity, not just similar APIs.",
+    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 536 tests — including shared conformance suites that replay identical admission sequences across all three — hold them to real behavioral parity, not just similar APIs.",
     micro: <MicroParity />,
   },
   {
@@ -213,7 +213,7 @@ export default function Page() {
             <Link href="/docs/dashboard">
               <FeatureCard
                 title="Dashboard — a control center for a running instance"
-                desc="Self-hosted, six sections: live budgets, breakers, agent loop stats, guardrail violations, an MCP tool console, and runtime policy tweaks. docker compose up, one instance already generating traffic."
+                desc="Self-hosted, six sections: live budgets, breakers, agent loop stats, guardrail violations, an MCP tool console, and runtime policy tweaks. Same dashboard, any of the 3 languages — docker compose up (Go), --profile node-demo, or --profile python-demo, each already generating traffic."
                 micro={<MicroDashboard />}
               />
             </Link>
@@ -224,7 +224,7 @@ export default function Page() {
       {/* Stats */}
       <section className="mx-auto max-w-3xl px-6 pb-32">
         <Reveal className="grid grid-cols-2 sm:grid-cols-4 gap-8 rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
-          <StatCounter value={533} label="Tests" />
+          <StatCounter value={536} label="Tests" />
           <StatCounter value={20} label="Providers" />
           <StatCounter value={3} label="Languages" />
           <div className="text-center">
