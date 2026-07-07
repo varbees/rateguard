@@ -3,6 +3,7 @@ package rateguard
 import (
 	"fmt"
 	"net/http"
+	"runtime/debug"
 	"sync/atomic"
 )
 
@@ -83,8 +84,32 @@ func promGauge(w http.ResponseWriter, name string, value int, labels ...string) 
 	}
 }
 
-// Version is set at build time via -ldflags. Defaults to "dev".
-var Version = "dev"
+// Version identifies this build of the SDK for the rateguard_sdk_info
+// metric. Overridable via -ldflags for callers building RateGuard itself
+// from source; for the common case (RateGuard as an imported dependency)
+// it's derived automatically from the Go module version the importer's
+// own go.mod pinned, via runtime/debug.ReadBuildInfo — a library has no
+// build step of its own for a consumer to pass -ldflags to, so relying on
+// that alone left every real user's metrics permanently reporting
+// version="dev" regardless of which release they were actually on.
+var Version = detectModuleVersion()
+
+func detectModuleVersion() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "dev"
+	}
+	const modulePath = "github.com/varbees/rateguard/packages/sdk-go"
+	if info.Main.Path == modulePath && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	for _, dep := range info.Deps {
+		if dep.Path == modulePath && dep.Version != "" && dep.Version != "(devel)" {
+			return dep.Version
+		}
+	}
+	return "dev"
+}
 
 // Atomic trackers (increment from middleware hot path)
 type atomicMetrics struct {

@@ -104,7 +104,7 @@ func (e *HTTPEventEmitter) Emit(ctx context.Context, event EventEnvelope) error 
 		return fmt.Errorf("build event request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "RateGuard-Go-SDK/0.1")
+	req.Header.Set("User-Agent", "RateGuard-Go-SDK/"+Version)
 
 	resp, err := e.client.Do(req)
 	if err != nil {
