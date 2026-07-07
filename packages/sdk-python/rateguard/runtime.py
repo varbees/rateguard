@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from inspect import isawaitable
 from threading import Lock
 from typing import Awaitable, cast
@@ -123,19 +124,25 @@ class RateGuardRuntime:
 
     def get_policy(self) -> dict[str, object]:
         """Return the current effective policy — mirrors Go's SDK.Policy().
+        Full PolicyPreset shape (all 17 fields), not just the 6 fields
+        set_policy can patch: this used to return a hand-picked 7-field
+        subset, silently dropping max_apis/monthly_request_limit/
+        advanced_analytics/etc. — a real gap against Go's Policy(), which
+        serializes the whole struct. The 6 patchable fields come from the
+        live rate_limit/token_budget sub-configs (which set_policy actually
+        mutates); everything else comes from the static preset snapshot.
         Safe to call concurrently with set_policy and with request handling
         (Python's GIL serializes the dict reads/writes below; there is no
         separate lock the way Go's sdk.go uses policyMu, since nothing here
         does more than one attribute access at a time)."""
-        return {
-            "name": self.config.preset.name,
-            "requests_per_second": self.config.rate_limit.requests_per_second,
-            "burst": self.config.rate_limit.burst,
-            "token_budget_per_hour": self.config.token_budget.hour_limit,
-            "token_budget_per_day": self.config.token_budget.day_limit,
-            "token_budget_per_month": self.config.token_budget.month_limit,
-            "token_budget_mode": self.config.token_budget.mode,
-        }
+        result: dict[str, object] = dataclasses.asdict(self.config.preset)
+        result["requests_per_second"] = self.config.rate_limit.requests_per_second
+        result["burst"] = self.config.rate_limit.burst
+        result["token_budget_per_hour"] = self.config.token_budget.hour_limit
+        result["token_budget_per_day"] = self.config.token_budget.day_limit
+        result["token_budget_per_month"] = self.config.token_budget.month_limit
+        result["token_budget_mode"] = self.config.token_budget.mode
+        return result
 
     def set_policy(self, patch: dict[str, object]) -> dict[str, object]:
         """Apply a partial override on top of the current policy and return
@@ -164,6 +171,12 @@ class RateGuardRuntime:
             month_limit = patch.get("token_budget_per_month")
             if month_limit is not None:
                 self.config.token_budget.month_limit = int(month_limit)  # type: ignore[call-overload]
+                # Kept in sync the same way Go's SetPolicy and Node's
+                # setPolicy do — max_tokens_per_month is a legacy alias for
+                # the same limit, and it's part of the full policy shape
+                # get_policy now returns; letting it go stale here would
+                # reintroduce a cross-language mismatch on PATCH.
+                self.config.preset.max_tokens_per_month = int(month_limit)  # type: ignore[call-overload]
             mode = patch.get("token_budget_mode")
             if mode is not None:
                 from .config import normalize_token_budget_mode

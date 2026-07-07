@@ -91,6 +91,34 @@ async def test_admin_policy_get_patch_roundtrip_affects_admission() -> None:
 
 
 @pytest.mark.asyncio
+async def test_admin_policy_returns_full_policy_shape_matching_go() -> None:
+    """Reproduces a real gap: GET /admin/policy used to hand-pick only 7 of
+    PolicyPreset's 17 fields (missing max_apis, advanced_analytics, and 9
+    others), while Go's SDK.Policy() serializes the whole struct — a
+    dashboard or any other consumer reading the full policy from Python got
+    a silently incomplete object Go's own admin API never produces."""
+    guard = _guard(rate_limit=RateLimitOptions(requests_per_second=100, burst=100))
+    async with _client(guard) as client:
+        res = await client.get("/admin/policy")
+        assert res.status_code == 200
+        policy = res.json()
+        for field in (
+            "name", "requests_per_second", "burst", "max_apis", "monthly_request_limit",
+            "max_requests_per_day", "max_requests_per_month", "max_tokens_per_month",
+            "token_budget_per_hour", "token_budget_per_day", "token_budget_per_month",
+            "token_budget_mode", "advanced_analytics", "priority_support",
+            "custom_rate_limits", "webhooks", "api_access", "analytics_retention_days",
+        ):
+            assert field in policy, f"GET /admin/policy missing {field!r}, want parity with Go's full PolicyPreset"
+
+        # max_tokens_per_month is a legacy alias for token_budget_per_month —
+        # Go and Node both keep it in sync on PATCH; Python didn't.
+        patched = await client.patch("/admin/policy", json={"token_budget_per_month": 5_000_000})
+        assert patched.json()["token_budget_per_month"] == 5_000_000
+        assert patched.json()["max_tokens_per_month"] == 5_000_000
+
+
+@pytest.mark.asyncio
 async def test_admin_policy_rejects_bad_json_and_bad_types() -> None:
     guard = _guard()
     async with _client(guard) as client:

@@ -238,6 +238,30 @@ def test_mcp_list_limits_aggregates_state():
     assert "loop_detector" in result
 
 
+def test_mcp_list_limits_preset_matches_go_shape():
+    """Reproduces a real cross-language gap: list_limits's inline "preset"
+    object only carried name/requests_per_second/burst — missing all 4
+    token-budget fields Go's mcpListLimits includes. An agent calling
+    list_limits for initialization (the tool's documented purpose) got an
+    incomplete picture of its own token budget in Python (and Node, fixed
+    identically) while Go's response was complete."""
+    import json
+
+    rg = RateGuard(preset="dev")
+    result = json.loads(rg.mcp_call("list_limits", {"key": "agent-1"}).content[0]["text"])
+    preset = result["preset"]
+    for field in (
+        "name",
+        "requests_per_second",
+        "burst",
+        "token_budget_per_hour",
+        "token_budget_per_day",
+        "token_budget_per_month",
+        "token_budget_mode",
+    ):
+        assert field in preset, f"list_limits preset missing {field!r}, want parity with Go's mcpListLimits"
+
+
 def test_mcp_unknown_tool_raises():
     rg = RateGuard(preset="dev")
     try:
