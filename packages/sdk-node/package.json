@@ -87,9 +87,6 @@
       "optional": true
     }
   },
-  "dependencies": {
-    "lru-cache": "^11.0.0"
-  },
   "devDependencies": {
     "@types/node": "^20.19.26",
     "ioredis": "^5.11.1",

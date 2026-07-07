@@ -1,23 +1,32 @@
-import { LRUCache } from 'lru-cache';
-
 /**
- * Small wrapper around an LRU cache for hot-path state.
+ * Small LRU cache for hot-path state — zero dependencies, stdlib only.
+ * Mirrors Go's bounded_cache.go and Python's core/bounded_cache.py: a
+ * `Map` already preserves insertion order, so re-inserting a key (delete
+ * then set) moves it to the most-recently-used end. get() and getOrCreate()
+ * both refresh recency on a hit, matching the other two SDKs.
  */
 export class BoundedCache<K extends {}, V extends {}> {
-  private readonly cache: LRUCache<K, V>;
+  private readonly cache = new Map<K, V>();
+  private readonly max: number;
 
   constructor(max: number) {
-    this.cache = new LRUCache<K, V>({
-      max: max > 0 ? max : 1,
-    });
+    this.max = max > 0 ? max : 1;
   }
 
   get(key: K): V | undefined {
-    return this.cache.get(key);
+    const value = this.cache.get(key);
+    if (value === undefined) {
+      return undefined;
+    }
+    this.cache.delete(key);
+    this.cache.set(key, value);
+    return value;
   }
 
   set(key: K, value: V): void {
+    this.cache.delete(key);
     this.cache.set(key, value);
+    this.evictIfNeeded();
   }
 
   delete(key: K): boolean {
@@ -36,21 +45,31 @@ export class BoundedCache<K extends {}, V extends {}> {
     return this.cache.size;
   }
 
-  values(): Generator<V> {
-    return this.cache.values() as Generator<V>;
+  values(): IterableIterator<V> {
+    return this.cache.values();
   }
 
   /**
    * Retrieve a value or initialize it once.
    */
   getOrCreate(key: K, factory: () => V): V {
-    const existing = this.cache.get(key);
+    const existing = this.get(key);
     if (existing !== undefined) {
       return existing;
     }
 
     const value = factory();
-    this.cache.set(key, value);
+    this.set(key, value);
     return value;
+  }
+
+  private evictIfNeeded(): void {
+    while (this.cache.size > this.max) {
+      const oldest = this.cache.keys().next();
+      if (oldest.done) {
+        break;
+      }
+      this.cache.delete(oldest.value);
+    }
   }
 }
