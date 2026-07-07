@@ -169,6 +169,28 @@ func (b *circuitBreaker) RecordOutcome(success bool) CircuitBreakerDecision {
 	return decision
 }
 
+// ReleaseProbe clears an in-flight half-open probe WITHOUT recording a
+// success or failure outcome. Use this when a request that Allow() granted
+// the probe slot to never actually reached upstream — denied instead by an
+// earlier, unrelated gate (rate limit, guardrail, token budget). That
+// request tested nothing about upstream health, so counting it as either a
+// success or a failure via RecordOutcome would corrupt the breaker's
+// signal. Without this, the probe slot leaks forever: Allow() never grants
+// another one while probeInFlight is stuck true, so the breaker is wedged
+// in half-open, denying every request, until the process restarts.
+func (b *circuitBreaker) ReleaseProbe() {
+	if b == nil || b.disabled {
+		return
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.state == CircuitBreakerHalfOpen {
+		b.probeInFlight = false
+	}
+}
+
 func (b *circuitBreaker) State() CircuitBreakerState {
 	if b == nil || b.disabled {
 		return CircuitBreakerClosed

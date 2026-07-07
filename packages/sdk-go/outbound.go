@@ -282,6 +282,19 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 				fmt.Sprintf("rateguard: circuit open for provider %s", call.Provider), breakerDecision.RetryAfter), nil
 		}
 	}
+	// A half-open probe grant must be released if the rate limit or token
+	// budget check below denies the request before it ever reaches
+	// upstream — otherwise the probe slot leaks and this provider's
+	// breaker wedges in half-open forever (see circuitBreaker.ReleaseProbe).
+	// probeConsumed is set true right before the actual RoundTrip.
+	probeConsumed := false
+	if breakerDecision.ProbeInFlight {
+		defer func() {
+			if !probeConsumed {
+				breaker.ReleaseProbe()
+			}
+		}()
+	}
 
 	// Outbound request rate limit, scoped per provider.
 	if !t.opts.DisableRateLimit && !s.cfg.DisableRateLimit {

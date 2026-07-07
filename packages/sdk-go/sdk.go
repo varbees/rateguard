@@ -236,6 +236,20 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 	key := s.admissionKey(r)
 	traceCtx := traceContextFromHeaders(r.Header)
 	breakerDecision := s.breaker.Allow()
+	// A half-open probe grant must be released if any later gate (rate
+	// limit, guardrail, token budget) denies the request before it reaches
+	// upstream — otherwise the probe slot leaks and the breaker wedges in
+	// half-open forever (see circuitBreaker.ReleaseProbe). probeConsumed is
+	// set true right before next.ServeHTTP; every other exit path falls
+	// through to this defer, including any added later.
+	probeConsumed := false
+	if breakerDecision.ProbeInFlight {
+		defer func() {
+			if !probeConsumed {
+				s.breaker.ReleaseProbe()
+			}
+		}()
+	}
 	attrs := requestAttributes(
 		s.tenantID(),
 		s.routeID(r),
@@ -303,6 +317,7 @@ func (s *SDK) handleHTTP(w http.ResponseWriter, r *http.Request, next http.Handl
 		maxBody = defaultMaxBufferedResponseBytes
 	}
 	recorder := &responseRecorder{ResponseWriter: w, maxBody: maxBody}
+	probeConsumed = true
 	next.ServeHTTP(recorder, r)
 	snapshot := recorder.snapshot()
 
