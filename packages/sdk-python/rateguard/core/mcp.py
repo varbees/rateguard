@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from threading import RLock
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -233,6 +234,100 @@ def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = N
             result["reason"] = reason
         return result
 
+    def attest_budget(args: dict[str, Any]) -> dict[str, Any]:
+        import base64
+
+        from .budget_attestation import BudgetGrant, attest as attest_fn, new_root_budget_token, parse_budget_token, private_key_from_raw, private_key_to_raw
+
+        signing_key_b64 = args.get("signing_key")
+        if not isinstance(signing_key_b64, str) or not signing_key_b64:
+            raise ValueError("mcp: signing_key is required")
+        signing_key = private_key_from_raw(base64.b64decode(signing_key_b64))
+
+        expires_in_seconds = args.get("expires_in_seconds")
+        if not isinstance(expires_in_seconds, (int, float)) or expires_in_seconds <= 0:
+            raise ValueError("mcp: expires_in_seconds is required and must be positive")
+
+        providers = args.get("providers")
+        models = args.get("models")
+        expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)
+        grant = BudgetGrant(
+            max_tokens=int(args.get("max_tokens") or 0),
+            providers=[p for p in providers if isinstance(p, str)] if isinstance(providers, list) else [],
+            models=[m for m in models if isinstance(m, str)] if isinstance(models, list) else [],
+            max_depth=int(args.get("max_depth") or 0),
+            expires_at=expires_at,
+        )
+
+        delegate_public_key_b64 = args.get("delegate_public_key")
+        delegate_public_key = base64.b64decode(delegate_public_key_b64) if isinstance(delegate_public_key_b64, str) and delegate_public_key_b64 else None
+
+        parent_token_str = args.get("parent_token")
+        try:
+            if isinstance(parent_token_str, str) and parent_token_str:
+                token, delegate_private_key = attest_fn(parse_budget_token(parent_token_str), signing_key, grant, delegate_public_key)
+            else:
+                token, delegate_private_key = new_root_budget_token(signing_key, grant, delegate_public_key)
+        except ValueError as exc:
+            return {"error": str(exc)}
+
+        last_block = token.blocks[-1]
+        result: dict[str, Any] = {
+            "token": token.marshal(),
+            "delegate_public_key": base64.b64encode(last_block.delegate_public_key).decode("ascii"),
+            "max_tokens": grant.max_tokens,
+            "max_depth": grant.max_depth,
+            "expires_at": expires_at.isoformat(),
+            "depth": len(token.blocks),
+        }
+        if delegate_private_key is not None:
+            result["delegate_private_key"] = base64.b64encode(private_key_to_raw(delegate_private_key)).decode("ascii")
+        return result
+
+    def verify_budget(args: dict[str, Any]) -> dict[str, Any]:
+        import base64
+
+        from .budget_attestation import parse_budget_token, verify_chain, verify_presentation
+
+        token_str = args.get("token")
+        if not isinstance(token_str, str) or not token_str:
+            raise ValueError("mcp: token is required")
+        root_public_key_b64 = args.get("root_public_key")
+        if not isinstance(root_public_key_b64, str) or not root_public_key_b64:
+            raise ValueError("mcp: root_public_key is required")
+        root_public_key = base64.b64decode(root_public_key_b64)
+
+        try:
+            token = parse_budget_token(token_str)
+        except ValueError as exc:
+            return {"valid": False, "error": str(exc)}
+
+        context_str = args.get("context")
+        signature_b64 = args.get("signature")
+        proof_verified = False
+
+        try:
+            if isinstance(context_str, str) and context_str and isinstance(signature_b64, str) and signature_b64:
+                grant = verify_presentation(token, root_public_key, context_str.encode("utf-8"), base64.b64decode(signature_b64))
+                proof_verified = True
+            else:
+                grant = verify_chain(token, root_public_key)
+        except ValueError as exc:
+            return {"valid": False, "error": str(exc)}
+
+        return {
+            "valid": True,
+            "proof_of_possession_verified": proof_verified,
+            "depth": len(token.blocks),
+            "effective_grant": {
+                "max_tokens": grant.max_tokens,
+                "providers": grant.providers or [],
+                "models": grant.models or [],
+                "max_depth": grant.max_depth,
+                "expires_at": grant.expires_at.isoformat() if grant.expires_at else None,
+            },
+        }
+
     def list_limits(args: dict[str, Any]) -> dict[str, Any]:
         key = args.get("key")
         if not isinstance(key, str) or not key:
@@ -340,6 +435,86 @@ def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = N
                 "required": ["key"],
             },
             handler=list_limits,
+        ),
+        MCPTool(
+            name="attest_budget",
+            description=(
+                "Mint or delegate a cryptographic budget token an agent can hand to a sub-agent it invokes. "
+                "Omit parent_token to mint a new root token (signing_key becomes the trust anchor verifiers "
+                "must already know). Pass parent_token to delegate further — the new grant must narrow the "
+                "parent's (less budget, fewer providers/models, less delegation depth, an earlier expiry); "
+                "signing_key must be the private key matching parent_token's current holder."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "signing_key": {
+                        "type": "string",
+                        "description": "Base64 Ed25519 private key: the root authority key when minting (parent_token absent), or the current holder's key when delegating (parent_token present)",
+                    },
+                    "parent_token": {
+                        "type": "string",
+                        "description": "Existing serialized budget token to delegate from. Omit to mint a new root token.",
+                    },
+                    "delegate_public_key": {
+                        "type": "string",
+                        "description": "Base64 Ed25519 public key of the recipient, if it already generated its own keypair (recommended — its private key never transits through this call). Omit to have RateGuard generate a fresh keypair and return the private key.",
+                    },
+                    "max_tokens": {
+                        "type": "integer",
+                        "description": "Token budget for this grant. <= 0 means unlimited, but only if the parent grant is also unlimited.",
+                    },
+                    "providers": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Restrict to these LLM providers. Omit for 'any provider', but only if the parent grant also allows any.",
+                    },
+                    "models": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Restrict to these models, same rule as providers.",
+                    },
+                    "max_depth": {
+                        "type": "integer",
+                        "description": "How many further delegations this grant allows (0 = recipient may use it but not delegate further).",
+                    },
+                    "expires_in_seconds": {
+                        "type": "integer",
+                        "description": "Grant lifetime from now, in seconds. Required — budget tokens must expire.",
+                    },
+                },
+                "required": ["signing_key", "max_depth", "expires_in_seconds"],
+            },
+            handler=attest_budget,
+        ),
+        MCPTool(
+            name="verify_budget",
+            description=(
+                "Verify a budget token before honoring it. Always checks the signature chain, that every "
+                "delegation narrowed its parent, and that nothing has expired. Pass context+signature for a "
+                "full authorization check (proof that the presenter actually holds the token, not just read "
+                "it) — without them this only confirms the token's terms are well-formed, not who is presenting it."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "token": {"type": "string", "description": "Serialized budget token to verify"},
+                    "root_public_key": {
+                        "type": "string",
+                        "description": "Base64 Ed25519 public key of the trusted root authority (known out-of-band, like a CA root certificate)",
+                    },
+                    "context": {
+                        "type": "string",
+                        "description": "Challenge/context the presenter should have signed with their holder key, for proof-of-possession",
+                    },
+                    "signature": {
+                        "type": "string",
+                        "description": "Base64 signature over 'context', produced by the token holder's private key (rateguard sign()) — proves the presenter, not just a token they saw, holds the delegation",
+                    },
+                },
+                "required": ["token", "root_public_key"],
+            },
+            handler=verify_budget,
         ),
     ]
 

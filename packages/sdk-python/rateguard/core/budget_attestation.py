@@ -53,7 +53,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from types import ModuleType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -81,6 +81,26 @@ def _public_bytes(key: "PublicKeyLike") -> bytes:
 
 def _private_public_bytes(private_key: "Ed25519PrivateKey") -> bytes:
     return private_key.public_key().public_bytes_raw()
+
+
+def private_key_from_raw(raw: bytes) -> "Ed25519PrivateKey":
+    """Reconstructs an Ed25519 private key from raw bytes. Accepts either a
+    bare 32-byte seed or Go's 64-byte ed25519.PrivateKey convention (seed +
+    public key concatenated) — only the seed (first 32 bytes) is used.
+    Exported for MCP tool handlers, which receive keys as base64 strings
+    over the wire, not key objects."""
+    if len(raw) not in (32, 64):
+        raise ValueError("rateguard: budget attestation requires a 32-byte seed or 64-byte Ed25519 private key")
+    ed25519 = _ed25519()
+    return cast("Ed25519PrivateKey", ed25519.Ed25519PrivateKey.from_private_bytes(raw[:32]))
+
+
+def private_key_to_raw(key: "Ed25519PrivateKey") -> bytes:
+    """Encodes an Ed25519 private key as Go's 64-byte ed25519.PrivateKey
+    convention (seed + public key concatenated) — the interoperable wire
+    format, so a key minted by one language's MCP tool works when handed
+    to another's."""
+    return key.private_bytes_raw() + _private_public_bytes(key)
 
 
 def _verify_signature(public_raw: bytes, payload: bytes, signature: bytes) -> bool:

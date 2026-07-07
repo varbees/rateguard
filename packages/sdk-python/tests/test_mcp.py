@@ -80,21 +80,104 @@ class TestLoopDetector:
         assert allowed is True
 
 
-# ── MCP tools (parity with Go's mcp.go: 5 tools) ──
+# ── MCP tools (parity with Go's mcp.go: 7 tools) ──
 
 from rateguard import RateGuard, create_mcp_tools, mcp_call
 
 
-def test_mcp_tools_expose_five_tools_matching_go():
+def test_mcp_tools_expose_all_seven_tools_matching_go():
     rg = RateGuard(preset="dev")
     names = sorted(tool.name for tool in rg.mcp_tools())
     assert names == [
+        "attest_budget",
         "check_loop",
         "get_circuit_breaker_state",
         "get_rate_limit_state",
         "get_token_budget",
         "list_limits",
+        "verify_budget",
     ]
+
+
+def test_mcp_attest_budget_mints_root_token_verify_budget_validates_end_to_end():
+    import json
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from rateguard import private_key_to_raw
+    from rateguard.core.budget_attestation import _private_public_bytes
+
+    rg = RateGuard(preset="dev")
+    authority = Ed25519PrivateKey.generate()
+
+    minted = json.loads(
+        rg.mcp_call(
+            "attest_budget",
+            {
+                "signing_key": base64_encode(private_key_to_raw(authority)),
+                "max_tokens": 10_000,
+                "providers": ["openai"],
+                "max_depth": 1,
+                "expires_in_seconds": 3_600,
+            },
+        ).content[0]["text"]
+    )
+    assert minted["token"]
+    assert minted["delegate_private_key"]
+
+    verified = json.loads(
+        rg.mcp_call(
+            "verify_budget",
+            {
+                "token": minted["token"],
+                "root_public_key": base64_encode(_private_public_bytes(authority)),
+            },
+        ).content[0]["text"]
+    )
+    assert verified["valid"] is True
+    assert verified["proof_of_possession_verified"] is False
+    assert verified["effective_grant"]["max_tokens"] == 10_000
+    assert verified["effective_grant"]["providers"] == ["openai"]
+
+
+def test_mcp_verify_budget_rejects_wrong_root_key():
+    import json
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from rateguard import private_key_to_raw
+    from rateguard.core.budget_attestation import _private_public_bytes
+
+    rg = RateGuard(preset="dev")
+    authority = Ed25519PrivateKey.generate()
+    impostor = Ed25519PrivateKey.generate()
+
+    minted = json.loads(
+        rg.mcp_call(
+            "attest_budget",
+            {
+                "signing_key": base64_encode(private_key_to_raw(authority)),
+                "max_tokens": 1_000,
+                "max_depth": 0,
+                "expires_in_seconds": 3_600,
+            },
+        ).content[0]["text"]
+    )
+
+    verified = json.loads(
+        rg.mcp_call(
+            "verify_budget",
+            {"token": minted["token"], "root_public_key": base64_encode(_private_public_bytes(impostor))},
+        ).content[0]["text"]
+    )
+    assert verified["valid"] is False
+    assert verified.get("error")
+
+
+def base64_encode(raw: bytes) -> str:
+    import base64
+
+    return base64.b64encode(raw).decode("ascii")
 
 
 def test_mcp_get_rate_limit_state_does_not_consume():
