@@ -64,7 +64,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Framework integration recipes (INTEGRATIONS.md, doc-verified) | ✅ | ✅ | ✅ | `INTEGRATIONS.md` |
 | Admin API — state/policy/MCP-tool-call over HTTP (opt-in, unauthenticated by design — bind privately; CORS same-origin-only by default, configurable single origin, never a wildcard) | ✅ | ✅ | ✅ | `admin.go` |
 | Guardrail violation tracking (bounded log + counts by code + Prometheus counter) | ✅ | ✅ | ✅ | `guardrail_log.go` |
-| Dashboard control center (`packages/dashboard`: Overview/Analytics/Agents/Controls/MCP Console/Settings, `docker compose up` demo) | ✅ (via Go admin API) | ❌ | ❌ | `packages/dashboard/` |
+| Dashboard control center (`packages/dashboard`: Overview/Analytics/Agents/Controls/MCP Console/Settings; `docker compose up` / `--profile node-demo` / `--profile python-demo`, each demo run end-to-end through the real dashboard) | ✅ | ✅ | ✅ | `packages/dashboard/` |
 
 ## 8 Presets
 
@@ -87,10 +87,10 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 # Go tests (160 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (177 passing)
+# Node tests (178 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (196 passing)
+# Python tests (198 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Python strict typecheck (mypy --strict passes clean on all 39 source files)

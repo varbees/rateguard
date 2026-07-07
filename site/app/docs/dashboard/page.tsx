@@ -30,8 +30,25 @@ export default function DashboardPage() {
 # open http://localhost:3001`}
       />
       <P>
+        That brings up the Go demo. Node and Python have their own demo stacks too — same dashboard,
+        same routes, different backend — each behind its own opt-in profile:
+      </P>
+      <CodeBlock
+        title="from the repo root"
+        code={`docker compose --profile node-demo up     # http://localhost:8081
+docker compose --profile python-demo up   # http://localhost:8082`}
+      />
+      <P>
+        Point the dashboard&apos;s <strong>Instance</strong> field (Settings) at whichever one you
+        brought up, key <code>demo:demo:demo:demo:demo</code> — the dashboard container itself
+        doesn&apos;t need rebuilding per backend, it&apos;s the same static client either way. All
+        three have been run through the real dashboard end to end (not just checked for matching
+        routes on paper): admission, budget consumption, and guardrail violations all render
+        correctly against Go, Node, and Python alike.
+      </P>
+      <P>
         For your own instance, wire the admin handler into whatever you&apos;re already running and
-        point the dashboard&apos;s <strong>Instance</strong> field (Settings) at it:
+        point the dashboard at it:
       </P>
       <CodeBlock
         title="Go"
@@ -41,14 +58,9 @@ mux.Handle("/admin/", rg.AdminHandler())
 mux.Handle("/", rg.HTTPMiddleware(yourHandler))
 http.ListenAndServe(":8080", mux)`}
       />
-      <Callout kind="note">
-        Node and Python ship the identical admin API surface (same routes, same shapes) — but the
-        dashboard itself has only been run against Go. If you point it at a Node or Python
-        instance, expect rough edges until that pairing gets its own verification pass.
-      </Callout>
       <P>
-        The dashboard talks to the admin API at <code>/admin/</code> — any of the three SDKs expose
-        it the same way. Go is the one this dashboard has actually been tested against end to end.
+        The Node and Python equivalents are in <code>examples/dashboard-demo/</code> in their
+        respective packages — the same demo the profiles above run, readable as a wiring reference.
       </P>
 
       <DocH2 id="sections">What each section shows</DocH2>

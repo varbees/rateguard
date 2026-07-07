@@ -78,8 +78,13 @@ python3 -m pip index versions varbees-rateguard
 
 ### Known Constraints
 
-- Dashboard (`packages/dashboard`) is verified only against Go's admin API — not
-  yet tested against Node's or Python's new admin API implementations.
+- Dashboard (`packages/dashboard`) is verified end-to-end against all 3 languages'
+  admin APIs — `docker compose --profile node-demo up` / `--profile python-demo up`,
+  same routes and shapes as Go. Two real cross-language bugs surfaced and were
+  fixed doing this: Node's `GET/PATCH /admin/policy` was serializing camelCase
+  (`requestsPerSecond`) instead of the snake_case wire shape every consumer reads;
+  Node's and Python's `list_limits`/`/admin/state` `preset` field was missing 4 of
+  its 7 fields (no token budget info at all).
 - Go publishing uses the submodule tag form `packages/sdk-go/vX.Y.Z`.
 - Python installs from the distribution name `varbees-rateguard`, while the
   import package remains `rateguard` — watch for the name-collision note above.
