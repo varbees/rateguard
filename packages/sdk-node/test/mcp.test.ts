@@ -93,15 +93,17 @@ import { RateGuard } from '../src/index.js';
 import { createMCPTools, mcpCall } from '../src/core/mcp.js';
 
 describe('MCP tools', () => {
-  it('exposes 5 tools matching the Go SDK', () => {
+  it('exposes all 7 tools matching the Go SDK', () => {
     const rg = new RateGuard({ preset: 'dev' });
     const tools = rg.mcpTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
+      'attest_budget',
       'check_loop',
       'get_circuit_breaker_state',
       'get_rate_limit_state',
       'get_token_budget',
       'list_limits',
+      'verify_budget',
     ]);
   });
 
@@ -133,6 +135,63 @@ describe('MCP tools', () => {
     expect(parsed.circuit_breaker).toBeDefined();
     expect(parsed.preset).toBeDefined();
     expect(parsed.loop_detector).toBeDefined();
+  });
+
+  it('attest_budget mints a root token verify_budget can validate end-to-end', async () => {
+    const rg = new RateGuard({ preset: 'dev' });
+    const { generateKeyPairSync } = await import('node:crypto');
+    const authority = generateKeyPairSync('ed25519');
+    const authorityRaw = (await import('../src/core/budget-attestation.js')).privateKeyToRaw(authority.privateKey);
+    const rootPublicRaw = (await import('../src/core/budget-attestation.js')).publicKeyToRaw(authority.publicKey);
+
+    const minted = await rg.mcpCall('attest_budget', {
+      signing_key: authorityRaw.toString('base64'),
+      max_tokens: 10_000,
+      providers: ['openai'],
+      max_depth: 1,
+      expires_in_seconds: 3_600,
+    });
+    const mintedParsed = JSON.parse(minted.content[0]!.text) as { token: string; delegate_private_key?: string };
+    expect(mintedParsed.token).toBeTruthy();
+    expect(mintedParsed.delegate_private_key).toBeTruthy();
+
+    const verified = await rg.mcpCall('verify_budget', {
+      token: mintedParsed.token,
+      root_public_key: rootPublicRaw.toString('base64'),
+    });
+    const verifiedParsed = JSON.parse(verified.content[0]!.text) as {
+      valid: boolean;
+      proof_of_possession_verified: boolean;
+      effective_grant: { max_tokens: number; providers: string[]; max_depth: number };
+    };
+    expect(verifiedParsed.valid).toBe(true);
+    expect(verifiedParsed.proof_of_possession_verified).toBe(false);
+    expect(verifiedParsed.effective_grant.max_tokens).toBe(10_000);
+    expect(verifiedParsed.effective_grant.providers).toEqual(['openai']);
+  });
+
+  it('verify_budget rejects a token signed by the wrong root key', async () => {
+    const rg = new RateGuard({ preset: 'dev' });
+    const { generateKeyPairSync } = await import('node:crypto');
+    const attestation = await import('../src/core/budget-attestation.js');
+    const authority = generateKeyPairSync('ed25519');
+    const impostor = generateKeyPairSync('ed25519');
+
+    const minted = await rg.mcpCall('attest_budget', {
+      signing_key: attestation.privateKeyToRaw(authority.privateKey).toString('base64'),
+      max_tokens: 1_000,
+      max_depth: 0,
+      expires_in_seconds: 3_600,
+    });
+    const { token } = JSON.parse(minted.content[0]!.text) as { token: string };
+
+    const verified = await rg.mcpCall('verify_budget', {
+      token,
+      root_public_key: attestation.publicKeyToRaw(impostor.publicKey).toString('base64'),
+    });
+    const parsed = JSON.parse(verified.content[0]!.text) as { valid: boolean; error?: string };
+    expect(parsed.valid).toBe(false);
+    expect(parsed.error).toBeTruthy();
   });
 
   it('rejects unknown tools with the available list', async () => {

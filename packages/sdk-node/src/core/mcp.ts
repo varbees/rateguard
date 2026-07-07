@@ -13,6 +13,18 @@ import { createHash } from 'node:crypto';
 import { BoundedCache } from './bounded-cache.js';
 import type { GuardrailLog } from './guardrail-log.js';
 import type { RateGuardRuntime } from '../runtime.js';
+import {
+  attest,
+  newRootBudgetToken,
+  parseBudgetToken,
+  privateKeyFromRaw,
+  privateKeyToRaw,
+  publicKeyFromRawBytes,
+  publicKeyToRaw,
+  verifyChain,
+  verifyPresentation,
+  type BudgetGrant,
+} from './budget-attestation.js';
 
 export interface MCPTool {
   name: string;
@@ -227,6 +239,113 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector, 
     return result;
   };
 
+  const mcpArgStrings = (args: Record<string, unknown>, field: string): string[] | undefined => {
+    const raw = args[field];
+    if (!Array.isArray(raw)) {
+      return undefined;
+    }
+    return raw.filter((entry): entry is string => typeof entry === 'string');
+  };
+
+  const attestBudget = async (args: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    const signingKeyB64 = typeof args.signing_key === 'string' ? args.signing_key : '';
+    if (!signingKeyB64) {
+      throw new Error('mcp: signing_key is required');
+    }
+    const signingKey = privateKeyFromRaw(Buffer.from(signingKeyB64, 'base64'));
+
+    const expiresInSeconds = typeof args.expires_in_seconds === 'number' ? args.expires_in_seconds : Number.NaN;
+    if (!Number.isFinite(expiresInSeconds) || expiresInSeconds <= 0) {
+      throw new Error('mcp: expires_in_seconds is required and must be positive');
+    }
+
+    const providers = mcpArgStrings(args, 'providers');
+    const models = mcpArgStrings(args, 'models');
+    const grant: BudgetGrant = {
+      maxTokens: typeof args.max_tokens === 'number' ? args.max_tokens : 0,
+      maxDepth: typeof args.max_depth === 'number' ? args.max_depth : 0,
+      expiresAt: new Date(Date.now() + expiresInSeconds * 1000),
+      ...(providers ? { providers } : {}),
+      ...(models ? { models } : {}),
+    };
+
+    const delegatePublicKeyB64 = typeof args.delegate_public_key === 'string' ? args.delegate_public_key : '';
+    const opts = {
+      grant,
+      ...(delegatePublicKeyB64 ? { delegatePublicKey: publicKeyFromRawBytes(Buffer.from(delegatePublicKeyB64, 'base64')) } : {}),
+    };
+
+    let result;
+    const parentTokenStr = typeof args.parent_token === 'string' ? args.parent_token : '';
+    try {
+      result = parentTokenStr ? attest(parseBudgetToken(parentTokenStr), signingKey, opts) : newRootBudgetToken(signingKey, opts);
+    } catch (error) {
+      return { error: (error as Error).message };
+    }
+
+    const lastBlock = result.token.blocks[result.token.blocks.length - 1]!;
+    const response: Record<string, unknown> = {
+      token: result.token.marshal(),
+      delegate_public_key: publicKeyToRaw(lastBlock.delegatePublicKey).toString('base64'),
+      max_tokens: grant.maxTokens,
+      max_depth: grant.maxDepth,
+      expires_at: grant.expiresAt.toISOString(),
+      depth: result.token.blocks.length,
+    };
+    if (result.delegatePrivateKey) {
+      response.delegate_private_key = privateKeyToRaw(result.delegatePrivateKey).toString('base64');
+    }
+    return response;
+  };
+
+  const verifyBudget = async (args: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    const tokenStr = typeof args.token === 'string' ? args.token : '';
+    if (!tokenStr) {
+      throw new Error('mcp: token is required');
+    }
+    const rootPublicKeyB64 = typeof args.root_public_key === 'string' ? args.root_public_key : '';
+    if (!rootPublicKeyB64) {
+      throw new Error('mcp: root_public_key is required');
+    }
+    const rootPublicKey = publicKeyFromRawBytes(Buffer.from(rootPublicKeyB64, 'base64'));
+
+    let token;
+    try {
+      token = parseBudgetToken(tokenStr);
+    } catch (error) {
+      return { valid: false, error: (error as Error).message };
+    }
+
+    const contextStr = typeof args.context === 'string' ? args.context : '';
+    const signatureB64 = typeof args.signature === 'string' ? args.signature : '';
+    let grant: BudgetGrant;
+    let proofVerified = false;
+
+    try {
+      if (contextStr && signatureB64) {
+        grant = verifyPresentation(token, rootPublicKey, Buffer.from(contextStr), Buffer.from(signatureB64, 'base64'));
+        proofVerified = true;
+      } else {
+        grant = verifyChain(token, rootPublicKey);
+      }
+    } catch (error) {
+      return { valid: false, error: (error as Error).message };
+    }
+
+    return {
+      valid: true,
+      proof_of_possession_verified: proofVerified,
+      depth: token.blocks.length,
+      effective_grant: {
+        max_tokens: grant.maxTokens,
+        providers: grant.providers ?? [],
+        models: grant.models ?? [],
+        max_depth: grant.maxDepth,
+        expires_at: grant.expiresAt.toISOString(),
+      },
+    };
+  };
+
   const listLimits = async (args: Record<string, unknown>): Promise<Record<string, unknown>> => {
     const key = typeof args.key === 'string' ? args.key : '';
     if (!key) {
@@ -322,6 +441,77 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector, 
         required: ['key'],
       },
       handler: listLimits,
+    },
+    {
+      name: 'attest_budget',
+      description:
+        "Mint or delegate a cryptographic budget token an agent can hand to a sub-agent it invokes. Omit parent_token to mint a new root token (signing_key becomes the trust anchor verifiers must already know). Pass parent_token to delegate further — the new grant must narrow the parent's (less budget, fewer providers/models, less delegation depth, an earlier expiry); signing_key must be the private key matching parent_token's current holder.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          signing_key: {
+            type: 'string',
+            description: 'Base64 Ed25519 private key: the root authority key when minting (parent_token absent), or the current holder\'s key when delegating (parent_token present)',
+          },
+          parent_token: {
+            type: 'string',
+            description: 'Existing serialized budget token to delegate from. Omit to mint a new root token.',
+          },
+          delegate_public_key: {
+            type: 'string',
+            description: 'Base64 Ed25519 public key of the recipient, if it already generated its own keypair (recommended — its private key never transits through this call). Omit to have RateGuard generate a fresh keypair and return the private key.',
+          },
+          max_tokens: {
+            type: 'integer',
+            description: 'Token budget for this grant. <= 0 means unlimited, but only if the parent grant is also unlimited.',
+          },
+          providers: {
+            type: 'array',
+            items: { type: 'string' },
+            description: "Restrict to these LLM providers. Omit for 'any provider', but only if the parent grant also allows any.",
+          },
+          models: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Restrict to these models, same rule as providers.',
+          },
+          max_depth: {
+            type: 'integer',
+            description: 'How many further delegations this grant allows (0 = recipient may use it but not delegate further).',
+          },
+          expires_in_seconds: {
+            type: 'integer',
+            description: 'Grant lifetime from now, in seconds. Required — budget tokens must expire.',
+          },
+        },
+        required: ['signing_key', 'max_depth', 'expires_in_seconds'],
+      },
+      handler: attestBudget,
+    },
+    {
+      name: 'verify_budget',
+      description:
+        "Verify a budget token before honoring it. Always checks the signature chain, that every delegation narrowed its parent, and that nothing has expired. Pass context+signature for a full authorization check (proof that the presenter actually holds the token, not just read it) — without them this only confirms the token's terms are well-formed, not who is presenting it.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          token: { type: 'string', description: 'Serialized budget token to verify' },
+          root_public_key: {
+            type: 'string',
+            description: 'Base64 Ed25519 public key of the trusted root authority (known out-of-band, like a CA root certificate)',
+          },
+          context: {
+            type: 'string',
+            description: 'Challenge/context the presenter should have signed with their holder key, for proof-of-possession',
+          },
+          signature: {
+            type: 'string',
+            description: "Base64 signature over 'context', produced by the token holder's private key (rateguard sign()) — proves the presenter, not just a token they saw, holds the delegation",
+          },
+        },
+        required: ['token', 'root_public_key'],
+      },
+      handler: verifyBudget,
     },
   ];
 }

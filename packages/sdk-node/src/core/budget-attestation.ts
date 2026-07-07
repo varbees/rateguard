@@ -39,6 +39,7 @@
  */
 
 import {
+  createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
   sign as cryptoSign,
@@ -147,6 +148,58 @@ function publicKeyFromRaw(raw: Buffer): KeyObject {
 
 function samePublicKey(a: KeyObject, b: KeyObject): boolean {
   return rawPublicKeyBytes(a).equals(rawPublicKeyBytes(b));
+}
+
+// The fixed 16-byte PKCS8 DER prefix for an Ed25519 private key (version +
+// AlgorithmIdentifier + OCTET STRING wrapper), followed by the 32-byte seed —
+// RFC 8410's encoding is constant apart from the seed itself, so this avoids
+// needing the public key just to import a raw private key (unlike the JWK
+// route, which requires both `x` and `d`).
+const ED25519_PKCS8_DER_PREFIX = Buffer.from('302e020100300506032b657004220420', 'hex');
+
+/**
+ * Reconstructs an Ed25519 private KeyObject from raw bytes. Accepts either a
+ * bare 32-byte seed or Go's 64-byte ed25519.PrivateKey convention (seed +
+ * public key concatenated) — only the seed (first 32 bytes) is used.
+ * Exported for MCP tool handlers, which receive keys as base64 strings over
+ * the wire, not KeyObjects.
+ */
+export function privateKeyFromRaw(raw: Buffer): KeyObject {
+  if (raw.length !== 32 && raw.length !== 64) {
+    throw new Error('rateguard: budget attestation requires a 32-byte seed or 64-byte Ed25519 private key');
+  }
+  const seed = raw.subarray(0, 32);
+  return createPrivateKey({
+    key: Buffer.concat([ED25519_PKCS8_DER_PREFIX, seed]),
+    format: 'der',
+    type: 'pkcs8',
+  });
+}
+
+/**
+ * Encodes an Ed25519 private KeyObject as Go's 64-byte ed25519.PrivateKey
+ * convention (seed + public key concatenated) — the interoperable wire
+ * format, so a key minted by one language's MCP tool works when handed to
+ * another's.
+ */
+export function privateKeyToRaw(key: KeyObject): Buffer {
+  const jwk = key.export({ format: 'jwk' }) as { kty?: string; crv?: string; d?: string };
+  if (jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || !jwk.d) {
+    throw new Error('rateguard: budget attestation requires an Ed25519 private key');
+  }
+  const seed = Buffer.from(jwk.d, 'base64url');
+  const pub = rawPublicKeyBytes(createPublicKey(key));
+  return Buffer.concat([seed, pub]);
+}
+
+/** Reconstructs an Ed25519 public KeyObject from raw 32-byte point bytes. Exported for MCP tool handlers. */
+export function publicKeyFromRawBytes(raw: Buffer): KeyObject {
+  return publicKeyFromRaw(raw);
+}
+
+/** Encodes an Ed25519 public KeyObject as raw 32-byte point bytes. Exported for MCP tool handlers. */
+export function publicKeyToRaw(key: KeyObject): Buffer {
+  return rawPublicKeyBytes(key);
 }
 
 /** One link of a BudgetToken's chain. */
