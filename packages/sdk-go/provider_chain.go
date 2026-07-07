@@ -113,14 +113,31 @@ func SetProviderHeaders(w http.ResponseWriter, provider, model string, fallback 
 }
 
 // ── Common provider chains (2026 market defaults) ──
+//
+// Every entry below must be a genuinely OpenAI-compatible endpoint —
+// retarget() rewrites a failed request onto the next entry's BaseURL by
+// appending "/chat/completions" and re-sending the SAME OpenAI-shaped JSON
+// body. That only works when the target actually speaks that schema.
+// Anthropic's native Messages API does not (different path — /v1/messages,
+// not /chat/completions — different request/response shape entirely), so
+// it's deliberately absent here despite being a top-tier model: an earlier
+// version of these three chains included it, and a reproduction test
+// confirmed the resulting fallback request really does get sent to
+// Anthropic's real API at the wrong path with the wrong body shape — not a
+// hypothetical concern. Google is included via its own OpenAI-compatible
+// endpoint specifically (BaseURL ends in /v1beta/openai, not bare /v1beta),
+// confirmed against detectLLMCall's own test matrix. If you need Anthropic
+// in your own fallback logic, that has to happen at the application layer
+// (catch the error, call Anthropic's own SDK yourself) — see the "Honest
+// scope" note in outbound.go: cross-schema fallback is impossible at the
+// transport layer and is not claimed anywhere else in this package either.
 
 // DefaultProviderChain returns the recommended provider chain for cost-optimized routing.
-// Priority: OpenAI → Anthropic → Google (Gemini)
+// Priority: OpenAI → Google (Gemini, OpenAI-compatible endpoint)
 func DefaultProviderChain() *ProviderChain {
 	return NewProviderChain(
 		Provider("openai", "gpt-4o", "https://api.openai.com/v1"),
-		Provider("anthropic", "claude-sonnet-4", "https://api.anthropic.com/v1"),
-		Provider("google", "gemini-2.5-flash", "https://generativelanguage.googleapis.com/v1beta"),
+		Provider("google", "gemini-2.5-flash", "https://generativelanguage.googleapis.com/v1beta/openai"),
 	)
 }
 
@@ -128,18 +145,18 @@ func DefaultProviderChain() *ProviderChain {
 // Priority: cheapest → more expensive. Used when token budget is at warning level.
 func BudgetProviderChain() *ProviderChain {
 	return NewProviderChain(
-		Provider("google", "gemini-2.5-flash", "https://generativelanguage.googleapis.com/v1beta"),
+		Provider("google", "gemini-2.5-flash", "https://generativelanguage.googleapis.com/v1beta/openai"),
 		Provider("openai", "gpt-4o-mini", "https://api.openai.com/v1"),
-		Provider("anthropic", "claude-haiku-3.5", "https://api.anthropic.com/v1"),
+		Provider("deepseek", "deepseek-chat", "https://api.deepseek.com/v1"),
 	)
 }
 
 // QualityProviderChain returns a provider chain optimized for response quality.
-// Priority: most capable → less capable. Used for critical/zero-tolerance tasks.
+// Priority: most capable → less capable, among OpenAI-compatible options.
+// Used for critical/zero-tolerance tasks.
 func QualityProviderChain() *ProviderChain {
 	return NewProviderChain(
-		Provider("anthropic", "claude-opus-4-5", "https://api.anthropic.com/v1"),
 		Provider("openai", "gpt-4o", "https://api.openai.com/v1"),
-		Provider("google", "gemini-2.5-pro", "https://generativelanguage.googleapis.com/v1beta"),
+		Provider("google", "gemini-2.5-pro", "https://generativelanguage.googleapis.com/v1beta/openai"),
 	)
 }
