@@ -289,6 +289,58 @@ func TestOutboundProviderFallback(t *testing.T) {
 	}
 }
 
+// TestOutboundFallbackStripsAzureAPIKey reproduces a real credential-leak
+// bug: Azure OpenAI authenticates via a bare "api-key" header (not
+// "Authorization" or "X-Api-Key"), which retarget's credential-stripping
+// list previously missed entirely. Failing over from Azure to another
+// provider that doesn't set its own api-key header used to forward the
+// Azure key verbatim to that third-party provider.
+func TestOutboundFallbackStripsAzureAPIKey(t *testing.T) {
+	var fallbackCalls atomic.Int64
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), "deepseek-chat") {
+			fallbackCalls.Add(1)
+			if got := r.Header.Get("api-key"); got != "" {
+				t.Errorf("Azure api-key leaked to fallback provider: %q", got)
+			}
+			openAIJSONHandler("deepseek-chat", 10, 5)(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"rate limited"}}`))
+	}))
+	defer server.Close()
+
+	// The fallback target deliberately does NOT set its own api-key (or
+	// any credential header) — the only way this test can fail is if the
+	// primary's Azure key leaks through uncleaned.
+	chain := NewProviderChain(
+		Provider("azure_openai", "gpt-4o", "https://api.openai.com"),
+		ProviderEntry{Name: "deepseek", Model: "deepseek-chat", BaseURL: server.URL},
+	)
+
+	sdk := New(Config{Preset: "dev"})
+	client := wrapForHost(t, sdk, server, OutboundOptions{Chain: chain})
+
+	req, _ := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4o","messages":[]}`))
+	req.Header.Set("api-key", "azure-secret-key")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("fallback call failed: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("fallback should succeed, got %d", resp.StatusCode)
+	}
+	if fallbackCalls.Load() != 1 {
+		t.Fatalf("fallbackCalls = %d, want 1", fallbackCalls.Load())
+	}
+}
+
 func TestOutboundCircuitBreakerTripsPerProvider(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

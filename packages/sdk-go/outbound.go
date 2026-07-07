@@ -444,9 +444,15 @@ func (t *genaiTransport) retarget(req *http.Request, body []byte, call *outbound
 	}
 	parsed = parsed.WithContext(req.Context())
 	parsed.Header = clone.Header.Clone()
-	// Provider credentials never transfer across providers.
+	// Provider credentials never transfer across providers. Strip every
+	// known provider auth header convention, not just Authorization —
+	// Azure OpenAI authenticates via a bare "api-key" header (not
+	// "X-Api-Key"), which a prior version of this list missed entirely,
+	// leaking the Azure key to whichever provider was failed over to.
 	parsed.Header.Del("Authorization")
 	parsed.Header.Del("X-Api-Key")
+	parsed.Header.Del("Api-Key")
+	parsed.Header.Del("X-Goog-Api-Key")
 	for key, value := range target.Headers {
 		parsed.Header.Set(key, value)
 	}
