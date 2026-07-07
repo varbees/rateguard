@@ -114,6 +114,24 @@ export class CircuitBreaker {
     };
   }
 
+  /**
+   * Clears an in-flight half-open probe WITHOUT recording a success or
+   * failure outcome. Use this when a request that allow() granted the
+   * probe slot to never actually reached upstream — denied instead by an
+   * earlier, unrelated gate (rate limit, guardrail, token budget). That
+   * request tested nothing about upstream health, so counting it as
+   * either a success or a failure via recordOutcome would corrupt the
+   * breaker's signal. Without this, the probe slot leaks forever: allow()
+   * never grants another one while probeInFlight is stuck true, so the
+   * breaker is wedged in half-open, denying every request, until the
+   * process restarts.
+   */
+  releaseProbe(): void {
+    if (this.state === 'half-open') {
+      this.probeInFlight = false;
+    }
+  }
+
   private open(): void {
     this.state = 'open';
     this.openedAtMs = this.clock.now();

@@ -243,6 +243,65 @@ describe('guardrails wiring', () => {
   });
 });
 
+describe('circuit breaker half-open probe leak (regression)', () => {
+  it('does not wedge in half-open forever when the recovery probe is denied by a guardrail', async () => {
+    let now = 0;
+    const clock = { now: () => now };
+    const guard = new RateGuard({
+      preset: 'dev',
+      clock,
+      rateLimit: { requestsPerSecond: 1_000, burst: 1_000 },
+      guardrails: standardGuardrails(),
+      circuitBreaker: {
+        errorRateThreshold: 0.5,
+        openTimeoutMs: 60_000,
+        halfOpenSuccessesRequired: 1,
+        sampleSize: 1,
+      },
+    });
+    const middleware = guard.middleware();
+
+    const post = (body: string) =>
+      Object.assign(Readable.from([Buffer.from(body)]), {
+        method: 'POST',
+        url: '/chat',
+        headers: {},
+      }) as unknown as ExpressLikeRequest;
+
+    let upstreamCalls = 0;
+
+    // Trip the breaker open with a clean request that fails upstream.
+    const tripped = new FakeExpressResponse();
+    await middleware(post('summarize this document'), tripped, async () => {
+      upstreamCalls += 1;
+      tripped.status(500).end('upstream error');
+    });
+    expect(tripped.statusCode).toBe(500);
+
+    now += 61_000;
+
+    // This request claims the half-open probe, then gets denied by the
+    // guardrail before it ever reaches upstream — observe() never runs.
+    const blocked = new FakeExpressResponse();
+    await middleware(post('email me at attacker@example.com'), blocked, async () => {
+      upstreamCalls += 1;
+      blocked.status(200).end('should not reach here');
+    });
+    expect(blocked.statusCode).toBe(422);
+
+    // The bug: without releasing the probe, every request from here on
+    // would see the breaker permanently wedged in half-open and never
+    // reach upstream again, no matter how much time passes.
+    const recovered = new FakeExpressResponse();
+    await middleware(post('what is the weather today'), recovered, async () => {
+      upstreamCalls += 1;
+      recovered.status(200).end('ok');
+    });
+    expect(recovered.statusCode).not.toBe(503);
+    expect(upstreamCalls).toBe(2);
+  });
+});
+
 describe('estimatedTokensPerRequest wiring', () => {
   it('threads through admit() so two same-key requests can both reserve budget', async () => {
     const guard = new RateGuard({

@@ -69,7 +69,7 @@ describe('RateGuard.adaptiveRateLimit config wiring', () => {
       const req = request({ requestId: `req-${i}` });
       const decision = await guard.runtime.admit(req);
       expect(decision.allowed).toBe(true);
-      await guard.runtime.observe(req, { statusCode: 500, tokenBudgetReservationId: decision.tokenBudgetReservationId }, clock.now());
+      await guard.runtime.observe(req, { statusCode: 500, ...(decision.tokenBudgetReservationId ? { tokenBudgetReservationId: decision.tokenBudgetReservationId } : {}) }, clock.now());
       advance(150);
     }
 
@@ -92,7 +92,7 @@ describe('RateGuard.adaptiveRateLimit config wiring', () => {
     for (let i = 0; i < 5; i++) {
       const req = request({ requestId: `bad-${i}` });
       const decision = await guard.runtime.admit(req);
-      await guard.runtime.observe(req, { statusCode: 500, tokenBudgetReservationId: decision.tokenBudgetReservationId }, clock.now());
+      await guard.runtime.observe(req, { statusCode: 500, ...(decision.tokenBudgetReservationId ? { tokenBudgetReservationId: decision.tokenBudgetReservationId } : {}) }, clock.now());
       advance(150);
     }
     const shrunk = guard.adaptiveRateLimitFactor() as number;
@@ -101,7 +101,7 @@ describe('RateGuard.adaptiveRateLimit config wiring', () => {
     for (let i = 0; i < 40; i++) {
       const req = request({ requestId: `good-${i}` });
       const decision = await guard.runtime.admit(req);
-      await guard.runtime.observe(req, { statusCode: 200, tokenBudgetReservationId: decision.tokenBudgetReservationId }, clock.now());
+      await guard.runtime.observe(req, { statusCode: 200, ...(decision.tokenBudgetReservationId ? { tokenBudgetReservationId: decision.tokenBudgetReservationId } : {}) }, clock.now());
       advance(150);
     }
     expect(guard.adaptiveRateLimitFactor() as number).toBeGreaterThan(shrunk);

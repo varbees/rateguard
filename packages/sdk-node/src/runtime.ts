@@ -13,6 +13,7 @@ import { readFirstHeader } from './core/utils.js';
 import { normalizeTokenBudgetMode, resolveRateGuardOptions, systemClock } from './config.js';
 import {
   type CompletionObservation,
+  type CircuitBreakerDecision,
   type CircuitBreakerState,
   type PolicyPreset,
   type PolicyUpdate,
@@ -203,7 +204,33 @@ export class RateGuardRuntime {
     const start = this.config.clock.now();
     const key = this.resolveKey(request);
     const breakerDecision = this.circuitBreaker.allow();
+    // A half-open probe grant must be released if any later gate (rate
+    // limit, guardrail, token budget) denies the request before it ever
+    // reaches upstream — otherwise the probe slot leaks and the breaker
+    // wedges in half-open forever (see CircuitBreaker.releaseProbe).
+    // probeConsumed is set true right before returning the final allowed
+    // decision; every early return falls through to the finally block,
+    // including any added later.
+    let probeConsumed = false;
+    try {
+      return await this.admitInner(request, bodyText, start, key, breakerDecision, () => {
+        probeConsumed = true;
+      });
+    } finally {
+      if (!probeConsumed && breakerDecision.probeInFlight) {
+        this.circuitBreaker.releaseProbe();
+      }
+    }
+  }
 
+  private async admitInner(
+    request: RequestContext,
+    bodyText: string | undefined,
+    start: number,
+    key: string,
+    breakerDecision: CircuitBreakerDecision,
+    markConsumed: () => void,
+  ): Promise<PreflightDecision> {
     if (!breakerDecision.allowed) {
       await this.emit('request.completed', request, breakerDecision.state, 503, start, undefined, undefined, breakerDecision.retryAfterMs);
       return {
@@ -268,6 +295,13 @@ export class RateGuardRuntime {
         circuitBreaker: breakerDecision,
       };
     }
+
+    // From here on the caller is responsible for making the actual upstream
+    // call and reporting its outcome via observe() (which calls
+    // recordOutcome) — that's what will eventually clear a half-open
+    // probe. Mark it consumed so admit()'s finally block doesn't also
+    // release it.
+    markConsumed();
 
     const allowed: PreflightDecision = {
       allowed: true,

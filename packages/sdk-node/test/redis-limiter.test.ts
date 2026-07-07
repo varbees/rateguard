@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessByStdio } from 'node:child_process';
+import type { Readable } from 'node:stream';
 
 import {
   RedisGCRALimiter,
@@ -294,7 +295,7 @@ describe('RateGuard wiring: redisClient option replaces the in-process limiter',
 // permissions, port conflict), the suite skips instead of failing — per the
 // task brief, a mocked-client suite alone is an acceptable fallback, real
 // Redis is a bonus when available.
-let redisProc: ChildProcessWithoutNullStreams | undefined;
+let redisProc: ChildProcessByStdio<null, Readable, Readable> | undefined;
 let redisPort = 0;
 let redisReady = false;
 
