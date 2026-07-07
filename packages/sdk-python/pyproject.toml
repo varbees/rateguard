@@ -21,8 +21,16 @@ Issues = "https://github.com/varbees/rateguard/issues"
 fastapi = ["fastapi>=0.100.0", "starlette>=0.27.0"]
 flask = ["flask>=2.0.0"]
 django = ["django>=4.0"]
-dev = ["pytest", "pytest-asyncio", "httpx", "anyio", "mypy", "openai", "anthropic", "redis"]
+# Outbound LLM tracking (wrap_httpx_client/wrap_httpx_async_client,
+# create_httpx_transport) lazily imports httpx — README-documented public
+# API, not a test-only concern, so it gets its own extra rather than only
+# living in "dev".
+outbound = ["httpx>=0.24.0"]
+# Distributed rate limiting (RedisGCRALimiter, RedisPyClient/AsyncRedisPyClient)
+# lazily imports redis — same reasoning as "outbound".
+redis = ["redis>=5.0.0"]
 attestation = ["cryptography>=41.0.0"]
+dev = ["pytest", "pytest-asyncio", "httpx", "anyio", "mypy", "openai", "anthropic", "redis"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

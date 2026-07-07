@@ -4,7 +4,7 @@ import json
 from io import BytesIO
 
 import pytest
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from rateguard import RateGuard
@@ -468,6 +468,53 @@ def test_mcp_list_limits_guardrails_disabled_when_not_configured() -> None:
     rg = RateGuard(preset="dev")
     result = json.loads(rg.mcp_call("list_limits", {"key": "agent-1"}).content[0]["text"])
     assert result["guardrails"]["enabled"] is False
+
+
+# ── rg.require (FastAPI Depends dependency) ──
+#
+# Regression coverage for a real bug found by a Fable 5 audit: require()
+# was annotated `request: object`, so FastAPI's dependency resolver didn't
+# recognize it as the special "inject the ASGI request" parameter and fell
+# through to treating it as a required query parameter literally named
+# "request" — every call 422'd. Nothing exercised rg.require through an
+# actual FastAPI app before this (AGENTS.md rule 9's exact failure mode:
+# exists, but unreachable in practice), which is exactly how it shipped
+# broken in the README's own copy-pasteable example.
+
+
+@pytest.mark.asyncio
+async def test_require_dependency_allows_request_through() -> None:
+    rg = RateGuard(preset="dev", rate_limit=RateLimitOptions(requests_per_second=100, burst=100))
+    app = FastAPI()
+
+    @app.post("/chat")
+    async def chat(_: None = Depends(rg.require)) -> dict[str, bool]:
+        return {"ok": True}
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/chat")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
+@pytest.mark.asyncio
+async def test_require_dependency_raises_429_when_rate_limited() -> None:
+    rg = RateGuard(preset="dev", rate_limit=RateLimitOptions(requests_per_second=1, burst=1))
+    app = FastAPI()
+
+    @app.post("/chat")
+    async def chat(_: None = Depends(rg.require)) -> dict[str, bool]:
+        return {"ok": True}
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        first = await client.post("/chat")
+        second = await client.post("/chat")
+
+    assert first.status_code == 200
+    assert second.status_code == 429
 
 
 # ── Facade instance sharing (MCP tools must see the same state the real

@@ -48,8 +48,29 @@ async with rg.budget.enforce(user_id="me", hard_stop=True):
 
 ## FastAPI
 
+Two ways to wire RateGuard in — pick one per route, not both, or a single
+request gets admitted (and its rate limit/token budget consumed) twice.
+
+Per-route, via `Depends` — needs the `fastapi` extra (`pip install
+varbees-rateguard[fastapi]`):
+
 ```python
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI
+from rateguard import RateGuard
+
+app = FastAPI()
+rg = RateGuard(preset="standard")
+
+
+@app.post("/chat")
+async def chat(_=Depends(rg.require)):
+    return {"ok": True}
+```
+
+App-wide, via ASGI middleware:
+
+```python
+from fastapi import FastAPI
 from rateguard import RateGuard
 
 app = FastAPI()
@@ -58,7 +79,7 @@ app.add_middleware(rg.asgi_middleware)
 
 
 @app.post("/chat")
-async def chat(req: Request, _=Depends(rg.require)):
+async def chat():
     return {"ok": True}
 ```
 
@@ -84,6 +105,8 @@ app.wsgi_app = RateGuardMiddleware(app.wsgi_app, guard=rg.runtime)
 
 ## Outbound LLM Tracking
 
+Needs the `outbound` extra (`pip install varbees-rateguard[outbound]`) — `httpx` is a lazy, optional import.
+
 ```python
 from openai import OpenAI, AsyncOpenAI
 from rateguard import RateGuard
@@ -98,7 +121,7 @@ aclient = AsyncOpenAI(http_client=rg.wrap_httpx_async_client())
 ## Also included
 
 - **Budget attestation** (`pip install varbees-rateguard[attestation]`) — Ed25519-signed delegation chains (`new_root_budget_token`, `attest`, `verify_presentation`), byte-identical signing payload with Go and Node so a token attested in one language verifies in another. `cryptography` is a lazy, optional import — install the `attestation` extra to use it.
-- **Redis distributed limiter** — atomic Lua GCRA script for rate limits shared across processes/instances, `RedisPyClient`/`AsyncRedisPyClient` wrap `redis-py` or bring your own client shaped like `RedisLimiterClient`.
+- **Redis distributed limiter** (`pip install varbees-rateguard[redis]`) — atomic Lua GCRA script for rate limits shared across processes/instances, `RedisPyClient`/`AsyncRedisPyClient` wrap `redis-py` or bring your own client shaped like `RedisLimiterClient`.
 - **Admin API** — opt-in, unauthenticated-by-design ASGI app (`AdminApp`) exposing state/policy/MCP-tool-calls; bind privately.
 - **Adaptive rate limiting** — opt-in AIMD controller that auto-tunes the effective limit from observed upstream error rate.
 - **Semantic response caching** — bring your own `Embedder`; a cosine-similarity hit skips the network call, breaker, and budget entirely.

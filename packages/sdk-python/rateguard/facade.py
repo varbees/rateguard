@@ -29,6 +29,24 @@ if TYPE_CHECKING:
     from .core.mcp import LoopDetector, MCPTool, MCPToolResult
     from .core.token_budget import TokenBudgetManager
 
+try:
+    # A REAL (not TYPE_CHECKING-only) import, on purpose: FastAPI's
+    # dependency injection recognizes a parameter as "give me the request"
+    # only when its annotation IS (or subclasses) starlette.requests.Request
+    # — it resolves annotations via typing.get_type_hints() against this
+    # module's actual globals, so a string annotation pointing at a name
+    # that was never really bound (e.g. a TYPE_CHECKING-only import) raises
+    # NameError the moment a route wires up Depends(rg.require). Falls back
+    # to plain object when starlette isn't installed — require() only gets
+    # called by someone who has it (the fastapi extra), so this path never
+    # actually executes without it; it just keeps `import rateguard` itself
+    # dependency-free.
+    from starlette.exceptions import HTTPException as _StarletteHTTPException
+    from starlette.requests import Request as _StarletteRequest
+except ImportError:  # pragma: no cover - fastapi/starlette extra not installed
+    _StarletteRequest = object  # type: ignore[assignment,misc]
+    _StarletteHTTPException = None  # type: ignore[assignment,misc]
+
 
 def _request_context_from_object(
     request: object,
@@ -261,7 +279,21 @@ class RateGuard:
 
         return BoundMiddleware
 
-    async def require(self, request: object) -> None:
+    async def require(self, request: _StarletteRequest) -> None:
+        """FastAPI dependency: `Depends(rg.require)` — raises
+        starlette.exceptions.HTTPException (429, or whatever
+        admit_async's decision carries) when the request isn't allowed.
+        Deliberately NOT RateGuardException: FastAPI/Starlette only
+        auto-converts HTTPException into a response for you — anything
+        else propagates as an unhandled exception (a 500 in production,
+        a crash in tests) unless the caller registers their own exception
+        handler, which nothing here prompts them to do. This calls
+        admit_async independently of the ASGI middleware — use this OR
+        app.add_middleware(rg.asgi_middleware) on a given route, not
+        both, or one request would be admitted (and its rate limit/token
+        budget consumed) twice."""
+        if _StarletteHTTPException is None:
+            raise RuntimeError("rateguard: rg.require needs the 'fastapi' extra (pip install varbees-rateguard[fastapi])")
         request_context = _request_context_from_object(
             request,
             tenant_id=self.runtime.config.tenant_id,
@@ -272,11 +304,8 @@ class RateGuard:
         )
         decision = await self.runtime.admit_async(request_context)
         if not decision.allowed:
-            raise RateGuardException(
-                "rate limited",
-                status=decision.status_code or 429,
-                retry_after=decision.retry_after_ms or 0,
-            )
+            headers = {"Retry-After": str(max(1, round((decision.retry_after_ms or 0) / 1000)))} if decision.retry_after_ms else None
+            raise _StarletteHTTPException(status_code=decision.status_code or 429, detail="rate limited", headers=headers)
 
     @property
     def budget(self) -> "BudgetFacade":
