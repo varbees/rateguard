@@ -26,7 +26,11 @@ local tolerance = (burst - 1) * intervalUs
 local allowAt = tat - tolerance
 
 if nowUs < allowAt then
-    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000)
+    -- Rounds to the nearest WHOLE SECOND (not millisecond) to match the
+    -- in-memory limiter's retry_after semantics (AGENTS.md rule 13) — a
+    -- deployment switching from in-process to Redis must not see deny
+    -- behavior silently change.
+    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000000) * 1000
     return {0, 0, retryAfterMs, 1}
 end
 
@@ -58,7 +62,11 @@ local tolerance = (burst - 1) * intervalUs
 local allowAt = tat - tolerance
 
 if nowUs < allowAt then
-    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000)
+    -- Rounds to the nearest WHOLE SECOND (not millisecond) to match the
+    -- in-memory limiter's retry_after semantics (AGENTS.md rule 13) — a
+    -- deployment switching from in-process to Redis must not see deny
+    -- behavior silently change.
+    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000000) * 1000
     return {0, 0, retryAfterMs, 1}
 end
 
@@ -91,7 +99,11 @@ local tolerance = (burst - n) * intervalUs
 local allowAt = tat - tolerance
 
 if nowUs < allowAt then
-    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000)
+    -- Rounds to the nearest WHOLE SECOND (not millisecond) to match the
+    -- in-memory limiter's retry_after semantics (AGENTS.md rule 13) — a
+    -- deployment switching from in-process to Redis must not see deny
+    -- behavior silently change.
+    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000000) * 1000
     return {0, 0, retryAfterMs, 1}
 end
 
@@ -107,7 +119,7 @@ redis.call('DEL', KEYS[1])
 return 1
 `
 
-type redisGCRALimiter struct {
+type RedisGCRALimiter struct {
 	client RedisLimiterClient
 	clock  Clock
 }
@@ -116,20 +128,33 @@ func newRedisGCRALimiterWithClock(client RedisLimiterClient, clock Clock) Limite
 	if clock == nil {
 		clock = systemClock{}
 	}
-	return &redisGCRALimiter{client: client, clock: clock}
+	return &RedisGCRALimiter{client: client, clock: clock}
 }
 
-func (l *redisGCRALimiter) Allow(ctx context.Context, key string, policy PolicyPreset) (AdmissionDecision, error) {
+// NewRedisGCRALimiter builds a Redis-backed distributed rate limiter
+// directly — the same atomic Lua GCRA that Config.RedisClient wires in
+// implicitly, exported standalone so Go callers can reach it the same way
+// Node's RedisGCRALimiter class and Python's RedisGCRALimiter class already
+// are (this was previously the one language where a user couldn't obtain
+// the Redis-backed Store without going through New(Config{RedisClient: ...})).
+// Returns the concrete type (matching NewMemoryLimiter/NewShardedLimiter's
+// pattern) so callers get Get/Increment/Reset (Store) in addition to
+// Allow/Peek (Limiter) without a type assertion — see limiter.go.
+func NewRedisGCRALimiter(client RedisLimiterClient) *RedisGCRALimiter {
+	return &RedisGCRALimiter{client: client, clock: systemClock{}}
+}
+
+func (l *RedisGCRALimiter) Allow(ctx context.Context, key string, policy PolicyPreset) (AdmissionDecision, error) {
 	return l.eval(ctx, key, policy, luaRedisGCRARateLimitScript)
 }
 
 // Peek reports what Allow would decide without advancing GCRA state.
-func (l *redisGCRALimiter) Peek(ctx context.Context, key string, policy PolicyPreset) (AdmissionDecision, error) {
+func (l *RedisGCRALimiter) Peek(ctx context.Context, key string, policy PolicyPreset) (AdmissionDecision, error) {
 	return l.eval(ctx, key, policy, luaRedisGCRAPeekScript)
 }
 
 // Get returns the current bucket state for key without consuming anything.
-func (l *redisGCRALimiter) Get(ctx context.Context, key string, policy PolicyPreset) (BucketState, error) {
+func (l *RedisGCRALimiter) Get(ctx context.Context, key string, policy PolicyPreset) (BucketState, error) {
 	decision, err := l.Peek(ctx, key, policy)
 	if err != nil {
 		return BucketState{}, err
@@ -143,7 +168,7 @@ func (l *redisGCRALimiter) Get(ctx context.Context, key string, policy PolicyPre
 
 // Increment consumes n cells atomically via the generalized GCRA script.
 // Increment(ctx, key, policy, 1) behaves identically to Allow.
-func (l *redisGCRALimiter) Increment(ctx context.Context, key string, policy PolicyPreset, n float64) (AdmissionDecision, error) {
+func (l *RedisGCRALimiter) Increment(ctx context.Context, key string, policy PolicyPreset, n float64) (AdmissionDecision, error) {
 	if l == nil || l.client == nil {
 		return AdmissionDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}, nil
 	}
@@ -187,7 +212,7 @@ func (l *redisGCRALimiter) Increment(ctx context.Context, key string, policy Pol
 }
 
 // Reset clears key's bucket; the next access starts from a full bucket.
-func (l *redisGCRALimiter) Reset(ctx context.Context, key string) error {
+func (l *RedisGCRALimiter) Reset(ctx context.Context, key string) error {
 	if l == nil || l.client == nil {
 		return nil
 	}
@@ -198,7 +223,7 @@ func (l *redisGCRALimiter) Reset(ctx context.Context, key string) error {
 	return nil
 }
 
-func (l *redisGCRALimiter) eval(ctx context.Context, key string, policy PolicyPreset, script string) (AdmissionDecision, error) {
+func (l *RedisGCRALimiter) eval(ctx context.Context, key string, policy PolicyPreset, script string) (AdmissionDecision, error) {
 	if l == nil || l.client == nil {
 		return AdmissionDecision{Allowed: true, Applied: false, Remaining: -1, Limit: -1}, nil
 	}

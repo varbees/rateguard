@@ -10,7 +10,7 @@ import (
 var (
 	_ Store = (*MemoryLimiter)(nil)
 	_ Store = (*ShardedLimiter)(nil)
-	_ Store = (*redisGCRALimiter)(nil)
+	_ Store = (*RedisGCRALimiter)(nil)
 )
 
 func newStoreFixtures(clock *fakeLimiterClock) []struct {

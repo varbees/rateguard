@@ -3,6 +3,7 @@ package rateguard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -206,5 +207,106 @@ func TestRedisStoreResetSendsDelScript(t *testing.T) {
 	}
 	if len(client.lastKeys) != 1 || client.lastKeys[0] != "tenant-a" {
 		t.Fatalf("Reset keys = %v, want [tenant-a]", client.lastKeys)
+	}
+}
+
+// ── Real Redis/Valkey integration ──
+//
+// Everything above uses a fake client that mocks Eval() directly, which
+// proves the SDK dispatches the right script with the right args but never
+// actually executes the Lua — so it can't catch a real bug in the script
+// itself (this repo shipped exactly that kind of bug once: the Lua rounded
+// retry_after to the nearest millisecond instead of the nearest whole
+// second, and no test caught it because nothing ran the real script
+// against a real server). These tests do — skipped automatically if no
+// Redis/Valkey is reachable on localhost:6379.
+
+func redisAvailableForTest() bool {
+	client := redis.NewClient(&redis.Options{Addr: "localhost:6379", DialTimeout: 300 * time.Millisecond})
+	defer client.Close()
+	return client.Ping(context.Background()).Err() == nil
+}
+
+func TestRedisIntegrationAllowsBurstThenDeniesWithWholeSecondRetry(t *testing.T) {
+	if !redisAvailableForTest() {
+		t.Skip("no Redis/Valkey reachable on localhost:6379")
+	}
+	t.Parallel()
+
+	client := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	defer client.Close()
+
+	limiter := NewRedisGCRALimiter(client)
+	ctx := context.Background()
+	key := fmt.Sprintf("rateguard-test:%d", time.Now().UnixNano())
+	// rps=10, burst=20: interval=100ms. Draining 20 with n=5 leaves newTat
+	// at now+500ms; a further n=20 exceeds the 2s window entirely, denying
+	// with a real, whole-second-rounded retry_after.
+	policy := PolicyPreset{RequestsPerSecond: 10, Burst: 20}
+
+	first, err := limiter.Increment(ctx, key, policy, 5)
+	if err != nil {
+		t.Fatalf("Increment(5): %v", err)
+	}
+	if !first.Allowed || first.Remaining != 15 {
+		t.Fatalf("Increment(5) = %+v, want allowed remaining=15", first)
+	}
+
+	// n=20 with tat=now+500ms: tolerance=0, allow_at=now+500ms>now -> denied.
+	// A 500ms deficit must ceil to the nearest WHOLE SECOND (1000ms), not
+	// stay at 500ms — this is the exact bug this test suite exists to catch.
+	second, err := limiter.Increment(ctx, key, policy, 20)
+	if err != nil {
+		t.Fatalf("Increment(20): %v", err)
+	}
+	if second.Allowed {
+		t.Fatal("Increment(20) with only 15 tokens left should deny")
+	}
+	if second.RetryAfter%time.Second != 0 {
+		t.Fatalf("RetryAfter = %v, want a whole-second multiple (Redis path must match the in-memory limiter's rounding, AGENTS.md rule 13)", second.RetryAfter)
+	}
+	if second.RetryAfter != time.Second {
+		t.Fatalf("RetryAfter = %v, want exactly 1s for a 500ms deficit", second.RetryAfter)
+	}
+
+	if err := limiter.Reset(ctx, key); err != nil {
+		t.Fatalf("Reset: %v", err)
+	}
+	afterReset, err := limiter.Allow(ctx, key, policy)
+	if err != nil {
+		t.Fatalf("Allow after Reset: %v", err)
+	}
+	if !afterReset.Allowed {
+		t.Fatal("bucket should be full again after Reset")
+	}
+}
+
+func TestRedisIntegrationPeekNeverConsumes(t *testing.T) {
+	if !redisAvailableForTest() {
+		t.Skip("no Redis/Valkey reachable on localhost:6379")
+	}
+	t.Parallel()
+
+	client := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
+	defer client.Close()
+
+	limiter := NewRedisGCRALimiter(client)
+	ctx := context.Background()
+	key := fmt.Sprintf("rateguard-test:%d", time.Now().UnixNano())
+	policy := PolicyPreset{RequestsPerSecond: 1, Burst: 2}
+
+	for i := 0; i < 3; i++ {
+		peeked, err := limiter.Peek(ctx, key, policy)
+		if err != nil {
+			t.Fatalf("Peek %d: %v", i, err)
+		}
+		if !peeked.Allowed || peeked.Remaining != 1 {
+			t.Fatalf("Peek %d = %+v, want allowed remaining=1 (unconsumed)", i, peeked)
+		}
+	}
+
+	first, err := limiter.Allow(ctx, key, policy)
+	if err != nil || !first.Allowed {
+		t.Fatalf("first real Allow after peeks = %+v err=%v, want allowed (peeks must not have consumed)", first, err)
 	}
 }
