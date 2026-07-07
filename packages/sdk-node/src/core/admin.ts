@@ -27,6 +27,14 @@
  * you'd give pprof or an unauthenticated Prometheus /metrics endpoint. It
  * is opt-in: nothing wires it into the middleware adapters.
  *
+ * Browser threat model: unlike pprof/metrics (read-only), this handler
+ * accepts state-mutating requests (PATCH /admin/policy, POST
+ * /admin/mcp/call). Without corsOrigin set, no cross-origin fetch from a
+ * browser can reach it — same-origin only. If you pass corsOrigin to
+ * serve a dashboard on a different port, that origin (and anything else
+ * running in the same browser) becomes trusted to the same degree the
+ * admin API itself is.
+ *
  * Zero new dependency: implemented against node:http's request/response
  * types — pass the returned handler to http.createServer(...), matching
  * Go's AdminHandler() http.Handler ergonomics.
@@ -54,15 +62,27 @@ export interface AdminHost {
  *   import { createServer } from 'node:http';
  *   const guard = new RateGuard({ preset: 'standard' });
  *   createServer(createAdminHandler(guard)).listen(9090, '127.0.0.1');
+ *
+ * corsOrigin sets Access-Control-Allow-Origin to this exact value (e.g.
+ * 'http://localhost:3001' for a locally-run dashboard) — never '*'. Omit
+ * it (the default) to skip CORS headers entirely: the admin API then only
+ * answers same-origin requests, and no arbitrary webpage open in a
+ * browser on the same machine can reach it via a cross-origin fetch.
  */
-export function createAdminHandler(guard: AdminHost): (req: IncomingMessage, res: ServerResponse) => void {
+export function createAdminHandler(guard: AdminHost, corsOrigin?: string): (req: IncomingMessage, res: ServerResponse) => void {
   return (req, res) => {
     // CORS allows a dashboard running on a different port (the common
-    // local-dev/self-host shape: app on :8080, dashboard on :3001). Scoped
-    // to this handler only — never applied to the rate-limited request path.
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    // local-dev/self-host shape: app on :8080, dashboard on :3001) — but
+    // ONLY when explicitly configured. No corsOrigin means no CORS
+    // headers at all, so a browser refuses cross-origin requests; this
+    // handler never sets a wildcard, which would let any webpage open in
+    // the same browser reach this unauthenticated, state-mutating API.
+    if (corsOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Vary', 'Origin');
+    }
     if (req.method === 'OPTIONS') {
       res.statusCode = 204;
       res.end();

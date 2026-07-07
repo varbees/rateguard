@@ -5,8 +5,8 @@ import type { RequestContext } from '../src/types.js';
 
 let server: Server | undefined;
 
-function startAdmin(guard: RateGuard): Promise<string> {
-  server = createServer(createAdminHandler(guard));
+function startAdmin(guard: RateGuard, corsOrigin?: string): Promise<string> {
+  server = createServer(createAdminHandler(guard, corsOrigin));
   return new Promise((resolve, reject) => {
     server!.once('error', reject);
     server!.listen(0, '127.0.0.1', () => {
@@ -52,7 +52,6 @@ describe('admin HTTP API', () => {
 
     const response = await fetch(`${base}/admin/state`);
     expect(response.status).toBe(200);
-    expect(response.headers.get('access-control-allow-origin')).toBe('*');
 
     const state = (await response.json()) as Record<string, unknown>;
     expect(state.key).toBe('default');
@@ -176,16 +175,37 @@ describe('admin HTTP API', () => {
     expect(((await missingTool.json()) as { error: string }).error).toBe('"tool" is required');
   });
 
-  it('OPTIONS short-circuits to 204 with CORS headers on every admin route', async () => {
-    const base = await startAdmin(new RateGuard({ preset: 'dev' }));
+  it('OPTIONS short-circuits to 204 with CORS headers only when corsOrigin is configured', async () => {
+    const base = await startAdmin(new RateGuard({ preset: 'dev' }), 'http://localhost:3001');
 
     for (const path of ['/admin/state', '/admin/policy', '/admin/mcp/tools', '/admin/mcp/call']) {
       const response = await fetch(`${base}${path}`, { method: 'OPTIONS' });
       expect(response.status, path).toBe(204);
-      expect(response.headers.get('access-control-allow-origin')).toBe('*');
+      expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:3001');
       expect(response.headers.get('access-control-allow-methods')).toBe('GET, PATCH, POST, OPTIONS');
       expect(response.headers.get('access-control-allow-headers')).toBe('Content-Type');
     }
+  });
+
+  // Security regression: without corsOrigin explicitly configured, the
+  // admin API must not set a wildcard (or any) CORS header — a browser
+  // then refuses cross-origin fetches, so no arbitrary webpage open in
+  // the same browser can reach this unauthenticated, state-mutating API.
+  // This was a real bug: the previous unconditional
+  // "Access-Control-Allow-Origin: *" let any page in any browser on the
+  // same machine/LAN PATCH policy via preflight.
+  it('sets no CORS headers by default', async () => {
+    const base = await startAdmin(new RateGuard({ preset: 'dev' }));
+
+    const response = await fetch(`${base}/admin/policy`, { method: 'OPTIONS' });
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+    expect(response.headers.get('access-control-allow-methods')).toBeNull();
+    expect(response.headers.get('access-control-allow-headers')).toBeNull();
+
+    // Same-origin/non-browser callers still work fine.
+    const getResponse = await fetch(`${base}/admin/policy`);
+    expect(getResponse.status).toBe(200);
   });
 
   it('rejects wrong methods per route with 405 and Go-matching messages', async () => {
