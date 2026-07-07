@@ -1,6 +1,6 @@
 # One-command self-hosted RateGuard control center demo:
 #   docker compose up
-# Then open http://localhost:3001 — it's pre-pointed at the demo server
+# Then open http://localhost:3001 — it's pre-pointed at the Go demo server
 # below, which is already generating synthetic traffic so the dashboard
 # has real, moving numbers on first load. docker compose down to stop.
 #
@@ -9,6 +9,15 @@
 # Python app) and point the dashboard's "Instance" field at it — the
 # dashboard is a static client, it has no idea which RateGuard instance
 # it's talking to until you tell it.
+#
+# To verify the SAME dashboard against a Node or Python backend instead of
+# Go (they expose the identical admin API), bring either up as its own
+# opt-in profile — the default `docker compose up` never starts them:
+#   docker compose --profile node-demo up      # http://localhost:8081, key=demo:demo:demo:demo:demo
+#   docker compose --profile python-demo up    # http://localhost:8082, key=demo:demo:demo:demo:demo
+# Then point the dashboard's Instance field (Settings) at whichever port
+# you brought up — the dashboard container itself doesn't need rebuilding
+# per backend, it's the same static client either way.
 #
 # To also front a real third-party tool (Claude Code, Hermes, Aider — anything
 # with a base_url override) instead of a service you own, bring up the connect
@@ -30,6 +39,22 @@ services:
       # Inter-container traffic (dashboard -> rateguard-demo) uses the
       # compose network directly and is unaffected by this host binding.
       - "127.0.0.1:8080:8080"
+
+  rateguard-demo-node:
+    profiles: ["node-demo"]
+    build:
+      context: ./packages/sdk-node
+      dockerfile: examples/dashboard-demo/Dockerfile
+    ports:
+      - "127.0.0.1:8081:8081"
+
+  rateguard-demo-python:
+    profiles: ["python-demo"]
+    build:
+      context: ./packages/sdk-python
+      dockerfile: examples/dashboard-demo/Dockerfile
+    ports:
+      - "127.0.0.1:8082:8082"
 
   dashboard:
     build:
