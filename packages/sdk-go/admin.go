@@ -32,24 +32,39 @@ import (
 // network, or put it behind your own reverse-proxy auth, the same posture
 // you'd give pprof or an unauthenticated Prometheus /metrics endpoint. It
 // is opt-in: nothing wires it into HTTPMiddleware or ChiMiddleware.
+//
+// Browser threat model: unlike pprof/metrics (which are read-only), this
+// handler accepts state-mutating requests (PATCH /admin/policy, POST
+// /admin/mcp/call). Without Config.AdminCORSOrigin set, no cross-origin
+// fetch from a browser can reach it — same-origin only. If you set
+// AdminCORSOrigin to serve a dashboard on a different port, that origin
+// (and anything else running in the same browser) becomes trusted to the
+// same degree the admin API itself is.
 func (s *SDK) AdminHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/admin/state", s.handleAdminState)
 	mux.HandleFunc("/admin/policy", s.handleAdminPolicy)
 	mux.HandleFunc("/admin/mcp/tools", s.handleAdminMCPTools)
 	mux.HandleFunc("/admin/mcp/call", s.handleAdminMCPCall)
-	return withAdminCORS(mux)
+	return withAdminCORS(mux, s.cfg.AdminCORSOrigin)
 }
 
-// withAdminCORS allows cross-origin requests from a dashboard running on a
-// different port (the common local-dev/self-host shape: RateGuard on :8080,
-// dashboard on :3001). Scoped to the admin mux only — never applied to the
-// rate-limited request path.
-func withAdminCORS(next http.Handler) http.Handler {
+// withAdminCORS allows cross-origin requests from a single configured
+// origin (e.g. a dashboard running on a different port — the common
+// local-dev/self-host shape: RateGuard on :8080, dashboard on :3001).
+// origin empty (the default) omits CORS headers entirely, so only
+// same-origin requests are answered — never a wildcard, which would let
+// any webpage open in the same browser reach this unauthenticated,
+// state-mutating API via a cross-origin fetch. Scoped to the admin mux
+// only — never applied to the rate-limited request path.
+func withAdminCORS(next http.Handler, origin string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, PATCH, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, PATCH, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Vary", "Origin")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

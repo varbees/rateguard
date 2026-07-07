@@ -23,14 +23,20 @@ services:
       context: ./packages/sdk-go
       dockerfile: examples/dashboard-demo/Dockerfile
     ports:
-      - "8080:8080"
+      # Bound to the host's loopback only — the admin API this exposes has
+      # no authentication of its own (see AdminHandler's doc comment), so
+      # the default "8080:8080" form (which Docker maps to all host
+      # interfaces) would let anyone on your LAN reach and rewrite policy.
+      # Inter-container traffic (dashboard -> rateguard-demo) uses the
+      # compose network directly and is unaffected by this host binding.
+      - "127.0.0.1:8080:8080"
 
   dashboard:
     build:
       context: .
       dockerfile: packages/dashboard/Dockerfile
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     depends_on:
       - rateguard-demo
 
@@ -40,7 +46,7 @@ services:
       context: ./packages
       dockerfile: connect/Dockerfile
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
     environment:
       # Falls back to a harmless default so plain `docker compose up` (no
       # --profile connect) never fails at parse time — compose interpolates

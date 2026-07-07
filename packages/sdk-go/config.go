@@ -95,4 +95,15 @@ type Config struct {
 	ServiceName           string
 	TraceSpanProcessor    sdktrace.SpanProcessor
 	MetricReader          sdkmetric.Reader
+
+	// AdminCORSOrigin sets Access-Control-Allow-Origin on AdminHandler's
+	// responses to this exact value (e.g. "http://localhost:3001" for a
+	// locally-run dashboard) — never "*". Leave empty (the default) to omit
+	// CORS headers entirely: the admin API then only answers same-origin
+	// requests, and no arbitrary webpage open in a browser on the same
+	// machine can reach it via a cross-origin fetch. Only set this to the
+	// dashboard's own origin, and only when you also trust everything else
+	// running in that browser — the admin API still has no authentication
+	// of its own.
+	AdminCORSOrigin string
 }

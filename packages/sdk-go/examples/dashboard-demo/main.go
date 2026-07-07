@@ -46,6 +46,11 @@ func main() {
 		Model:              demoKeyPart,
 		KeyFunc:            func(*http.Request) string { return demoKey },
 		Guardrails:         rateguard.StandardGuardrails(),
+		// The dashboard (packages/dashboard) runs on :3001 in dev
+		// (package.json's "dev" script) — a different origin from this
+		// demo's :8080, so the admin API needs this explicit allowance.
+		// Without it the admin API only answers same-origin requests.
+		AdminCORSOrigin: "http://localhost:3001",
 	})
 
 	mux := http.NewServeMux()
@@ -57,6 +62,16 @@ func main() {
 
 	go generateSyntheticTraffic(rg)
 
+	// This binary also runs inside the docker-compose demo's rateguard-demo
+	// container (see examples/dashboard-demo/Dockerfile), where it must
+	// bind to all interfaces for Docker's port publishing to reach it —
+	// binding to 127.0.0.1 here would work for a direct `go run` on your
+	// own machine but silently break the containerized path entirely. The
+	// LAN-exposure risk is instead closed at the docker-compose.yml layer
+	// (host-side port bindings restricted to 127.0.0.1) and by this admin
+	// API having no auth of its own (see AdminHandler's doc comment) — if
+	// you run this directly with `go run` on a machine reachable from your
+	// LAN, bind a specific interface yourself instead of using this addr.
 	addr := ":8080"
 	log.Printf("dashboard-demo listening on %s — metrics at /metrics, admin API at /admin/*", addr)
 	log.Printf("point packages/dashboard at http://localhost%s, key=%s (the dashboard's default)", addr, demoKey)

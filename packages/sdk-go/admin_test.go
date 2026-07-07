@@ -125,6 +125,29 @@ func TestAdminHandlerMethodNotAllowed(t *testing.T) {
 }
 
 func TestAdminHandlerCORSPreflight(t *testing.T) {
+	sdk := New(Config{Preset: "dev", AdminCORSOrigin: "http://localhost:3001"})
+	handler := sdk.AdminHandler()
+
+	req := httptest.NewRequest(http.MethodOptions, "/admin/policy", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:3001" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want http://localhost:3001", got)
+	}
+}
+
+// TestAdminHandlerNoCORSByDefault is the security-regression test: without
+// AdminCORSOrigin explicitly configured, the admin API must not set a
+// wildcard (or any) CORS header — a browser then refuses cross-origin
+// fetches, so no arbitrary webpage open in the same browser can reach this
+// unauthenticated, state-mutating API. This was a real bug: the previous
+// unconditional "Access-Control-Allow-Origin: *" let any page in any
+// browser on the same machine/LAN PATCH policy via preflight.
+func TestAdminHandlerNoCORSByDefault(t *testing.T) {
 	sdk := New(Config{Preset: "dev"})
 	handler := sdk.AdminHandler()
 
@@ -135,8 +158,16 @@ func TestAdminHandlerCORSPreflight(t *testing.T) {
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
-	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
-		t.Fatalf("Access-Control-Allow-Origin = %q, want *", got)
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want empty (no CORS header without AdminCORSOrigin configured)", got)
+	}
+
+	// The API itself must still work for same-origin/non-browser callers.
+	getReq := httptest.NewRequest(http.MethodGet, "/admin/policy", nil)
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/policy status = %d, want 200", getRec.Code)
 	}
 }
 
