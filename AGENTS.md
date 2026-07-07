@@ -62,7 +62,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Provider detection (16 hosts + Azure/Bedrock/Vertex + self-hosted) | ✅ | ✅ | ✅ | `outbound.go` |
 | Async outbound transport (agent frameworks are async-first) | n/a | n/a | ✅ | `core/outbound.py` |
 | Framework integration recipes (INTEGRATIONS.md, doc-verified) | ✅ | ✅ | ✅ | `INTEGRATIONS.md` |
-| Admin API — state/policy/MCP-tool-call over HTTP (opt-in, unauthenticated by design — bind privately) | ✅ | ✅ | ✅ | `admin.go` |
+| Admin API — state/policy/MCP-tool-call over HTTP (opt-in, unauthenticated by design — bind privately; CORS same-origin-only by default, configurable single origin, never a wildcard) | ✅ | ✅ | ✅ | `admin.go` |
 | Guardrail violation tracking (bounded log + counts by code + Prometheus counter) | ✅ | ✅ | ✅ | `guardrail_log.go` |
 | Dashboard control center (`packages/dashboard`: Overview/Analytics/Agents/Controls/MCP Console/Settings, `docker compose up` demo) | ✅ (via Go admin API) | ❌ | ❌ | `packages/dashboard/` |
 

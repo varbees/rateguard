@@ -33,7 +33,7 @@ Every other rate limiting tool was built for REST APIs. RateGuard was built for 
 | **Semantic caching** | Bring your own `Embedder` (OpenAI/Cohere/Voyage embeddings, a local model — anything). A cosine-similarity hit skips the network call, breaker, and budget entirely. Streaming requests always bypass it. All 3 languages. |
 | **Budget attestation** | Ed25519-signed delegation chains so one agent can hand a sub-agent a cryptographic budget that only narrows, never widens — no shared secret, verifiable end-to-end, byte-identical signing across all 3 languages. RateGuard's own extension in the shape of the IETF Agent Identity Protocol draft, not a claim of AIP compliance. |
 | **Redis distributed limiter** | Atomic Lua GCRA script, byte-identical across all 3 languages — for rate limits shared across multiple processes/instances. |
-| **Admin API** | Opt-in, unauthenticated-by-design HTTP API for state/policy/MCP-tool-calls — bind privately. All 3 languages. |
+| **Admin API** | Opt-in, unauthenticated-by-design HTTP API for state/policy/MCP-tool-calls — bind privately. CORS is same-origin-only by default; cross-origin access (e.g. a dashboard on a different port) requires explicitly configuring the allowed origin, never a wildcard. All 3 languages. |
 
 ## Guard the money, not just the door
 
