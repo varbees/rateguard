@@ -341,6 +341,92 @@ func TestOutboundFallbackStripsAzureAPIKey(t *testing.T) {
 	}
 }
 
+// TestOutboundSemanticCacheScopesFallbackResponsesToTheServingProvider
+// reproduces a real gap: the semantic cache's scope key was computed from
+// the REQUESTED provider/model before execute() ran, but execute() can
+// internally fall over to a different provider — which never mutates the
+// caller's outboundCall struct (retarget builds an entirely new one for the
+// recursive call). Caching a fallback answer under the pre-fallback scope
+// meant a later request that reached the ORIGINAL (now-recovered) provider
+// could get served the FALLBACK provider's stale, mislabeled answer instead
+// of a fresh real one.
+func TestOutboundSemanticCacheScopesFallbackResponsesToTheServingProvider(t *testing.T) {
+	var primaryCalls, fallbackCalls atomic.Int64
+	primaryShouldFail := true
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if strings.Contains(string(body), "deepseek-chat") {
+			fallbackCalls.Add(1)
+			openAIJSONHandler("deepseek-chat", 10, 5)(w, r)
+			return
+		}
+		primaryCalls.Add(1)
+		if primaryShouldFail {
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"error":{"message":"rate limited"}}`))
+			return
+		}
+		openAIJSONHandler("gpt-4o", 10, 5)(w, r)
+	}))
+	defer server.Close()
+
+	chain := NewProviderChain(
+		Provider("openai", "gpt-4o", "https://api.openai.com"),
+		ProviderEntry{Name: "deepseek", Model: "deepseek-chat", BaseURL: server.URL},
+	)
+	embedder := &stubEmbedder{vectors: map[string][]float32{"capital of france": {1, 0, 0}}}
+
+	sdk := New(Config{Preset: "dev"})
+	client := wrapForHost(t, sdk, server, OutboundOptions{
+		Chain:         chain,
+		SemanticCache: &SemanticCacheOptions{Embedder: embedder, SimilarityThreshold: 0.9},
+	})
+
+	// Request 1: primary is down, falls back to deepseek. Gets cached —
+	// the fix requires it be cached under deepseek's scope, not openai's.
+	req1, _ := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4o","messages":[{"role":"user","content":"what is the capital of france?"}]}`))
+	resp1, err := client.Do(req1)
+	if err != nil {
+		t.Fatalf("request 1: %v", err)
+	}
+	body1, _ := io.ReadAll(resp1.Body)
+	_ = resp1.Body.Close()
+	if resp1.Header.Get("X-RateGuard-Fallback") != "true" {
+		t.Fatalf("request 1 should have fallen back, body: %s", body1)
+	}
+	if primaryCalls.Load() != 1 || fallbackCalls.Load() != 1 {
+		t.Fatalf("after request 1: primary=%d fallback=%d, want 1/1", primaryCalls.Load(), fallbackCalls.Load())
+	}
+
+	// Primary has recovered. Request 2 (same prompt, same embedding) must
+	// NOT be served deepseek's cached answer as if it were openai's — it
+	// must reach the network and get a fresh, real openai response. If the
+	// bug were present (cached under "openai:gpt-4o"), this would be a
+	// wrongful cache hit: primaryCalls would stay at 1 and the body would
+	// still say "deepseek-chat".
+	primaryShouldFail = false
+	req2, _ := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4o","messages":[{"role":"user","content":"tell me the capital of france"}]}`))
+	resp2, err := client.Do(req2)
+	if err != nil {
+		t.Fatalf("request 2: %v", err)
+	}
+	body2, _ := io.ReadAll(resp2.Body)
+	_ = resp2.Body.Close()
+
+	if resp2.Header.Get("X-RateGuard-Cache") == "hit" {
+		t.Fatalf("request 2 must not be served from the fallback-scoped cache entry, body: %s", body2)
+	}
+	if primaryCalls.Load() != 2 {
+		t.Fatalf("primary must be reached again on request 2 (recovered): primaryCalls = %d, want 2", primaryCalls.Load())
+	}
+	if !strings.Contains(string(body2), `"model":"gpt-4o"`) {
+		t.Fatalf("request 2 should return a fresh openai (gpt-4o) response, got: %s", body2)
+	}
+}
+
 func TestOutboundCircuitBreakerTripsPerProvider(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

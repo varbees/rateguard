@@ -188,6 +188,67 @@ describe('wrapFetch semanticCache wiring', () => {
     expect(unrelated.headers.get('x-rateguard-cache')).toBeNull();
   });
 
+  // Reproduces a real gap: the scope key was computed from the REQUESTED
+  // provider/model before the call ran, but a fallback (retarget) never
+  // mutates the caller's `call` object — it builds an entirely new one for
+  // the recursive attempt. Caching a fallback answer under the pre-fallback
+  // scope meant a later request that reached the ORIGINAL (now-recovered)
+  // provider could get served the FALLBACK provider's stale, mislabeled
+  // answer instead of a fresh real one.
+  it('scopes a fallback response to the provider that actually served it, not the one requested', async () => {
+    let primaryShouldFail = true;
+    let primaryCalls = 0;
+    let fallbackCalls = 0;
+    const mockFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = typeof init?.body === 'string' ? init.body : '';
+      if (body.includes('deepseek-chat')) {
+        fallbackCalls++;
+        return new Response(openAIBody('deepseek-chat', 10, 5), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      primaryCalls++;
+      if (primaryShouldFail) {
+        return new Response('{"error":{"message":"rate limited"}}', { status: 429 });
+      }
+      return new Response(openAIBody('gpt-4o', 10, 5), { status: 200, headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+
+    const rg = new RateGuard({ preset: 'dev' });
+    const wrapped = rg.wrapFetch({
+      fetch: mockFetch,
+      chain: [{ name: 'deepseek', model: 'deepseek-chat', baseURL: 'https://api.deepseek.com/v1', weight: 0 }],
+      semanticCache: { embedder: new LetterFrequencyEmbedder(), similarityThreshold: 0.95 },
+    });
+
+    // Request 1: primary is down, falls back to deepseek. Gets cached —
+    // the fix requires it be cached under deepseek's scope, not openai's.
+    const prompt = 'what is the capital of france';
+    const first = await wrapped('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] }),
+    });
+    expect(first.headers.get('x-rateguard-fallback')).toBe('true');
+    expect(primaryCalls).toBe(1);
+    expect(fallbackCalls).toBe(1);
+
+    // Primary has recovered. Request 2 (IDENTICAL prompt -> identical
+    // embedding, guaranteeing a cache match if scope agrees) must NOT be
+    // served deepseek's cached answer as if it were openai's — it must
+    // reach the network and get a fresh, real openai response. If the bug
+    // were present (cached under "openai:gpt-4o"), this would be a
+    // wrongful cache hit: primaryCalls would stay at 1 and the body would
+    // still say "deepseek-chat".
+    primaryShouldFail = false;
+    const second = await wrapped('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: prompt }] }),
+    });
+
+    expect(second.headers.get('x-rateguard-cache')).not.toBe('hit');
+    expect(primaryCalls).toBe(2);
+    const secondText = await second.text();
+    expect(secondText).toContain('"model":"gpt-4o"');
+  });
+
   it('never caches or serves streaming requests', async () => {
     let networkCalls = 0;
     // Generous token budget: the SSE usage scan that commits/releases the

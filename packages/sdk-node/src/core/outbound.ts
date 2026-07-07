@@ -362,7 +362,7 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
   const attemptWithCache = async (url: URL, init: RequestInit, bodyText: string, call: OutboundCall): Promise<Response> => {
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     const semanticCache = cache!;
-    const scope = `${call.provider}:${call.model || 'default'}`;
+    let scope = `${call.provider}:${call.model || 'default'}`;
     const prompt = promptTextFromRequestBody(bodyText);
     if (!prompt) {
       return attempt(url, init, bodyText || undefined, call, 0);
@@ -408,6 +408,19 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
       response.headers.forEach((value, key) => {
         headers[key] = value;
       });
+      // `scope` was computed from the REQUESTED provider/model before
+      // attempt() ran — but attempt() may have internally fallen over to a
+      // different provider (retarget), which never mutates the caller's
+      // `call` object (it builds an entirely new one for the recursive
+      // call). Caching under the pre-fallback scope means a later request
+      // that still reaches the ORIGINAL (now-recovered) provider could
+      // replay the FALLBACK provider's answer. Recompute the scope from
+      // what actually served this response.
+      if (response.headers.get('x-rateguard-fallback') === 'true') {
+        const servedProvider = response.headers.get('x-rateguard-provider') || call.provider;
+        const servedModel = modelFromBody(text) || call.model || 'default';
+        scope = `${servedProvider}:${servedModel}`;
+      }
       semanticCache.store(scope, embedding, { status: response.status, headers, body: text });
     } catch {
       // Storing is best-effort; never fail the real response over it.

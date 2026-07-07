@@ -197,6 +197,62 @@ def test_outbound_semantic_cache_hit_skips_network():
     assert second.json() == first.json()
 
 
+def test_outbound_semantic_cache_scopes_fallback_response_to_the_serving_provider():
+    """Reproduces a real gap: the scope key was computed from the
+    REQUESTED provider/model before the call ran, but a fallback
+    (retarget) never mutates the caller's `call` object — it builds an
+    entirely new one for the recursive attempt. Caching a fallback answer
+    under the pre-fallback scope meant a later request that reached the
+    ORIGINAL (now-recovered) provider could get served the FALLBACK
+    provider's stale, mislabeled answer instead of a fresh real one."""
+    from rateguard import FallbackProvider
+
+    primary_calls = 0
+    fallback_calls = 0
+    primary_should_fail = True
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal primary_calls, fallback_calls
+        body = json.loads(request.content or b"{}")
+        if body.get("model") == "deepseek-chat":
+            fallback_calls += 1
+            return httpx.Response(200, json={"id": "c1", "model": "deepseek-chat", "choices": []})
+        primary_calls += 1
+        if primary_should_fail:
+            return httpx.Response(429, json={"error": {"message": "rate limited"}})
+        return httpx.Response(200, json={"id": "c1", "model": "gpt-4o", "choices": []})
+
+    rg = RateGuard(preset="dev")
+    client = make_client(
+        rg,
+        handler,
+        chain=[FallbackProvider(name="deepseek", base_url="https://api.deepseek.com/v1", model="deepseek-chat")],
+        semantic_cache=SemanticCacheOptions(embedder=_FakeEmbedder(), similarity_threshold=0.9),
+    )
+
+    prompt = {"model": "gpt-4o", "messages": [{"role": "user", "content": "What is the capital of France?"}]}
+
+    # Request 1: primary is down, falls back to deepseek. Gets cached — the
+    # fix requires it be cached under deepseek's scope, not openai's.
+    first = client.post("https://api.openai.com/v1/chat/completions", json=prompt)
+    assert first.headers.get("x-rateguard-fallback") == "true"
+    assert primary_calls == 1
+    assert fallback_calls == 1
+
+    # Primary has recovered. Request 2 (identical prompt -> identical
+    # embedding) must NOT be served deepseek's cached answer as if it were
+    # openai's — it must reach the network and get a fresh, real openai
+    # response. If the bug were present (cached under "openai:gpt-4o"),
+    # this would be a wrongful cache hit: primary_calls would stay at 1 and
+    # the body would still say "deepseek-chat".
+    primary_should_fail = False
+    second = client.post("https://api.openai.com/v1/chat/completions", json=prompt)
+
+    assert second.headers.get("x-rateguard-cache") != "hit"
+    assert primary_calls == 2
+    assert second.json()["model"] == "gpt-4o"
+
+
 def test_outbound_semantic_cache_miss_on_dissimilar_prompt_still_calls_network():
     call_count = 0
 

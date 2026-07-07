@@ -234,6 +234,19 @@ func (t *genaiTransport) executeWithCache(req *http.Request, body []byte, call *
 		return nil, fmt.Errorf("rateguard: read response for semantic cache: %w", readErr)
 	}
 
+	// `scope` was computed from the REQUESTED provider/model before execute()
+	// ran — but execute() may have internally fallen over to a different
+	// provider (retarget()), which never mutates the caller's `call` struct
+	// (it builds an entirely new one for the recursive call). Caching under
+	// the pre-fallback scope means a later request that still reaches the
+	// ORIGINAL (now-recovered) provider could replay the FALLBACK provider's
+	// answer. Recompute the scope from what actually served this response.
+	if resp.Header.Get("X-RateGuard-Fallback") == "true" {
+		servedProvider := nonEmpty(resp.Header.Get("X-RateGuard-Provider"), call.Provider)
+		servedModel := nonEmpty(servedModelFromResponseBody(buffered), nonEmpty(call.Model, "default"))
+		scope = servedProvider + ":" + servedModel
+	}
+
 	t.cache.store(scope, embedding, cachedLLMResponse{
 		statusCode: resp.StatusCode,
 		header:     resp.Header.Clone(),
@@ -611,6 +624,14 @@ func modelFromRequestBody(body []byte) string {
 		return ""
 	}
 	return strings.TrimSpace(payload.Model)
+}
+
+// servedModelFromResponseBody reads the top-level "model" field a provider
+// echoes back in its response (OpenAI-compatible APIs, including fallback
+// targets, all do this) — the ground truth for which model actually served
+// a request, independent of whichever model the request asked for.
+func servedModelFromResponseBody(body []byte) string {
+	return modelFromRequestBody(body)
 }
 
 func overrideModelInBody(body []byte, model string) ([]byte, bool) {

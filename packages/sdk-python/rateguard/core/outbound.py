@@ -409,6 +409,19 @@ def create_httpx_transport(
                 return response  # a rejection we synthesized ourselves — never cache it
 
             content = response.read()
+            # `scope` was computed from the REQUESTED provider/model before
+            # _execute() ran — but _execute() may have internally fallen
+            # over to a different provider (retarget), which never mutates
+            # the caller's `call` object (it builds an entirely new one for
+            # the recursive call). Caching under the pre-fallback scope
+            # meant a later request that still reaches the ORIGINAL
+            # (now-recovered) provider could replay the FALLBACK provider's
+            # answer. Recompute the scope from what actually served this
+            # response.
+            if response.headers.get("x-rateguard-fallback") == "true":
+                served_provider = response.headers.get("x-rateguard-provider") or call.provider
+                served_model = _model_from_body(content) or call.model or "default"
+                scope = f"{served_provider}:{served_model}"
             cache.store(scope, embedding, CachedResponse(status_code=response.status_code, headers=dict(response.headers), body=content))
             return response
 
@@ -654,6 +667,14 @@ def create_httpx_async_transport(
                 return response  # a rejection we synthesized ourselves — never cache it
 
             content = await response.aread()
+            # See the matching comment in the sync _execute_with_cache above:
+            # scope must reflect whatever provider actually served the
+            # response (fallback may have retargeted), not the one
+            # originally requested.
+            if response.headers.get("x-rateguard-fallback") == "true":
+                served_provider = response.headers.get("x-rateguard-provider") or call.provider
+                served_model = _model_from_body(content) or call.model or "default"
+                scope = f"{served_provider}:{served_model}"
             cache.store(scope, embedding, CachedResponse(status_code=response.status_code, headers=dict(response.headers), body=content))
             return response
 
