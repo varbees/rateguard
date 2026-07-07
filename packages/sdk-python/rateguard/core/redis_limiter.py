@@ -58,7 +58,11 @@ local tolerance = (burst - 1) * intervalUs
 local allowAt = tat - tolerance
 
 if nowUs < allowAt then
-    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000)
+    -- Rounds to the nearest WHOLE SECOND (not millisecond) to match the
+    -- in-memory limiter's retry_after semantics (AGENTS.md rule 13) — a
+    -- deployment switching from in-process to Redis must not see deny
+    -- behavior silently change.
+    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000000) * 1000
     return {0, 0, retryAfterMs, 1}
 end
 
@@ -90,7 +94,11 @@ local tolerance = (burst - 1) * intervalUs
 local allowAt = tat - tolerance
 
 if nowUs < allowAt then
-    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000)
+    -- Rounds to the nearest WHOLE SECOND (not millisecond) to match the
+    -- in-memory limiter's retry_after semantics (AGENTS.md rule 13) — a
+    -- deployment switching from in-process to Redis must not see deny
+    -- behavior silently change.
+    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000000) * 1000
     return {0, 0, retryAfterMs, 1}
 end
 
@@ -124,7 +132,11 @@ local tolerance = (burst - n) * intervalUs
 local allowAt = tat - tolerance
 
 if nowUs < allowAt then
-    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000)
+    -- Rounds to the nearest WHOLE SECOND (not millisecond) to match the
+    -- in-memory limiter's retry_after semantics (AGENTS.md rule 13) — a
+    -- deployment switching from in-process to Redis must not see deny
+    -- behavior silently change.
+    local retryAfterMs = math.ceil((allowAt - nowUs) / 1000000) * 1000
     return {0, 0, retryAfterMs, 1}
 end
 

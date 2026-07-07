@@ -388,11 +388,13 @@ def test_redis_integration_increment_consumes_n_cells(sync_limiter: RedisGCRALim
     first = sync_limiter.increment(key, options, 5)
     assert first.allowed and first.remaining == 15
 
-    # n=20 with tat=now+500ms: tolerance=0, allow_at=now+500ms>now -> denied,
-    # retry=ceil(500000us/1000)=500ms.
+    # n=20 with tat=now+500ms: tolerance=0, allow_at=now+500ms>now -> denied.
+    # A 500ms deficit ceils to the nearest WHOLE SECOND (AGENTS.md rule 13
+    # — matches the in-memory limiter's rounding, not raw millisecond
+    # ceiling), so retry_after_ms is 1000, not 500.
     second = sync_limiter.increment(key, options, 20)
     assert not second.allowed
-    assert second.retry_after_ms == 500
+    assert second.retry_after_ms == 1_000
 
 
 @requires_redis
