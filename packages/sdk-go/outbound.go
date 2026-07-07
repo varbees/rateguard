@@ -493,25 +493,58 @@ func (t *genaiTransport) retarget(req *http.Request, body []byte, call *outbound
 // openAICompatibleHosts maps known OpenAI-schema hosts to provider labels.
 // Validated against the 2026 inference-provider landscape: OpenAI-compatible
 // /chat/completions is the lingua franca (Groq serves it under /openai/v1/,
-// Cohere under /compatibility/v1/, DashScope under /compatible-mode/v1/ —
-// suffix matching covers all of them).
+// Cohere under /compatibility/v1/, DashScope under /compatible-mode/v1/,
+// DeepInfra under /v1/openai/, Z.AI under /api/paas/v4/ — suffix matching
+// covers all of them regardless of the path prefix a provider chose).
+//
+// Every host below was checked against that provider's own current API
+// docs, not carried over from a list someone else compiled — two are
+// deliberately NOT here despite both offering "OpenAI-compatible" access:
+//   - Cloudflare AI Gateway: its current recommended endpoint
+//     (api.cloudflare.com/client/v4/accounts/{id}/ai/v1/chat/completions)
+//     lives under Cloudflare's single shared general-purpose API host, used
+//     for every other Cloudflare product too (DNS, Workers, R2, ...) — not a
+//     dedicated LLM host the way every entry below is. Its OTHER endpoint
+//     shape (gateway.ai.cloudflare.com/v1/{account}/{gateway}/...) embeds a
+//     per-customer account+gateway ID in the path itself, so there is no
+//     single fixed hostname to key off the way this map does for everyone
+//     else. A user pointing at either still works via the self-hosted
+//     fallback below — it just gets labeled by its literal host, not
+//     "cloudflare" specifically.
+//   - IBM watsonx.ai: its OpenAI-compatible "Model Gateway" is explicitly
+//     preview-status in IBM's own docs as of this writing, and — like AWS
+//     Bedrock — is split across multiple region-specific hosts
+//     (us-south.ml.cloud.ibm.com, eu-de.ml.cloud.ibm.com, ...) rather than
+//     one fixed global host. Revisit once the gateway reaches GA with a
+//     confirmed stable endpoint shape; it would need a Bedrock-style native
+//     adapter (region-aware path matching), not a map entry.
 var openAICompatibleHosts = map[string]string{
-	"api.openai.com":           "openai",
-	"api.deepseek.com":         "deepseek",
-	"api.groq.com":             "groq",
-	"api.mistral.ai":           "mistral",
-	"api.together.xyz":         "together",
-	"openrouter.ai":            "openrouter",
-	"api.x.ai":                 "xai",
-	"api.perplexity.ai":        "perplexity",
-	"api.moonshot.ai":          "moonshot",
-	"api.fireworks.ai":         "fireworks",
-	"api.cerebras.ai":          "cerebras",
-	"api.cohere.ai":            "cohere",
-	"api.cohere.com":           "cohere",
-	"dashscope.aliyuncs.com":   "dashscope",
-	"api.sambanova.ai":         "sambanova",
-	"integrate.api.nvidia.com": "nvidia",
+	"api.openai.com":              "openai",
+	"api.deepseek.com":            "deepseek",
+	"api.groq.com":                "groq",
+	"api.mistral.ai":              "mistral",
+	"api.together.xyz":            "together",
+	"openrouter.ai":               "openrouter",
+	"api.x.ai":                    "xai",
+	"api.perplexity.ai":           "perplexity",
+	"api.moonshot.ai":             "moonshot",
+	"api.fireworks.ai":            "fireworks",
+	"api.cerebras.ai":             "cerebras",
+	"api.cohere.ai":               "cohere",
+	"api.cohere.com":              "cohere",
+	"dashscope.aliyuncs.com":      "dashscope",
+	"api.sambanova.ai":            "sambanova",
+	"integrate.api.nvidia.com":    "nvidia",
+	"api.deepinfra.com":           "deepinfra",
+	"router.huggingface.co":       "huggingface",
+	"inference.baseten.co":        "baseten",
+	"api.tokenfactory.nebius.com": "nebius",
+	"api.z.ai":                    "zai",
+	"open.bigmodel.cn":            "zai",
+	"api.siliconflow.com":         "siliconflow",
+	"api.siliconflow.cn":          "siliconflow",
+	"router.requesty.ai":          "requesty",
+	"models.github.ai":            "github",
 }
 
 // detectLLMCall classifies an outbound request. Returns nil for non-LLM

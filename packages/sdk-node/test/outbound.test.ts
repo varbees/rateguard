@@ -28,6 +28,18 @@ describe('detectLLMCall', () => {
       ['https://bedrock-runtime.us-east-1.amazonaws.com/model/meta.llama3-70b/invoke', 'aws_bedrock', false],
       ['https://api.groq.com/openai/v1/chat/completions', 'groq', true],
       ['https://my-vllm.internal:8000/v1/chat/completions', 'my-vllm.internal', true],
+      // New providers this round — every path below is the real path shape
+      // from that provider's own current API docs, not a guess.
+      ['https://api.deepinfra.com/v1/openai/chat/completions', 'deepinfra', true],
+      ['https://router.huggingface.co/v1/chat/completions', 'huggingface', true],
+      ['https://inference.baseten.co/v1/chat/completions', 'baseten', true],
+      ['https://api.tokenfactory.nebius.com/v1/chat/completions', 'nebius', true],
+      ['https://api.z.ai/api/paas/v4/chat/completions', 'zai', true],
+      ['https://open.bigmodel.cn/api/paas/v4/chat/completions', 'zai', true],
+      ['https://api.siliconflow.com/v1/chat/completions', 'siliconflow', true],
+      ['https://api.siliconflow.cn/v1/chat/completions', 'siliconflow', true],
+      ['https://router.requesty.ai/v1/chat/completions', 'requesty', true],
+      ['https://models.github.ai/inference/chat/completions', 'github', true],
     ];
     for (const [url, provider, compatible] of cases) {
       const call = detectLLMCall(new URL(url));
@@ -229,6 +241,49 @@ describe('wrapFetch', () => {
     expect(resp.status).toBe(200);
     expect(seen).toHaveLength(2);
     expect(seen[1]!.apiKey).toBeNull();
+  });
+
+  // Reproduces a real bug: defaultProviderChain/budgetProviderChain/
+  // qualityProviderChain used to return a ProviderChain instance, but the
+  // real wrapFetch chain option is typed ProviderEntry[] and indexes it as
+  // a plain array (see outbound.ts: `options.chain[depth]`). Passing the
+  // ProviderChain instance through failed to even typecheck — confirmed by
+  // actually trying to compile `wrapFetch({ chain: defaultProviderChain() })`,
+  // not by inspection. Separately, an earlier version of all three chains
+  // included a raw 'anthropic' entry pointed at Anthropic's native base
+  // URL — but the fallback appends '/chat/completions' and resends the
+  // same OpenAI-shaped body, which Anthropic's real Messages API
+  // (/v1/messages, a different schema) would reject. Both bugs fixed
+  // together: every chain now returns a plain ProviderEntry[], all
+  // genuinely OpenAI-compatible.
+  it('preset provider chains are usable and openai-compatible', async () => {
+    const { defaultProviderChain, budgetProviderChain, qualityProviderChain } = await import('../src/core/provider-chain.js');
+
+    for (const factory of [defaultProviderChain, budgetProviderChain, qualityProviderChain]) {
+      const chain = factory();
+      expect(Array.isArray(chain)).toBe(true);
+      for (const entry of chain) {
+        expect(entry.name, `${factory.name} includes a raw anthropic entry`).not.toBe('anthropic');
+      }
+    }
+
+    const mockFetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('openai.com')) {
+        return new Response('{"error":{"message":"rate limited"}}', { status: 429 });
+      }
+      return jsonResponse(openAIBody('gemini-2.5-flash', 5, 3));
+    }) as typeof fetch;
+
+    const rg = new RateGuard({ preset: 'dev' });
+    const wrapped = rg.wrapFetch({ fetch: mockFetch, chain: defaultProviderChain() });
+
+    const resp = await wrapped('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }] }),
+    });
+    expect(resp.status).toBe(200);
+    expect(resp.headers.get('x-rateguard-fallback')).toBe('true');
   });
 
   it('passes non-LLM traffic through untouched', async () => {

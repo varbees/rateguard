@@ -522,6 +522,18 @@ func TestDetectLLMCallMatrix(t *testing.T) {
 		{"https://api.cerebras.ai/v1/chat/completions", "cerebras", true, ""},
 		{"https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", "dashscope", true, ""},
 		{"https://my-vllm.internal:8000/v1/chat/completions", "my-vllm.internal", true, ""},
+		// New providers this round — every path below is the real path shape
+		// from that provider's own current API docs, not a guess.
+		{"https://api.deepinfra.com/v1/openai/chat/completions", "deepinfra", true, ""},
+		{"https://router.huggingface.co/v1/chat/completions", "huggingface", true, ""},
+		{"https://inference.baseten.co/v1/chat/completions", "baseten", true, ""},
+		{"https://api.tokenfactory.nebius.com/v1/chat/completions", "nebius", true, ""},
+		{"https://api.z.ai/api/paas/v4/chat/completions", "zai", true, ""},
+		{"https://open.bigmodel.cn/api/paas/v4/chat/completions", "zai", true, ""},
+		{"https://api.siliconflow.com/v1/chat/completions", "siliconflow", true, ""},
+		{"https://api.siliconflow.cn/v1/chat/completions", "siliconflow", true, ""},
+		{"https://router.requesty.ai/v1/chat/completions", "requesty", true, ""},
+		{"https://models.github.ai/inference/chat/completions", "github", true, ""},
 	}
 
 	for _, tc := range cases {

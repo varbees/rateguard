@@ -34,6 +34,18 @@ def test_detect_llm_call_matrix():
         ("bedrock-runtime.us-east-1.amazonaws.com", "/model/meta.llama3-70b/invoke", "aws_bedrock", False),
         ("api.groq.com", "/openai/v1/chat/completions", "groq", True),
         ("my-vllm.internal", "/v1/chat/completions", "my-vllm.internal", True),
+        # New providers this round — every path below is the real path shape
+        # from that provider's own current API docs, not a guess.
+        ("api.deepinfra.com", "/v1/openai/chat/completions", "deepinfra", True),
+        ("router.huggingface.co", "/v1/chat/completions", "huggingface", True),
+        ("inference.baseten.co", "/v1/chat/completions", "baseten", True),
+        ("api.tokenfactory.nebius.com", "/v1/chat/completions", "nebius", True),
+        ("api.z.ai", "/api/paas/v4/chat/completions", "zai", True),
+        ("open.bigmodel.cn", "/api/paas/v4/chat/completions", "zai", True),
+        ("api.siliconflow.com", "/v1/chat/completions", "siliconflow", True),
+        ("api.siliconflow.cn", "/v1/chat/completions", "siliconflow", True),
+        ("router.requesty.ai", "/v1/chat/completions", "requesty", True),
+        ("models.github.ai", "/inference/chat/completions", "github", True),
     ]
     for host, path, provider, compatible in cases:
         call = detect_llm_call(host, path)
@@ -214,6 +226,48 @@ def test_outbound_fallback_strips_azure_api_key():
     assert resp.status_code == 200
     assert len(seen) == 2
     assert seen[1]["api_key"] is None
+
+
+def test_preset_provider_chains_are_usable_and_openai_compatible():
+    """Reproduces a real bug: default_provider_chain/budget_provider_chain/
+    quality_provider_chain used to return a ProviderChain instance, but the
+    real outbound transport's chain= parameter indexes a plain
+    list[FallbackProvider] (see core/outbound.py: `self.chain[depth]`).
+    Passing the ProviderChain instance through crashed the moment a
+    fallback was actually attempted: `TypeError: object of type
+    'ProviderChain' has no len()`. Confirmed by actually forcing a
+    429-triggered fallback through a mocked transport, not by inspection.
+
+    Separately, an earlier version of all three chains included a raw
+    "anthropic" entry pointed at Anthropic's native base URL — but
+    retarget appends "/chat/completions" and resends the same OpenAI-
+    shaped body, which Anthropic's real Messages API (/v1/messages, a
+    different schema) would reject. Both bugs fixed together: every
+    chain now returns plain FallbackProvider objects, all genuinely
+    OpenAI-compatible."""
+    from rateguard.core.provider_chain import budget_provider_chain, default_provider_chain, quality_provider_chain
+
+    for factory in (default_provider_chain, budget_provider_chain, quality_provider_chain):
+        chain = factory()
+        assert isinstance(chain, list)
+        for entry in chain:
+            assert isinstance(entry, FallbackProvider)
+            assert entry.name != "anthropic", f"{factory.__name__} includes a raw anthropic entry — no OpenAI-compatible endpoint exists for it"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "openai.com" in str(request.url):
+            return httpx.Response(429, json={"error": {"message": "rate limited"}})
+        return httpx.Response(200, json=openai_body("gemini-2.5-flash", 5, 3))
+
+    rg = RateGuard(preset="dev")
+    client = make_client(rg, handler, chain=default_provider_chain())
+
+    resp = client.post(
+        "https://api.openai.com/v1/chat/completions",
+        json={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]},
+    )
+    assert resp.status_code == 200
+    assert resp.headers.get("x-rateguard-fallback") == "true"
 
 
 def test_outbound_passthrough_non_llm():

@@ -64,7 +64,21 @@ const MAX_SSE_CANDIDATES = 8;
 const DEFAULT_OUTBOUND_ESTIMATED_TOKENS = 4096; // typical chat-call upper bound
 
 // OpenAI-schema hosts (suffix matching on the path covers Groq's /openai/v1/,
-// Cohere's /compatibility/v1/, DashScope's /compatible-mode/v1/, ...).
+// Cohere's /compatibility/v1/, DashScope's /compatible-mode/v1/, DeepInfra's
+// /v1/openai/, Z.AI's /api/paas/v4/, ...).
+//
+// Every host here was checked against that provider's own current API docs,
+// not carried over from a list someone else compiled — two are deliberately
+// NOT here despite both offering "OpenAI-compatible" access. See Go's
+// outbound.go (the reference implementation) for why: Cloudflare AI Gateway's
+// current recommended endpoint lives under Cloudflare's single shared
+// general-purpose API host (used for DNS, Workers, R2, ...), not a dedicated
+// LLM host, and its other endpoint shape embeds a per-customer account+
+// gateway ID in the path itself — no fixed hostname to key off. IBM
+// watsonx.ai's OpenAI-compatible "Model Gateway" is explicitly preview-status
+// in IBM's own docs and split across region-specific hosts rather than one
+// fixed host, the same shape as AWS Bedrock (a native, non-map-based
+// adapter) — revisit once it reaches GA with a confirmed stable endpoint.
 const OPENAI_COMPATIBLE_HOSTS: Record<string, string> = {
   'api.openai.com': 'openai',
   'api.deepseek.com': 'deepseek',
@@ -82,6 +96,16 @@ const OPENAI_COMPATIBLE_HOSTS: Record<string, string> = {
   'dashscope.aliyuncs.com': 'dashscope',
   'api.sambanova.ai': 'sambanova',
   'integrate.api.nvidia.com': 'nvidia',
+  'api.deepinfra.com': 'deepinfra',
+  'router.huggingface.co': 'huggingface',
+  'inference.baseten.co': 'baseten',
+  'api.tokenfactory.nebius.com': 'nebius',
+  'api.z.ai': 'zai',
+  'open.bigmodel.cn': 'zai',
+  'api.siliconflow.com': 'siliconflow',
+  'api.siliconflow.cn': 'siliconflow',
+  'router.requesty.ai': 'requesty',
+  'models.github.ai': 'github',
 };
 
 /** Classifies an outbound URL. Returns undefined for non-LLM traffic. */
