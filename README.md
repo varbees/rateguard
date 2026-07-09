@@ -1,14 +1,14 @@
-# RateGuard Middleware
+# RateGuard
 
-**The AI-native rate limiting SDK for Go, Node.js, and Python.**
+**Flight controls for AI agents — runtime enforcement in Go, Node.js, and Python.**
 
-RateGuard is middleware that makes every LLM call transparent. Drop it into your app and every token consumed, every rate limit hit, every circuit breaker trip becomes a traceable event — with zero infrastructure.
+RateGuard is agent runtime enforcement: token budgets, rate limits, circuit breakers, loop detection, and cryptographically delegable spend authority, running inside your application process. Every token consumed, every limit hit, every breaker trip is an enforced decision *and* a traceable event — with zero infrastructure.
 
-Three SDKs, one architecture: the same core algorithms with idiomatic APIs for each language.
+Three SDKs, one architecture: the same core algorithms with idiomatic APIs for each language, held to behavioral parity by shared cross-language conformance vectors.
 
 ## Why RateGuard
 
-Every other rate limiting tool was built for REST APIs. RateGuard was built for the LLM era — where a single request can consume 100,000 tokens, streaming responses span minutes, and your provider bill depends on how well you control it.
+Rate limiting was invented to protect servers from too many users. In the agent era the dangerous actor is your own software, spending real money at machine speed behind your own credentials — a failure mode with a name ([denial of wallet](https://rateguard.antharmaya.com/denial-of-wallet)) and a documented incident record. Observability explains the bill afterward; gateway caps are coarse and perimeter-bound. Enforcement has to live where the agent runs.
 
 **No proxy. No extra service. No latency overhead.** RateGuard runs inside your application process.
 
