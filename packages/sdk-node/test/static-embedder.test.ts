@@ -1,0 +1,181 @@
+/**
+ * Static embedder: loader, tokenizer pipeline, pooling math, and the
+ * gated golden-conformance test against the real converted model —
+ * mirrors Go static_embedder_test.go and Python test_static_embedder.py.
+ *
+ * The tokenizer tests assert EXACT token ids (not just zero/non-zero
+ * vectors): cross-language parity lives or dies on id-level agreement.
+ */
+
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { describe, expect, it } from 'vitest';
+
+import { StaticEmbedder } from '../src/core/static-embedder';
+
+const GOLDENS_PATH = join(__dirname, '..', '..', '..', 'conformance', 'static_embedding_vectors.json');
+const MODEL_PATH = process.env.RATEGUARD_EMBED_MODEL;
+
+// ── Mini-model builder ──
+
+function buildMiniRGEMB(vocab: string[], dim: number, rows: number[][], normalize = true): Buffer {
+  const header = {
+    format: 'rgemb/1',
+    source: 'mini-test',
+    dim,
+    vocab_size: vocab.length,
+    dtype: 'f32',
+    normalize,
+    norm_epsilon: 1e-32,
+    drop_token_ids: [1],
+    tokenizer: {
+      type: 'wordpiece',
+      lowercase: true,
+      strip_accents: true,
+      clean_text: true,
+      handle_chinese_chars: true,
+      continuing_subword_prefix: '##',
+      unk_id: 1,
+      max_input_chars_per_word: 10,
+    },
+  };
+  const headerBytes = Buffer.from(JSON.stringify(header), 'utf8');
+  const parts: Buffer[] = [Buffer.from('RGEMBED1', 'latin1')];
+  const lenBuf = Buffer.alloc(4);
+  lenBuf.writeUInt32LE(headerBytes.length);
+  parts.push(lenBuf, headerBytes);
+  for (const tok of vocab) {
+    const b = Buffer.from(tok, 'utf8');
+    const l = Buffer.alloc(2);
+    l.writeUInt16LE(b.length); // byte length, not UTF-16 units
+    parts.push(l, b);
+  }
+  for (const row of rows) {
+    expect(row.length).toBe(dim);
+    const rb = Buffer.alloc(dim * 4);
+    row.forEach((v, i) => rb.writeFloatLE(v, i * 4));
+    parts.push(rb);
+  }
+  return Buffer.concat(parts);
+}
+
+function miniEmbedder(): StaticEmbedder {
+  // ids:            0        1        2        3        4       5      6       7
+  const vocab = ['[PAD]', '[UNK]', 'hello', 'world', '##ld', 'wor', 'cafe', '!'];
+  const rows = [
+    [0, 0], [9, 9], [1, 0], [0, 1], [0.5, 0.5], [2, 0], [0, 2], [1, 1],
+  ];
+  return StaticEmbedder.fromBuffer(buildMiniRGEMB(vocab, 2, rows));
+}
+
+// ── Tokenizer pipeline: exact token ids ──
+
+describe('StaticEmbedder tokenizer pipeline', () => {
+  const cases: Array<[string, string, number[]]> = [
+    ['lowercase', 'HELLO World', [2, 3]],
+    ['punctuation isolated', 'hello!world', [2, 7, 3]],
+    ['greedy subword order', 'world hello', [3, 2]],
+    ['subword continuation fails whole word', 'worldx', [1]], // wor+##ld+x: x unmatched → UNK
+    ['accents stripped', 'café', [6]],
+    ['unknown word', 'zzz', [1]],
+    ['over max chars', 'hellohellohello', [1]], // 15 > 10 cap
+    ['control chars dropped', 'he\u0000llo', [2]],
+    ['whitespace collapse', '  hello\t\nworld  ', [2, 3]],
+    ['empty', '', []],
+  ];
+
+  for (const [name, input, wantIDs] of cases) {
+    it(name, () => {
+      expect(miniEmbedder().tokenize(input)).toEqual(wantIDs);
+    });
+  }
+});
+
+// ── Pooling math: exact expected values ──
+
+describe('StaticEmbedder pooling', () => {
+  it('mean-pools and L2-normalizes', () => {
+    const e = miniEmbedder();
+    // "hello world" → rows (1,0),(0,1) → mean (0.5,0.5) → normalized (√2/2, √2/2).
+    const v = e.embedSync('hello world');
+    const want = Math.SQRT2 / 2;
+    expect(v).toHaveLength(2);
+    for (const x of v) expect(Math.abs(x - want)).toBeLessThan(1e-6);
+  });
+
+  it('unknown-only and empty text embed to the zero vector', () => {
+    const e = miniEmbedder();
+    expect(e.embedSync('zzz qqq')).toEqual([0, 0]);
+    expect(e.embedSync('')).toEqual([0, 0]);
+  });
+
+  it('async embed matches sync', async () => {
+    const e = miniEmbedder();
+    expect(await e.embed('hello world')).toEqual(e.embedSync('hello world'));
+  });
+});
+
+// ── Garbage rejection ──
+
+describe('StaticEmbedder loader validation', () => {
+  it('rejects garbage bytes', () => {
+    expect(() => StaticEmbedder.fromBuffer(Buffer.from('not a model'))).toThrow(/rgemb/);
+  });
+
+  it('rejects absurd header length', () => {
+    const bad = Buffer.concat([Buffer.from('RGEMBED1', 'latin1'), Buffer.from([0xff, 0xff, 0xff, 0xff])]);
+    expect(() => StaticEmbedder.fromBuffer(bad)).toThrow(/header/);
+  });
+
+  it('rejects truncated vocab and matrix', () => {
+    const full = buildMiniRGEMB(['[PAD]', '[UNK]', 'a'], 2, [[0, 0], [1, 1], [2, 2]]);
+    expect(() => StaticEmbedder.fromBuffer(full.subarray(0, full.length - 5))).toThrow(/truncated/);
+    expect(() => StaticEmbedder.fromBuffer(full.subarray(0, 20))).toThrow();
+  });
+});
+
+// ── Golden conformance (gated on the real converted model) ──
+//
+// RATEGUARD_EMBED_MODEL=/path/to/potion-base-2M.rgemb bun run test
+//
+// Goldens were generated by the reference model2vec library itself —
+// parity with ground truth, not self-consistency. model2vec's tokenize()
+// removes unknown-token ids, so golden token_ids are post-drop; ours are
+// filtered through drop_token_ids the same way before comparing.
+
+interface GoldenCase {
+  text: string;
+  token_ids: number[];
+  embedding: number[];
+}
+
+describe.skipIf(!MODEL_PATH)('StaticEmbedder golden conformance', () => {
+  it('matches reference token ids and embeddings', async () => {
+    const e = StaticEmbedder.load(MODEL_PATH!);
+    const goldens = JSON.parse(readFileSync(GOLDENS_PATH, 'utf8')) as {
+      dim: number;
+      cases: GoldenCase[];
+    };
+    expect(e.dim).toBe(goldens.dim);
+
+    // unk id 1 is the model's sole drop id (asserted so a future model
+    // change doesn't silently weaken this test).
+    const dropped = e.tokenize('\u{1F680}'); // emoji → UNK
+    expect(dropped).toEqual([1]);
+
+    for (const c of goldens.cases) {
+      const gotIDs = e.tokenize(c.text).filter((id) => id !== 1);
+      expect(gotIDs, `token ids for ${JSON.stringify(c.text)}`).toEqual(c.token_ids);
+
+      const vec = await e.embed(c.text);
+      expect(vec).toHaveLength(c.embedding.length);
+      for (let j = 0; j < vec.length; j++) {
+        expect(
+          Math.abs(vec[j] - c.embedding[j]),
+          `dim ${j} of ${JSON.stringify(c.text)}`,
+        ).toBeLessThanOrEqual(1e-4);
+      }
+    }
+  });
+});
