@@ -45,7 +45,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Guardrails wired into middleware (422) | ✅ | ✅ | ✅ | `sdk.go` |
 | 8 presets | ✅ | ✅ | ✅ | `presets.go` |
 | Redis distributed limiter (atomic Lua GCRA) | ✅ | ✅ | ✅ | `redis_limiter.go` |
-| Events/webhooks | ✅ | ✅ | ✅ | `events.go` |
+| Events/webhooks (endpoint config → async by default: bounded queue, non-blocking emit, drop-with-counter on overflow, drained by Shutdown/shutdown) | ✅ | ✅ | ✅ | `events.go`, `events_async.go` |
 | MCP tools (7: rate limit, budget, breaker, loop, list, attest, verify) | ✅ | ✅ | ✅ | `mcp.go` |
 | Lock-free sharded limiter (64-way, atomic CAS) | ✅ | ✅ | ✅ | `sharded_limiter.go` |
 | Adaptive rate limiting (AIMD controller) | ✅ | ✅ | ✅ | `adaptive.go` |
@@ -86,16 +86,16 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (169 test funcs, all with -race)
+# Go tests (175 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (202 passing)
+# Node tests (209 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (219 passing)
+# Python tests (226 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
-# Python strict typecheck (mypy --strict passes clean on all 39 source files)
+# Python strict typecheck (mypy --strict passes clean on all 41 source files)
 cd packages/sdk-python && RATEGUARD_STRICT_TYPES=1 python3 scripts/typecheck.py
 
 # Cross-language conformance (shared oracle, all 3 SDKs replay the same
