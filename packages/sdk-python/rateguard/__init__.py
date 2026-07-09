@@ -80,7 +80,9 @@ from .core.redis_limiter import (
     build_redis_gcra_tier,
 )
 from .core.semantic_cache import CachedResponse, Embedder, SemanticCache, SemanticCacheOptions, is_streaming_request_body, prompt_text_from_request_body
+from .core.semantic_loop import SemanticLoopDecision, SemanticLoopDetector, SemanticLoopOptions
 from .core.sharded_limiter import ShardedLimiter
+from .core.static_embedder import StaticEmbedder
 from .core.token_budget import TokenBudgetManager
 from .exceptions import BudgetExceeded, RateGuardException
 from .facade import RateGuard
@@ -213,6 +215,11 @@ __all__ = [
     "SemanticCacheOptions",
     "is_streaming_request_body",
     "prompt_text_from_request_body",
+    # Static embeddings + semantic loop detection
+    "StaticEmbedder",
+    "SemanticLoopDecision",
+    "SemanticLoopDetector",
+    "SemanticLoopOptions",
     # Prometheus
     "prometheus_text",
     # Provider chain
