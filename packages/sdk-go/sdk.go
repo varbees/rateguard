@@ -33,10 +33,13 @@ type SDK struct {
 	waiter   BudgetWaiter
 	otel     *observability
 	emitter  EventEmitter
-	clock    Clock
-	metrics  atomicMetrics
-	loops    *LoopDetector
-	guardLog *guardrailLog
+	// asyncEmitter is set only when the SDK created the async wrapper
+	// itself (EventEndpoint config) — Shutdown drains it.
+	asyncEmitter *AsyncEventEmitter
+	clock        Clock
+	metrics      atomicMetrics
+	loops        *LoopDetector
+	guardLog     *guardrailLog
 }
 
 // New constructs a new SDK instance with sensible defaults.
@@ -94,11 +97,18 @@ func New(cfg Config) *SDK {
 	}
 
 	var emitter EventEmitter
+	var asyncEmitter *AsyncEventEmitter
 	switch {
 	case cfg.EventEmitter != nil:
 		emitter = cfg.EventEmitter
 	case cfg.EventEndpoint != "":
-		emitter = NewHTTPEventEmitter(cfg.EventEndpoint, cfg.HTTPClient)
+		// Wrapped async so webhook delivery never blocks the hot path;
+		// Shutdown drains the queue.
+		asyncEmitter = NewAsyncEventEmitter(
+			NewHTTPEventEmitter(cfg.EventEndpoint, cfg.HTTPClient),
+			AsyncEmitterOptions{QueueSize: cfg.EventQueueSize},
+		)
+		emitter = asyncEmitter
 	default:
 		emitter = NoopEmitter{}
 	}
@@ -120,28 +130,41 @@ func New(cfg Config) *SDK {
 	}
 
 	return &SDK{
-		cfg:      cfg,
-		policy:   policy,
-		limiter:  limiter,
-		adaptive: adaptive,
-		breaker:  newCircuitBreaker(clock, cfg.CircuitBreaker),
-		tokens:   newTokenBudgetManager(clock),
-		extract:  extractor,
-		waiter:   waiter,
-		otel:     otel,
-		emitter:  emitter,
-		clock:    clock,
-		loops:    NewLoopDetector(cfg.LoopMaxDepth),
-		guardLog: newGuardrailLog(),
+		cfg:          cfg,
+		policy:       policy,
+		limiter:      limiter,
+		adaptive:     adaptive,
+		breaker:      newCircuitBreaker(clock, cfg.CircuitBreaker),
+		tokens:       newTokenBudgetManager(clock),
+		extract:      extractor,
+		waiter:       waiter,
+		otel:         otel,
+		emitter:      emitter,
+		asyncEmitter: asyncEmitter,
+		clock:        clock,
+		loops:        NewLoopDetector(cfg.LoopMaxDepth),
+		guardLog:     newGuardrailLog(),
 	}
 }
 
-// Shutdown flushes any queued telemetry exporters.
+// Shutdown flushes queued telemetry exporters and drains the async event
+// queue (when the SDK created one from Config.EventEndpoint).
 func (s *SDK) Shutdown(ctx context.Context) error {
-	if s == nil || s.otel == nil {
+	if s == nil {
 		return nil
 	}
-	return s.otel.Shutdown(ctx)
+	var firstErr error
+	if s.asyncEmitter != nil {
+		if err := s.asyncEmitter.Close(ctx); err != nil {
+			firstErr = err
+		}
+	}
+	if s.otel != nil {
+		if err := s.otel.Shutdown(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // Policy returns the resolved policy preset for this SDK instance. Safe to

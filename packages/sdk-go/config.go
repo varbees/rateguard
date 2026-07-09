@@ -82,8 +82,17 @@ type Config struct {
 	// AdaptiveRateLimit is true.
 	Adaptive AdaptiveOptions
 
-	EventEmitter        EventEmitter
-	EventEndpoint       string
+	EventEmitter EventEmitter
+	// EventEndpoint enables webhook event delivery. The HTTP emitter it
+	// creates is wrapped in an AsyncEventEmitter so delivery never blocks
+	// the request hot path (bounded queue, drop-with-counter on overflow —
+	// see events_async.go). A custom EventEmitter is used exactly as
+	// given: wrap it in NewAsyncEventEmitter yourself if you want the
+	// same behavior.
+	EventEndpoint string
+	// EventQueueSize bounds the async event queue used with
+	// EventEndpoint. 0 means the default (1024).
+	EventQueueSize      int
 	HTTPClient          *http.Client
 	Clock               Clock
 	KeyFunc             KeyFunc
