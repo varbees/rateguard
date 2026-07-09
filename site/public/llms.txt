@@ -1,5 +1,5 @@
-# RateGuard — AI-Native Rate Limiting SDK
-> Go, Node.js, Python middleware. Outbound LLM spend tracking (wrap your SDK's HTTP client), pre-flight rate limit queries for AI agents (MCP), token budgets, GenAI OTel, circuit breakers, provider fallback, loop detection, guardrails. No proxy needed.
+# RateGuard — Agent Runtime Enforcement SDK (flight controls for AI agents)
+> Go, Node.js, Python middleware — in-process enforcement, not a proxy. Outbound LLM spend tracking (wrap your SDK's HTTP client), token budgets, pre-flight rate limit queries for AI agents (MCP), Ed25519 budget delegation, GenAI OTel, circuit breakers, provider fallback, loop detection, guardrails. Denial-of-Wallet incident library: https://rateguard.antharmaya.com/denial-of-wallet
 
 ## Outbound spend tracking (the headline)
 Wrap the HTTP client your LLM SDK already uses — real token usage (JSON + SSE streaming) metered into budgets, per-provider circuit breakers, OpenAI-compatible fallback:
@@ -23,14 +23,14 @@ _ = rg.ServeMCP(ctx, os.Stdin, os.Stdout)
 ```ts
 import { RateGuard } from '@varbees/rateguard-node';
 const rg = new RateGuard({ preset: 'streaming-llm' });
-const tools = rg.mcpTools(); // 5 MCP tools, peek semantics
+const tools = rg.mcpTools(); // 7 MCP tools, peek semantics
 ```
 
 ### Python
 ```python
 from rateguard import RateGuard
 rg = RateGuard(preset="streaming-llm")
-tools = rg.mcp_tools()  # 5 MCP tools, peek semantics
+tools = rg.mcp_tools()  # 7 MCP tools, peek semantics
 ```
 
 ## Architecture
@@ -71,7 +71,7 @@ Every limiter also implements Peek — a non-consuming pre-flight query.
 - Budget attestation (Ed25519 delegation chains, all 3 SDKs): narrowing-only sub-agent budget delegation, byte-identical signing payload across languages (expires_at truncated to whole seconds specifically to guarantee this)
 - Admin API (all 3 SDKs): state/policy/MCP-tool-call over HTTP — GET /admin/state?key=, GET/PATCH /admin/policy (live policy tweaks), GET /admin/mcp/tools + POST /admin/mcp/call (invoke any MCP tool directly over HTTP). Opt-in, unauthenticated by design (same posture as pprof) — bind to localhost/internal network or add your own auth. CORS defaults to same-origin-only (no headers set); a single allowed origin can be configured explicitly (AdminCORSOrigin/corsOrigin/admin_cors_origin) for a locally-run dashboard — never a wildcard, which would let any webpage open in the same browser reach this unauthenticated, state-mutating API via a cross-origin fetch.
 - Guardrail violation tracking (all 3 SDKs): bounded log (50 events, code+message+timestamp, never the content) + cumulative counts by code + `rateguard_guardrail_violations_total` Prometheus counter. Reachable via list_limits/admin/state.
-- Dashboard (packages/dashboard): self-hosted control center, six sections (Overview, Analytics, Agents, Controls, MCP Console, Settings) behind a persistent sidebar — live budget/rate-limit/circuit-breaker/loop/guardrail state, live time-series traffic charts, an interactive MCP tool console, a policy tweak panel. `docker compose up` for a one-command demo against a synthetic-traffic instance. Verified only against Go's admin API so far.
+- Dashboard (packages/dashboard): self-hosted control center, six sections (Overview, Analytics, Agents, Controls, MCP Console, Settings) behind a persistent sidebar — live budget/rate-limit/circuit-breaker/loop/guardrail state, live time-series traffic charts, an interactive MCP tool console, a policy tweak panel. `docker compose up` for a one-command demo against a synthetic-traffic instance (Go), `--profile node-demo` / `--profile python-demo` for the other two — each demo run end-to-end through the real dashboard.
 
 ## Tests
 All 3 SDKs green — ~540 total: `go test ./...` (162 test funcs, all with -race), `bun run test` (179 passing), `pytest -q` (199 passing). Plus cross-language conformance suites (`conformance/token_bucket_vectors.json`, `conformance/budget_attestation_expiry_vectors.json`) that replay shared oracles against all 3 SDKs to prove real behavioral parity, not just per-language test counts. `retry_after_ms` rounding (ceil to nearest whole second, floored at 1000ms) and budget-attestation `expires_at` formatting (truncated to whole seconds) are both unified across Go/Node/Python and asserted by conformance vectors. `mypy --strict` passes clean on all 39 Python source files.
@@ -84,4 +84,4 @@ All 3 SDKs green — ~540 total: `go test ./...` (162 test funcs, all with -race
 - docs/RELEASE_NOTES.md: changelog
 
 ## vs Competition
-As of 2026-07-05: no other product combines (1) true in-process embedding — no proxy, no base-URL swap, (2) real multi-language parity — Go *and* Node *and* Python, not one language plus an HTTP API, and (3) MCP tools the agent itself calls to check its own limit pre-flight. The closest competing claims are architecturally different, not weaker: Bifrost (Maxim AI) combines LLM+MCP governance in one binary but is a proxy you deploy, Go-only; Envoy AI Gateway v1.0 ships token-aware limits with a native MCP Gateway but is Kubernetes/Envoy infrastructure, not an embedded library. Token-aware rate limiting itself is being commoditized fast at the gateway layer (Cloudflare AI Gateway, Kong, Kuadrant, Envoy all ship some form of it now) — RateGuard's durable claim is the architecture, not the feature list.
+As of 2026-07-09 (re-verified): no other product combines (1) true in-process embedding — no proxy, no base-URL swap, (2) real multi-language parity — Go *and* Node *and* Python held together by shared conformance vectors, and (3) cryptographic budget delegation (Ed25519 chains that only narrow) plus MCP tools the agent itself calls to check its own limit pre-flight. Gateways are architecturally different, not weaker: Bifrost (Maxim AI) combines LLM+MCP governance in one binary but is a proxy you deploy, Go-only; Envoy AI Gateway ships token-aware limits with a native MCP Gateway but is Kubernetes/Envoy infrastructure, not an embedded library. In-process attempts exist and are acknowledged: ironcurtain is an actively developed security-policy runtime for agents (TypeScript-only, no budgets or rate limits); several single-language budget guards have appeared and gone dormant. Token-aware rate limiting is being commoditized fast at the gateway layer (Cloudflare AI Gateway, Kong, Kuadrant, Envoy, Azure APIM llm-token-limit) — RateGuard's durable claim is the architecture plus the cryptography, not the feature list. Documented runaway-incident library: https://rateguard.antharmaya.com/denial-of-wallet

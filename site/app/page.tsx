@@ -20,9 +20,9 @@ import {
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rateguard.antharmaya.com"),
-  title: "RateGuard — AI-Native Rate Limiting Middleware",
+  title: "RateGuard — Flight Controls for AI Agents | Runtime Enforcement & Rate Limiting",
   description:
-    "The first agent-native rate limiting SDK. Go, Node, Python. MCP tools for pre-flight queries. Outbound transport tracking. Loop detection. Open source (MIT).",
+    "Agent runtime enforcement in Go, Node, and Python: token budgets, rate limits, circuit breakers, loop detection, and cryptographic budget delegation — inside your process, no proxy. Open source (MIT).",
   openGraph: {
     title: "RateGuard — AI Agents That Know Their Limits",
     description:
@@ -40,6 +40,7 @@ export const metadata: Metadata = {
   keywords: [
     "rate limiting", "AI middleware", "LLM rate limit", "token budget", "MCP server",
     "agent rate limit", "OpenTelemetry", "Go", "Node.js", "Python", "open source", "MIT",
+    "denial of wallet", "agent runtime enforcement", "AI agent cost control", "budget delegation",
   ],
   robots: "index, follow",
   alternates: {
@@ -99,6 +100,9 @@ export default function Page() {
             <Link href="/docs" className="text-sm font-medium hover:text-white transition-colors">
               Docs
             </Link>
+            <Link href="/denial-of-wallet" className="text-sm font-medium hover:text-white transition-colors">
+              Denial of Wallet
+            </Link>
           </div>
           <div className="flex items-center gap-6">
             <a href="https://antharmaya.com" className="hidden sm:block text-sm text-[var(--muted)] hover:text-[var(--fg)] transition-colors">
@@ -157,7 +161,11 @@ export default function Page() {
           <p className="text-[var(--muted)] leading-relaxed">
             No rate awareness, no budget sense, no idea it&apos;s stuck in a loop.
             Every unguarded call is a chance to blow through a limit you find out about
-            after the invoice.
+            after the invoice. The failure mode has a name now —{" "}
+            <Link href="/denial-of-wallet" className="text-[var(--amber)] hover:underline">
+              denial of wallet
+            </Link>
+            {" "}— and a documented incident record.
           </p>
         </Reveal>
       </section>
