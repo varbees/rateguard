@@ -98,8 +98,12 @@ class RateGuardOptions:
     event_emitter: EventEmitterLike | None = None
     clock: Clock | None = None
     # HTTP webhook endpoint events are POSTed to when no event_emitter is
-    # set. Mirrors Go's cfg.EventEndpoint.
+    # set. Mirrors Go's cfg.EventEndpoint. Delivery is wrapped in
+    # AsyncEventEmitter (bounded queue, never blocks the request path).
     event_endpoint: str | None = None
+    # Bounds the async event queue used with event_endpoint. None means
+    # the default (1024).
+    event_queue_size: int | None = None
     # Content guardrail chain checked against request bodies (PII, prompt
     # injection, length). Mirrors Go's cfg.Guardrails — None (default)
     # disables the check entirely.
@@ -157,6 +161,7 @@ class ResolvedRateGuardOptions:
     event_emitter: EventEmitterLike | None
     clock: Clock
     event_endpoint: str | None
+    event_queue_size: int | None
     guardrails: "GuardrailChain | None"
     loop_detection: bool
     estimated_tokens_per_request: int

@@ -91,6 +91,7 @@ class RateGuard:
         circuit_breaker: CircuitBreakerOptions | None = None,
         event_emitter: EventEmitterLike | None = None,
         event_endpoint: str | None = None,
+        event_queue_size: int | None = None,
         clock: Clock | None = None,
         guardrails: "GuardrailChain | None" = None,
         loop_detection: bool = False,
@@ -118,6 +119,7 @@ class RateGuard:
             event_emitter=event_emitter,
             clock=clock,
             event_endpoint=event_endpoint,
+            event_queue_size=event_queue_size,
             guardrails=guardrails,
             loop_detection=loop_detection,
             estimated_tokens_per_request=estimated_tokens_per_request,
@@ -129,6 +131,11 @@ class RateGuard:
         )
         self.runtime = RateGuardRuntime(self.options)
         self._mcp_tools: list["MCPTool"] | None = None
+
+    def shutdown(self, timeout: float = 5.0) -> bool:
+        """Drain the async event queue (see RateGuardRuntime.shutdown).
+        Returns True when fully drained, False on timeout."""
+        return self.runtime.shutdown(timeout)
 
     @property
     def adaptive_limiter(self) -> "AdaptiveLimiter | None":

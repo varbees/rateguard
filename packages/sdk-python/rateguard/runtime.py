@@ -144,6 +144,17 @@ class RateGuardRuntime:
         result["token_budget_mode"] = self.config.token_budget.mode
         return result
 
+    def shutdown(self, timeout: float = 5.0) -> bool:
+        """Drain the async event queue when this runtime created one from
+        event_endpoint config (a custom event_emitter is the caller's to
+        close). Returns True when fully drained, False on timeout.
+        Mirrors Go's SDK.Shutdown."""
+        from .core.event_emitter import AsyncEventEmitter
+
+        if isinstance(self.event_emitter, AsyncEventEmitter):
+            return self.event_emitter.close(timeout)
+        return True
+
     def set_policy(self, patch: dict[str, object]) -> dict[str, object]:
         """Apply a partial override on top of the current policy and return
         the resulting effective policy. In-memory only — mirrors Go's

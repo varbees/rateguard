@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 from rateguard.config import resolve_rateguard_options
-from rateguard.core.event_emitter import HTTPEventEmitter, build_event_envelope, create_event_emitter
+from rateguard.core.event_emitter import AsyncEventEmitter, HTTPEventEmitter, build_event_envelope, create_event_emitter
 from rateguard.types import RateGuardEventPayload, RateGuardOptions
 
 
@@ -122,11 +122,14 @@ async def test_http_event_emitter_noop_when_endpoint_empty() -> None:
 def test_create_event_emitter_prefers_event_endpoint_over_ws_url() -> None:
     options = resolve_rateguard_options(RateGuardOptions(event_endpoint="https://example.invalid/hook", ws_url="wss://example.invalid/ws"))
     emitter = create_event_emitter(options)
-    assert isinstance(emitter, HTTPEventEmitter)
+    # An endpoint now gets the async wrapper (bounded queue, off the hot
+    # path) rather than a bare HTTPEventEmitter — see AsyncEventEmitter.
+    assert isinstance(emitter, AsyncEventEmitter)
+    assert emitter.close(1.0) is True
 
 
 def test_create_event_emitter_prefers_explicit_emitter_over_event_endpoint() -> None:
-    from rateguard.core.event_emitter import ConsoleEventEmitter
+    from rateguard.core.event_emitter import AsyncEventEmitter, ConsoleEventEmitter
 
     console = ConsoleEventEmitter()
     options = resolve_rateguard_options(RateGuardOptions(event_endpoint="https://example.invalid/hook", event_emitter=console))

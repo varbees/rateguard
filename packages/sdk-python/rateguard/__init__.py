@@ -28,7 +28,7 @@ from .core.budget_attestation import (
     verify_presentation,
 )
 from .core.circuit_breaker import CircuitBreaker
-from .core.event_emitter import ConsoleEventEmitter, HTTPEventEmitter, WebSocketEventEmitter
+from .core.event_emitter import AsyncEventEmitter, ConsoleEventEmitter, HTTPEventEmitter, WebSocketEventEmitter
 from .core.genai import (
     GenAICall,
     GenAISpan,
@@ -122,6 +122,7 @@ __all__ = [
     "__version__",
     "ASGIRateGuardMiddleware",
     "WSGIRateGuardMiddleware",
+    "AsyncEventEmitter",
     "ConsoleEventEmitter",
     "HTTPEventEmitter",
     "WebSocketEventEmitter",
