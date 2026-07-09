@@ -1,4 +1,5 @@
 import {
+  AsyncEventEmitter,
   createEventEmitter,
   buildEventEnvelope,
 } from './core/event-emitter.js';
@@ -83,6 +84,19 @@ export class RateGuardRuntime {
     this.eventEmitter = createEventEmitter(this.config);
     this.loopDetector = new LoopDetector();
     this.guardrailLog = new GuardrailLog();
+  }
+
+  /**
+   * Drains the async event queue when this runtime created one from
+   * eventEndpoint config (a custom eventEmitter is the caller's to close).
+   * Resolves true when fully drained, false on timeout. Mirrors Go's
+   * SDK.Shutdown().
+   */
+  async shutdown(timeoutMs = 5_000): Promise<boolean> {
+    if (this.eventEmitter instanceof AsyncEventEmitter) {
+      return this.eventEmitter.close(timeoutMs);
+    }
+    return true;
   }
 
   /**

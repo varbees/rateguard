@@ -136,8 +136,14 @@ export interface RateGuardOptions {
   tokenBudget?: TokenBudgetOptions;
   circuitBreaker?: CircuitBreakerOptions;
   eventEmitter?: EventEmitterLike;
-  /** HTTP webhook endpoint events are POSTed to when no eventEmitter is set. Mirrors Go's cfg.EventEndpoint. */
+  /**
+   * HTTP webhook endpoint events are POSTed to when no eventEmitter is
+   * set. Mirrors Go's cfg.EventEndpoint. Delivery is wrapped in
+   * AsyncEventEmitter (bounded queue, never blocks the request path).
+   */
   eventEndpoint?: string;
+  /** Bounds the async event queue used with eventEndpoint. Default 1024. */
+  eventQueueSize?: number;
   clock?: Clock;
   /**
    * Content guardrail chain checked against request bodies (PII, prompt
@@ -198,6 +204,7 @@ export interface ResolvedRateGuardOptions {
   circuitBreaker: Required<CircuitBreakerOptions>;
   eventEmitter: EventEmitterLike | undefined;
   eventEndpoint: string | undefined;
+  eventQueueSize: number | undefined;
   clock: Clock;
   guardrails: Guardrail | undefined;
   loopDetection: boolean;

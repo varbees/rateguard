@@ -151,15 +151,112 @@ export class ControlPlaneEventEmitter implements EventEmitterLike {
   }
 }
 
+const DEFAULT_EVENT_QUEUE_SIZE = 1024;
+
+/**
+ * Async wrapper: webhooks off the request hot path.
+ *
+ * HTTPEventEmitter awaits a network round-trip (up to its 5s timeout);
+ * awaited from the middleware, that puts the webhook inside every
+ * request. AsyncEventEmitter wraps any emitter with a bounded FIFO and a
+ * single sequential pump so the hot path pays O(1): emit() enqueues and
+ * resolves immediately.
+ *
+ * Semantics (mirrors Go's AsyncEventEmitter, events_async.go):
+ * - emit() never blocks and never rejects. When the queue is full the
+ *   incoming event is DROPPED and counted — telemetry must degrade,
+ *   never the request path. Read `dropped` to alert on loss.
+ * - close() stops intake and waits for the pump to drain, up to
+ *   timeoutMs; on timeout it resolves `false` while the pump keeps
+ *   draining in the background. Emitting after close counts as a drop.
+ */
+export class AsyncEventEmitter implements EventEmitterLike {
+  private readonly queue: RateGuardEventEnvelope[] = [];
+  private readonly queueSize: number;
+  private droppedCount = 0;
+  private closed = false;
+  private pump: Promise<void> = Promise.resolve();
+  private pumping = false;
+
+  constructor(
+    private readonly inner: EventEmitterLike,
+    options: { queueSize?: number | undefined } = {},
+  ) {
+    this.queueSize = options.queueSize && options.queueSize > 0 ? options.queueSize : DEFAULT_EVENT_QUEUE_SIZE;
+  }
+
+  /** Events discarded (queue full, or emitted after close). */
+  get dropped(): number {
+    return this.droppedCount;
+  }
+
+  emit(event: RateGuardEventEnvelope): Promise<void> {
+    if (this.closed || this.queue.length >= this.queueSize) {
+      this.droppedCount += 1;
+      return Promise.resolve();
+    }
+    this.queue.push(event);
+    this.startPump();
+    return Promise.resolve();
+  }
+
+  /**
+   * Stop intake and wait for queued events to deliver. Resolves true when
+   * fully drained, false if timeoutMs elapsed first (draining continues
+   * in the background).
+   */
+  async close(timeoutMs = 5_000): Promise<boolean> {
+    this.closed = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), timeoutMs);
+    });
+    const drained = this.pump.then(() => true);
+    const result = await Promise.race([drained, timedOut]);
+    clearTimeout(timer);
+    return result;
+  }
+
+  private startPump(): void {
+    if (this.pumping) {
+      return;
+    }
+    this.pumping = true;
+    this.pump = this.pump.then(async () => {
+      try {
+        for (;;) {
+          const event = this.queue.shift();
+          if (!event) {
+            return;
+          }
+          // Inner delivery failures are the inner emitter's story (the
+          // HTTP emitter already logs them). A failed delivery is final —
+          // no in-process retry queue by design.
+          await this.inner.emit(event).catch(() => undefined);
+        }
+      } finally {
+        this.pumping = false;
+      }
+    });
+  }
+}
+
 /**
  * Build the default event emitter for a given SDK configuration.
+ *
+ * An eventEndpoint gets the async wrapper automatically so webhook
+ * delivery never blocks the request path; a custom eventEmitter is used
+ * exactly as given (wrap it in AsyncEventEmitter yourself if you want
+ * the same behavior).
  */
 export function createEventEmitter(options: ResolvedRateGuardOptions): EventEmitterLike {
   if (options.eventEmitter) {
     return options.eventEmitter;
   }
   if (options.eventEndpoint) {
-    return new HTTPEventEmitter(options.eventEndpoint);
+    return new AsyncEventEmitter(new HTTPEventEmitter(options.eventEndpoint), {
+      queueSize: options.eventQueueSize,
+    });
   }
   if (options.wsUrl) {
     return new ControlPlaneEventEmitter({ wsUrl: options.wsUrl });

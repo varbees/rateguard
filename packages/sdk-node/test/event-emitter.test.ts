@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
-import { HTTPEventEmitter, createEventEmitter, buildEventEnvelope } from '../src/core/event-emitter.js';
+import { AsyncEventEmitter, HTTPEventEmitter, createEventEmitter, buildEventEnvelope } from '../src/core/event-emitter.js';
 import { resolveRateGuardOptions } from '../src/config.js';
 import type { RateGuardEventPayload } from '../src/types.js';
 
@@ -108,6 +108,8 @@ describe('HTTPEventEmitter', () => {
   it('createEventEmitter prefers eventEndpoint over wsUrl when no eventEmitter override is set', () => {
     const options = resolveRateGuardOptions({ eventEndpoint: 'https://example.com/hook', wsUrl: 'wss://example.com/ws' });
     const emitter = createEventEmitter(options);
-    expect(emitter).toBeInstanceOf(HTTPEventEmitter);
+    // An endpoint now gets the async wrapper (bounded queue, off the hot
+    // path) rather than a bare HTTPEventEmitter — see AsyncEventEmitter.
+    expect(emitter).toBeInstanceOf(AsyncEventEmitter);
   });
 });

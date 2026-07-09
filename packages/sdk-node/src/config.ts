@@ -254,6 +254,7 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
     circuitBreaker: normalizeCircuitBreakerOptions(options.circuitBreaker),
     eventEmitter: options.eventEmitter,
     eventEndpoint: options.eventEndpoint?.trim() || undefined,
+    eventQueueSize: options.eventQueueSize && options.eventQueueSize > 0 ? options.eventQueueSize : undefined,
     clock,
     guardrails: options.guardrails,
     loopDetection: options.loopDetection ?? false,
