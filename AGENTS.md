@@ -50,6 +50,8 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Lock-free sharded limiter (64-way, atomic CAS) | ✅ | ✅ | ✅ | `sharded_limiter.go` |
 | Adaptive rate limiting (AIMD controller) | ✅ | ✅ | ✅ | `adaptive.go` |
 | Semantic response caching (pluggable Embedder) | ✅ | ✅ | ✅ | `semantic_cache.go` |
+| Static embedder (.rgemb loader, stdlib WordPiece+BertNormalizer, model2vec-conformant — model file is downloaded data, never bundled; `scripts/convert_model2vec.py` converts any potion-style model) | ✅ | ✅ | ✅ | `static_embedder.go` |
+| Semantic loop detection (paraphrase loops via local embeddings; cosine window, Check/Peek split, threshold 0.90 empirically calibrated — public primitive, NOT yet wired into middleware/outbound) | ✅ | ✅ | ✅ | `semantic_loop.go` |
 | Budget attestation (Ed25519 delegation chains) | ✅ | ✅ | ✅ | `budget_attestation.go` |
 | MCP stdio server (zero-dep JSON-RPC) | ✅ | ✅ | ✅ | `mcp_server.go` |
 | Loop detection (SHA-256, max-depth, LRU-bounded) | ✅ | ✅ | ✅ | `loop_detector.go` |
@@ -84,13 +86,13 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (162 test funcs, all with -race)
+# Go tests (169 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (179 passing)
+# Node tests (202 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (199 passing)
+# Python tests (219 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Python strict typecheck (mypy --strict passes clean on all 39 source files)
