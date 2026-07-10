@@ -59,7 +59,8 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Loop detection (SHA-256, max-depth, LRU-bounded) | ✅ | ✅ | ✅ | `loop_detector.go` |
 | Loop detection wired into middleware (X-Sequence-Depth) | ✅ | ✅ | ✅ | `sdk.go` |
 | IETF RateLimit-* response headers | ✅ | ✅ | ✅ | `sdk.go` |
-| Realtime session enforcement (voice substrate: OpenAI Realtime + Gemini Live usage parsers — Gemini LIVE-verified 2026-07-10, per-turn semantics proven; per-session guard: total/audio tokens, turns, duration, caller-priced cost; terminal breach + once-only callback; transport-agnostic — integrator feeds frames; Pipecat/LiveKit adapters pending) | ✅ | ✅ | ✅ | `realtime_usage.go`, `realtime_session.go` |
+| Realtime session enforcement (voice substrate: OpenAI Realtime + Gemini Live usage parsers — Gemini LIVE-verified 2026-07-10, per-turn semantics proven; per-session guard: total/audio tokens, turns, duration, caller-priced cost; terminal breach + once-only callback; transport-agnostic — integrator feeds frames) | ✅ | ✅ | ✅ | `realtime_usage.go`, `realtime_session.go` |
+| Voice framework adapters (Pipecat RateGuardBudgetProcessor + LiveKit Agents attach_rateguard — verified against real pipecat-ai 1.5.0 / livekit-agents 1.6.5; optional `rateguard.integrations.*`, core stays zero-dep; user-facing INTEGRATIONS.md/docs-site recipes land with the v0.3.0 release docs pass) | n/a | n/a | ✅ | `integrations/pipecat_adapter.py` |
 | Outbound GenAI transport (WrapClient/wrapFetch/httpx) | ✅ | ✅ | ✅ | `outbound.go` |
 | SSE streaming usage extraction (transparent tee) | ✅ | ✅ | ✅ | `sse_usage.go` |
 | Provider fallback (OpenAI-compatible, credential-isolated) | ✅ | ✅ | ✅ | `outbound.go` |
