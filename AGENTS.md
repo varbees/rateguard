@@ -53,6 +53,8 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Static embedder (.rgemb loader, stdlib WordPiece+BertNormalizer, model2vec-conformant — model file is downloaded data, never bundled; `scripts/convert_model2vec.py` converts any potion-style model) | ✅ | ✅ | ✅ | `static_embedder.go` |
 | Semantic loop detection (paraphrase loops via local embeddings; cosine window, Check/Peek split, threshold 0.90 empirically calibrated — public primitive, NOT yet wired into middleware/outbound) | ✅ | ✅ | ✅ | `semantic_loop.go` |
 | Budget attestation (Ed25519 delegation chains) | ✅ | ✅ | ✅ | `budget_attestation.go` |
+| Spend receipts (Ed25519-signed proof of spend; integer-only signing payload — unix seconds + micro-USD; caller-fed, RateGuard holds no keys; optional attestation binding) | ✅ | ✅ | ✅ | `spend_receipt.go` |
+| FOCUS-aligned cost export (core FOCUS columns, tokens via ConsumedQuantity/ConsumedUnit, x_-prefixed extensions; BilledCost always 0 — estimates, never invoice truth) | ✅ | ✅ | ✅ | `focus_export.go` |
 | MCP stdio server (zero-dep JSON-RPC) | ✅ | ✅ | ✅ | `mcp_server.go` |
 | Loop detection (SHA-256, max-depth, LRU-bounded) | ✅ | ✅ | ✅ | `loop_detector.go` |
 | Loop detection wired into middleware (X-Sequence-Depth) | ✅ | ✅ | ✅ | `sdk.go` |
@@ -86,16 +88,16 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (175 test funcs, all with -race)
+# Go tests (181 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (209 passing)
+# Node tests (214 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (226 passing)
+# Python tests (232 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
-# Python strict typecheck (mypy --strict passes clean on all 41 source files)
+# Python strict typecheck (mypy --strict passes clean on all 43 source files)
 cd packages/sdk-python && RATEGUARD_STRICT_TYPES=1 python3 scripts/typecheck.py
 
 # Cross-language conformance (shared oracle, all 3 SDKs replay the same
