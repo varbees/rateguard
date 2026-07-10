@@ -122,6 +122,7 @@ def resolve_rateguard_options(options: RateGuardOptions) -> ResolvedRateGuardOpt
         event_queue_size=options.event_queue_size if (options.event_queue_size or 0) > 0 else None,
         guardrails=options.guardrails,
         pricing_provider=options.pricing_provider,
+        outbound_customer_header=options.outbound_customer_header,
         loop_detection=bool(options.loop_detection),
         estimated_tokens_per_request=(
             int(options.estimated_tokens_per_request)

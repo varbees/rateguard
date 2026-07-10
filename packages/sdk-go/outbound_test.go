@@ -218,6 +218,56 @@ func TestOutboundStreamingWithoutUsageChargesEstimate(t *testing.T) {
 	}
 }
 
+func TestOutboundPerCustomerBudgetIsolation(t *testing.T) {
+	// The X-RateGuard-Customer header scopes the budget per customer: one
+	// customer exhausting their budget must NOT block a different customer —
+	// and the header must be stripped before reaching the provider.
+	var sawCustomerHeader bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-RateGuard-Customer") != "" {
+			sawCustomerHeader = true
+		}
+		openAIJSONHandler("gpt-4o", 400, 100)(w, r)
+	}))
+	defer server.Close()
+
+	sdk := New(Config{Preset: "dev", TokenBudgetPerHour: 600, EstimatedTokensPerRequest: 500})
+	client := wrapForHost(t, sdk, server)
+
+	send := func(customer string) *http.Response {
+		req, _ := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/chat/completions",
+			strings.NewReader(`{"model":"gpt-4o"}`))
+		if customer != "" {
+			req.Header.Set("X-RateGuard-Customer", customer)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("outbound call failed: %v", err)
+		}
+		_, _ = io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		return resp
+	}
+
+	// Customer "alice" burns her 600-token/hr budget (500 est + 500 actual > 600).
+	if resp := send("alice"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("alice call 1 should pass, got %d", resp.StatusCode)
+	}
+	if resp := send("alice"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("alice call 2 should pass (100 remains), got %d", resp.StatusCode)
+	}
+	if resp := send("alice"); resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("alice call 3 should be budget-blocked, got %d", resp.StatusCode)
+	}
+	// "bob" is a different customer — his budget is untouched by alice.
+	if resp := send("bob"); resp.StatusCode != http.StatusOK {
+		t.Fatalf("bob should pass — per-customer budgets are isolated, got %d", resp.StatusCode)
+	}
+	if sawCustomerHeader {
+		t.Error("X-RateGuard-Customer header leaked to the provider — must be stripped")
+	}
+}
+
 func TestOutboundBudgetEnforcement(t *testing.T) {
 	server := httptest.NewServer(openAIJSONHandler("gpt-4o", 400, 100))
 	defer server.Close()

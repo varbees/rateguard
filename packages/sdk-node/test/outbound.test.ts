@@ -186,6 +186,30 @@ describe('wrapFetch', () => {
     expect(blocked.headers.get('x-rateguard-synthesized')).toBe('true');
   });
 
+  it('scopes budgets per customer via X-RateGuard-Customer and strips the header', async () => {
+    let leaked = false;
+    const rg = new RateGuard({ preset: 'dev', tokenBudget: { hourLimit: 600 } });
+    const wrapped = rg.wrapFetch({
+      fetch: (async (_url: unknown, init?: RequestInit) => {
+        if (new Headers(init?.headers).get('x-rateguard-customer')) leaked = true;
+        return jsonResponse(openAIBody('gpt-4o', 400, 100));
+      }) as typeof fetch,
+    });
+
+    const send = (customer?: string) =>
+      wrapped('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4o' }),
+        ...(customer ? { headers: { 'X-RateGuard-Customer': customer } } : {}),
+      });
+
+    expect((await send('alice')).status).toBe(200);
+    expect((await send('alice')).status).toBe(200);
+    expect((await send('alice')).status).toBe(429); // alice exhausted her 600
+    expect((await send('bob')).status).toBe(200); // bob's budget is isolated
+    expect(leaked).toBe(false); // header stripped, never reaches the provider
+  });
+
   it('observe mode never blocks but still meters', async () => {
     const rg = new RateGuard({ preset: 'dev', tokenBudget: { hourLimit: 100 } });
     const wrapped = rg.wrapFetch({

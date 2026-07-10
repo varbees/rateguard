@@ -41,6 +41,7 @@ _MAX_EXTRACT_BYTES = 1 << 20  # 1 MiB cap on JSON usage extraction
 _MAX_SSE_CANDIDATES = 8
 _MAX_SSE_LINE_BYTES = 256 << 10
 _DEFAULT_OUTBOUND_ESTIMATED_TOKENS = 4096  # typical chat-call upper bound
+_DEFAULT_OUTBOUND_CUSTOMER_HEADER = "x-rateguard-customer"
 
 # OpenAI-schema hosts (path-suffix matching covers Groq's /openai/v1/,
 # Cohere's /compatibility/v1/, DashScope's /compatible-mode/v1/, DeepInfra's
@@ -97,6 +98,9 @@ class OutboundCall:
     operation: str = "chat"
     compatible: bool = False
     path_suffix: str = ""
+    # End-user/tenant this call is attributed to, from the X-RateGuard-Customer
+    # header. When set, budgets are scoped and spend tracked per customer.
+    customer: str = ""
 
 
 @dataclass(slots=True)
@@ -216,11 +220,17 @@ class _OutboundCore:
         chain: list[FallbackProvider] | None = None,
         disable_rate_limit: bool = False,
         estimated_tokens: int = 0,
+        customer_header: str = "",
     ) -> None:
         self.runtime = runtime
         self.mode = mode if mode in ("enforce", "observe") else "enforce"
         self.chain = chain or []
         self.disable_rate_limit = disable_rate_limit
+        self.customer_header = (
+            customer_header
+            or runtime.config.outbound_customer_header
+            or _DEFAULT_OUTBOUND_CUSTOMER_HEADER
+        )
         # Zero falls back to the SDK-instance estimated_tokens_per_request
         # config, then to a sane hardcoded default; reserving the whole
         # remaining budget per call would serialize concurrent agents.
@@ -245,7 +255,9 @@ class _OutboundCore:
 
     def budget_key(self, call: OutboundCall) -> str:
         model = call.model or "default"
-        return f"{self.runtime.config.tenant_id}:{call.provider}:{model}:outbound"
+        tenant = self.runtime.config.tenant_id
+        prefix = f"{tenant}:customer={call.customer}" if call.customer else tenant
+        return f"{prefix}:{call.provider}:{model}:outbound"
 
     def reserve(self, call: OutboundCall) -> Any:
         return self.runtime.token_budget.reserve(
@@ -400,6 +412,13 @@ def create_httpx_transport(
             call = detect_llm_call(request.url.host, request.url.path)
             if call is None:
                 return inner.handle_request(request)
+
+            # Per-customer attribution: read the customer key from a request
+            # header and strip it so it never reaches the provider.
+            customer = request.headers.get(core.customer_header)
+            if customer:
+                call.customer = customer
+                del request.headers[core.customer_header]
 
             body = request.read()
             if call.model == "" and body:
@@ -567,6 +586,7 @@ def create_httpx_transport(
                 operation=call.operation,
                 compatible=True,
                 path_suffix=call.path_suffix,
+                customer=call.customer,  # attribution survives provider fallback
             )
             response = self._execute(next_request, new_body, next_call, depth + 1)
             response.headers["x-rateguard-fallback"] = "true"
@@ -664,6 +684,11 @@ def create_httpx_async_transport(
             call = detect_llm_call(request.url.host, request.url.path)
             if call is None:
                 return await inner.handle_async_request(request)
+
+            customer = request.headers.get(core.customer_header)
+            if customer:
+                call.customer = customer
+                del request.headers[core.customer_header]
 
             body = await request.aread()
             if call.model == "" and body:
@@ -817,6 +842,7 @@ def create_httpx_async_transport(
                 operation=call.operation,
                 compatible=True,
                 path_suffix=call.path_suffix,
+                customer=call.customer,  # attribution survives provider fallback
             )
             response = await self._execute(next_request, new_body, next_call, depth + 1)
             response.headers["x-rateguard-fallback"] = "true"

@@ -114,6 +114,9 @@ class RateGuardOptions:
     # custom/fine-tuned/not-yet-tabled models. Mirrors Go's cfg.PricingProvider.
     # Cost is an observability estimate only — it never drives enforcement.
     pricing_provider: "PricingProvider | None" = None
+    # Header read for per-customer budget attribution on outbound LLM calls
+    # (default x-rateguard-customer). Mirrors Go's cfg.OutboundCustomerHeader.
+    outbound_customer_header: str = ""
     # Enables agent loop detection for requests carrying an
     # X-Sequence-Depth header. Mirrors Go's cfg.LoopDetection. Opt-in.
     loop_detection: bool = False
@@ -170,6 +173,7 @@ class ResolvedRateGuardOptions:
     event_queue_size: int | None
     guardrails: "GuardrailChain | None"
     pricing_provider: "PricingProvider | None"
+    outbound_customer_header: str
     loop_detection: bool
     estimated_tokens_per_request: int
     adaptive_rate_limit: bool

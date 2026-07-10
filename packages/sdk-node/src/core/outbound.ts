@@ -31,13 +31,24 @@ export interface OutboundCall {
   operation: 'chat' | 'text_completion' | 'embedding';
   compatible: boolean;
   pathSuffix: string;
+  /**
+   * End-user/tenant this call is attributed to, from the X-RateGuard-Customer
+   * header. When set, budgets are scoped and spend tracked per customer — one
+   * runaway user can't exhaust everyone's budget.
+   */
+  customer?: string;
 }
+
+/** Request header carrying the per-customer attribution key (default). */
+const DEFAULT_OUTBOUND_CUSTOMER_HEADER = 'x-rateguard-customer';
 
 export interface WrapFetchOptions {
   /** enforce (default): synthesize 429/503 when limits say no. observe: never block. */
   mode?: OutboundMode;
   /** Fallback providers, tried in order on 429/5xx/breaker-open. OpenAI-compatible only. */
   chain?: ProviderEntry[];
+  /** Header read for per-customer budget attribution (default x-rateguard-customer). */
+  customerHeader?: string;
   /**
    * Bounds the per-call hard-stop budget reservation. Defaults to 4096 —
    * reserving the whole remaining budget per call would serialize
@@ -309,6 +320,7 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
         operation: call.operation,
         compatible: true,
         pathSuffix: call.pathSuffix,
+        ...(call.customer ? { customer: call.customer } : {}), // attribution survives fallback
       };
       const response = await attempt(nextURL, { ...init, headers, body: nextBody }, nextBody, nextCall, depth + 1);
       const wrapped = new Response(response.body, response);
@@ -338,7 +350,8 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
       }
     }
 
-    const budgetKey = `${runtime.config.tenantId}:${call.provider}:${call.model || 'default'}:outbound`;
+    const customerSegment = call.customer ? `:customer=${call.customer}` : '';
+    const budgetKey = `${runtime.config.tenantId}${customerSegment}:${call.provider}:${call.model || 'default'}:outbound`;
     const reservation = runtime.tokenBudget.reserve(budgetKey, runtime.config.tokenBudget, estimatedTokens);
     if (reservation.decision.applied && !reservation.decision.allowed && enforce) {
       return synthesizedResponse(429, 'token_budget_exceeded', `rateguard: outbound token budget exhausted for ${call.provider}`, reservation.decision.retryAfterMs);
@@ -486,6 +499,17 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
       // not sniffable without consuming them — tracking still works.
       requestInit.method = requestInit.method ?? input.method;
       requestInit.headers = requestInit.headers ?? input.headers;
+    }
+
+    // Per-customer attribution: read the customer key from a request header and
+    // strip it so it never reaches the provider.
+    const customerHeaderName = options.customerHeader ?? runtime.config.outboundCustomerHeader ?? DEFAULT_OUTBOUND_CUSTOMER_HEADER;
+    const entryHeaders = new Headers(requestInit.headers);
+    const customer = entryHeaders.get(customerHeaderName);
+    if (customer) {
+      call.customer = customer;
+      entryHeaders.delete(customerHeaderName);
+      requestInit.headers = entryHeaders;
     }
 
     const body = typeof requestInit.body === 'string' ? requestInit.body : undefined;

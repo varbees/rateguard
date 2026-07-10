@@ -59,6 +59,10 @@ type GenAICall struct {
 	ConversationID string
 	ResponseID     string
 
+	// Customer attributes spend to an end-user/tenant (from the
+	// X-RateGuard-Customer header) for per-customer cost breakdowns.
+	Customer string
+
 	// Cost tracking (USD, approximate — set per model pricing)
 	EstimatedCostUSD float64
 
@@ -218,6 +222,9 @@ func (o *genaiObserver) StartSpan(ctx context.Context, call GenAICall) (context.
 	}
 	if call.ConversationID != "" {
 		attrs = append(attrs, attribute.String("gen_ai.conversation.id", call.ConversationID))
+	}
+	if call.Customer != "" {
+		attrs = append(attrs, attribute.String("rateguard.customer", call.Customer))
 	}
 
 	return o.tracer.Start(ctx, genaiSpanNameFor(call),

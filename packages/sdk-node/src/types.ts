@@ -160,6 +160,11 @@ export interface RateGuardOptions {
    */
   pricingProvider?: PricingProvider;
   /**
+   * Header read for per-customer budget attribution on outbound LLM calls
+   * (default x-rateguard-customer). Mirrors Go's cfg.OutboundCustomerHeader.
+   */
+  outboundCustomerHeader?: string;
+  /**
    * Enables agent loop detection for requests carrying an X-Sequence-Depth
    * header. Mirrors Go's cfg.LoopDetection. Opt-in, defaults to false.
    */
@@ -216,6 +221,7 @@ export interface ResolvedRateGuardOptions {
   clock: Clock;
   guardrails: Guardrail | undefined;
   pricingProvider: PricingProvider | undefined;
+  outboundCustomerHeader: string | undefined;
   loopDetection: boolean;
   estimatedTokensPerRequest: number;
   adaptiveRateLimit: boolean;

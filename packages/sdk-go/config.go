@@ -84,6 +84,12 @@ type Config struct {
 
 	EventEmitter EventEmitter
 
+	// OutboundCustomerHeader is the request header read for per-customer budget
+	// attribution on outbound LLM calls (default X-RateGuard-Customer). When a
+	// request carries it, budgets are scoped and spend is tracked per customer,
+	// and the header is stripped before the request reaches the provider.
+	OutboundCustomerHeader string
+
 	// PricingProvider supplies USD-per-1K-token prices for cost estimates,
 	// checked before the built-in starter table. Bring your own, or use
 	// StaticPricing for a map of custom/fine-tuned/not-yet-tabled models.

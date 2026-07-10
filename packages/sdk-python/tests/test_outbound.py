@@ -100,6 +100,34 @@ def test_outbound_sse_streaming_usage_preserves_bytes():
     assert usage["hour"] == 35
 
 
+def test_outbound_per_customer_budget_isolation():
+    # X-RateGuard-Customer scopes the budget per customer: one customer
+    # exhausting theirs must NOT block another, and the header must be stripped.
+    saw_customer_header = False
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal saw_customer_header
+        if request.headers.get("x-rateguard-customer"):
+            saw_customer_header = True
+        return httpx.Response(200, json={"model": "gpt-4o", "usage": {"prompt_tokens": 400, "completion_tokens": 100, "total_tokens": 500}})
+
+    rg = RateGuard(preset="dev", token_budget=TokenBudgetOptions(hour_limit=600))
+    client = make_client(rg, handler)
+
+    def send(customer: str) -> httpx.Response:
+        return client.post(
+            "https://api.openai.com/v1/chat/completions",
+            json={"model": "gpt-4o"},
+            headers={"X-RateGuard-Customer": customer},
+        )
+
+    assert send("alice").status_code == 200
+    assert send("alice").status_code == 200
+    assert send("alice").status_code == 429  # alice exhausted her 600
+    assert send("bob").status_code == 200  # bob's budget is isolated
+    assert not saw_customer_header, "X-RateGuard-Customer must be stripped before reaching the provider"
+
+
 def test_outbound_streaming_without_usage_charges_estimate():
     # OpenAI-compatible streaming WITHOUT stream_options.include_usage: content
     # deltas and [DONE], no usage anywhere. Recording zero would let a runaway

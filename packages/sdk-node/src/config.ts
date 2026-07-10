@@ -258,6 +258,7 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
     clock,
     guardrails: options.guardrails,
     pricingProvider: options.pricingProvider,
+    outboundCustomerHeader: options.outboundCustomerHeader,
     loopDetection: options.loopDetection ?? false,
     estimatedTokensPerRequest:
       typeof options.estimatedTokensPerRequest === 'number' && options.estimatedTokensPerRequest > 0

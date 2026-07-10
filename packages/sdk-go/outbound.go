@@ -55,6 +55,9 @@ type OutboundOptions struct {
 	// concurrent agents. Set negative for strict reserve-all semantics
 	// (guaranteed never to overshoot, one in-flight call per budget key).
 	EstimatedTokens int64
+	// CustomerHeader overrides the request header read for per-customer budget
+	// attribution (default X-RateGuard-Customer). Empty uses the default.
+	CustomerHeader string
 	// DisableRateLimit skips the outbound per-provider request limiter
 	// (budgets and breakers still apply).
 	DisableRateLimit bool
@@ -80,7 +83,17 @@ type outboundCall struct {
 	Operation  string
 	Compatible bool // OpenAI-compatible request schema (fallback-safe)
 	PathSuffix string
+	// Customer is the end-user/tenant this call is attributed to, read from the
+	// X-RateGuard-Customer request header (configurable). When set, budgets are
+	// scoped and spend is tracked per customer — one runaway user can't exhaust
+	// everyone's budget, and per-customer usage is queryable via the budget key.
+	Customer string
 }
+
+// defaultOutboundCustomerHeader is the request header that carries the
+// per-customer attribution key. RateGuard reads it, scopes the budget by it,
+// and strips it before the request reaches the provider.
+const defaultOutboundCustomerHeader = "X-RateGuard-Customer"
 
 type genaiTransport struct {
 	next  http.RoundTripper
@@ -155,6 +168,15 @@ func (t *genaiTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	call := detectLLMCall(req)
 	if call == nil {
 		return t.next.RoundTrip(req)
+	}
+
+	// Per-customer attribution: read the customer key from a request header and
+	// strip it so it never reaches the provider. Set once here at entry; carried
+	// through fallback via the call struct.
+	customerHeader := nonEmpty(t.opts.CustomerHeader, nonEmpty(t.sdk.cfg.OutboundCustomerHeader, defaultOutboundCustomerHeader))
+	if v := req.Header.Get(customerHeader); v != "" {
+		call.Customer = v
+		req.Header.Del(customerHeader)
 	}
 
 	// Buffer the request body: needed for model detection and fallback retry.
@@ -318,8 +340,16 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 		}
 	}
 
-	// Token budget: reserve before, commit actual usage after.
-	budgetKey := strings.Join([]string{s.tenantID(), call.Provider, nonEmpty(call.Model, "default"), "outbound"}, ":")
+	// Token budget: reserve before, commit actual usage after. When a customer
+	// is attributed, it becomes part of the scope — per-customer budgets and
+	// per-customer spend tracking. Absent a customer, the key is unchanged
+	// (backward-compatible).
+	budgetSegments := []string{s.tenantID()}
+	if call.Customer != "" {
+		budgetSegments = append(budgetSegments, "customer="+call.Customer)
+	}
+	budgetSegments = append(budgetSegments, call.Provider, nonEmpty(call.Model, "default"), "outbound")
+	budgetKey := strings.Join(budgetSegments, ":")
 	reservation := s.tokens.reserveWithEstimate(budgetKey, s.Policy(), TokenBudgetMode(s.Policy().TokenBudgetMode), t.opts.EstimatedTokens)
 	if reservation.Applied && !reservation.Allowed && enforce {
 		s.metrics.tokenBudgetExhausted.Add(1)
@@ -331,6 +361,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 		Provider:            call.Provider,
 		Model:               call.Model,
 		Operation:           call.Operation,
+		Customer:            call.Customer,
 		TokenBudgetApplied:  reservation.Applied,
 		CircuitBreakerState: string(breakerDecision.State),
 	})
@@ -493,6 +524,7 @@ func (t *genaiTransport) retarget(req *http.Request, body []byte, call *outbound
 		Operation:  call.Operation,
 		Compatible: true,
 		PathSuffix: call.PathSuffix,
+		Customer:   call.Customer, // attribution survives provider fallback
 	}
 
 	resp, err := t.execute(parsed, newBody, nextCall, depth+1)
