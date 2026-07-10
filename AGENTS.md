@@ -96,7 +96,7 @@ cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 # Node tests (226 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (238 passing)
+# Python tests (237 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Python strict typecheck (mypy --strict passes clean on all 44 source files)

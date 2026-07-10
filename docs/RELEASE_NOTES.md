@@ -1,5 +1,87 @@
 # Release Notes
 
+## v0.3.0 — 2026-07-10 — "The Enforcement Release"
+
+RateGuard `v0.3.0` extends enforcement to where agents actually run: voice
+pipelines, reworded loops, and the compliance ledger. Every feature ships in
+all 3 languages with cross-language conformance vectors, several of them
+generated from live APIs or reference libraries rather than hand-written
+fixtures.
+
+### Highlights
+
+- **Realtime voice session enforcement.** Voice sessions are one WebSocket that
+  can burn dollars per minute for hours; per-request rate limiting is
+  structurally blind to them. New usage parsers for OpenAI Realtime
+  (documented `response.done` schema; live verification pending — no free
+  tier) and Gemini Live (**live-verified against the real API**: usage is
+  per-turn, proven with a two-turn session), plus a per-session
+  `RealtimeSessionGuard` with limits on total tokens, audio tokens, turns,
+  wall-clock duration, and caller-priced cost estimates. Terminal on breach,
+  once-only callback; `Peek` never mutates; frames are never rewritten.
+  `conformance/realtime_usage_vectors.json` contains real captured Gemini
+  frames.
+- **Pipecat + LiveKit Agents adapters (Python).** Production voice runs
+  through frameworks that terminate media server-side — so enforcement lives
+  inside them: `rateguard.integrations.pipecat_adapter` (a drop-in
+  `FrameProcessor`; breach pushes Pipecat's own fatal-error stop) and
+  `rateguard.integrations.livekit_adapter` (`attach_rateguard` on
+  `metrics_collected`, with full audio/text/cached token splits). Verified
+  against pipecat-ai 1.5.0 and livekit-agents 1.6.5 as installed. Optional
+  imports — the core package stays zero-dependency.
+- **Semantic loop detection.** SHA-256 fingerprinting catches byte-identical
+  repeats; it provably cannot catch an agent repeating itself *in different
+  words* — the documented $47K two-agent incident shape. The new
+  `SemanticLoopDetector` embeds each step locally and compares against a
+  sliding window; the 0.90 default threshold is empirically calibrated
+  (reworded repeats score 0.92–0.99, same-template/different-entity workloads
+  ≤0.80, distinct steps <0.67).
+- **Local static embedder, zero inference dependencies.** Loads
+  model2vec/potion-style models from RateGuard's `.rgemb` format
+  (`scripts/convert_model2vec.py`, checksum printed at conversion; models
+  load from a local path — nothing is downloaded at runtime, nothing is
+  bundled). WordPiece + BertNormalizer reimplemented on each language's
+  stdlib; token ids are byte-exact with the reference HF tokenizer and
+  embeddings match the model2vec library within 1e-4
+  (`conformance/static_embedding_vectors.json` is generated from model2vec
+  itself). Also closes the semantic cache's batteries-not-included gap.
+- **Signed spend receipts.** Budget attestation proves an agent was
+  *authorized* to spend; a receipt is the Ed25519-signed, offline-verifiable
+  statement of what it *did* spend — closing grant → spend → proof. Signing
+  payloads contain integers and strings only (unix seconds, micro-USD);
+  `conformance/spend_receipt_vectors.json` pins payload **and signature**
+  byte-for-byte across the 3 SDKs.
+- **FOCUS-aligned cost export.** Spend receipts map onto FinOps FOCUS columns
+  (tokens ride `ConsumedQuantity`/`ConsumedUnit` per the spec's
+  virtual-currency model; RateGuard detail in `x_rateguard_*` extension
+  columns). `BilledCost` is deliberately 0 — RateGuard's costs are
+  pricing-table **estimates**, never presented as invoice truth.
+- **Async webhook emission.** Endpoint-configured event delivery no longer
+  runs in the request hot path: bounded queue (default 1024), non-blocking
+  emit with drop-and-count on overflow, delivery on a background context (a
+  canceled request no longer cancels its own event), drained by
+  `SDK.Shutdown` / `runtime.shutdown()` / `rg.shutdown()`.
+- **~650 tests** across the 3 SDKs (up from ~498 at v0.2.0): 188 Go test
+  functions (`-race`), 226 Node, 237 Python — plus five cross-language
+  conformance suites. `mypy --strict` passes clean on all 44 Python source
+  files; the Node build is `tsc` strict-clean.
+
+### Published Artifacts
+
+- Go: `github.com/varbees/rateguard/packages/sdk-go@v0.3.0`
+- npm: `@varbees/rateguard-node@0.3.0`
+- PyPI: `varbees-rateguard==0.3.0` (`pip install varbees-rateguard` — note the
+  full name; the bare `rateguard` name on PyPI is an unrelated package)
+
+### Verification
+
+Every feature above carries regression tests confirmed to fail without the
+change; cross-language behavior is held by conformance vectors
+(`token_bucket`, `budget_attestation_expiry`, `static_embedding`,
+`spend_receipt` — signature-level, `realtime_usage` — real captured frames).
+Gemini Live parsing was validated against the live API; OpenAI Realtime
+against its documented schema with fake-server tests, live check pending.
+
 ## v0.2.0 — 2026-07-06
 
 RateGuard `v0.2.0` closes every Node/Python parity gap against the Go reference
