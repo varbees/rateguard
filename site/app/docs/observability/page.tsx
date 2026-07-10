@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Callout, DocH1, DocH2, DocsPager, P } from "../../../components/docs/Docs";
 import { CodeBlock } from "../../../components/docs/CodeBlock";
 
@@ -45,8 +46,10 @@ span.End(rateguard.GenAICall{
 }, err)`}
       />
       <P>
-        Cost is estimated automatically from the pricing table (14 models verified against
-        provider pricing pages) when not provided. TTFT and TPOT are derived from{" "}
+        Cost is estimated automatically from a starter pricing table of common models when not
+        provided — dated snapshots resolve to their base entry, and a{" "}
+        <code>PricingProvider</code> prices custom or unlisted models (see{" "}
+        <Link href="/docs/outbound">Track LLM spend</Link>). TTFT and TPOT are derived from{" "}
         <code>RecordChunk()</code> timing. Node and Python expose the same attribute builders via{" "}
         <code>genaiSpanName</code> / <code>genai_span_name</code> and friends.
       </P>

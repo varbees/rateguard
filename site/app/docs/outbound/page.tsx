@@ -111,6 +111,23 @@ aclient = AsyncOpenAI(http_client=rg.wrap_httpx_async_client())  # async
         window rolls. See <Link href="/docs/token-budgets">Token budgets</Link>.
       </P>
 
+      <DocH2 id="per-customer">Per-customer budgets &amp; attribution</DocH2>
+      <P>
+        Send an <code>X-RateGuard-Customer</code> header on the request and the customer becomes
+        part of the budget scope — <strong>each customer gets their own budget</strong>, so one
+        runaway end-user can&apos;t exhaust the whole tenant&apos;s allowance, and spend is tracked
+        per customer for free (query it by the scoped budget key). The header is{" "}
+        <strong>stripped before the request reaches the provider</strong>, and the customer is
+        emitted as the <code>rateguard.customer</code> span attribute for per-user cost dashboards.
+        No header → the scope and behavior are unchanged.
+      </P>
+      <Callout kind="tip" title="One header, no code change">
+        Because RateGuard rides your existing client, per-customer budgets need nothing more than a
+        header on the outbound request — the agent code stays the same. Override the header name via{" "}
+        <code>Config.OutboundCustomerHeader</code> (Go), <code>outboundCustomerHeader</code> (Node),
+        or <code>outbound_customer_header</code> (Python). Attribution survives provider fallback.
+      </Callout>
+
       <DocH2 id="pricing">Pricing your own models</DocH2>
       <P>
         RateGuard ships a small starter table of common models for the OTel{" "}

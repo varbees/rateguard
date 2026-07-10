@@ -49,7 +49,7 @@ Cost is estimated automatically from the pricing table when not provided. TTFT a
 
 ## Model pricing
 
-14 models are configured in the SDK pricing table. Costs are approximate (USD per 1K tokens); re-check provider pricing pages before publishing a release.
+A starter table prices ~14 common models (USD per 1K tokens); dated snapshots resolve to their base entry via model-ID normalization. Supply a `PricingProvider`/`StaticPricing` map to price custom, fine-tuned, or unlisted models with no fetched file or network. Costs are approximate display estimates (never enforcement, never invoice truth); re-check provider pricing pages before publishing a release.
 
 | Model | Prompt ($/1K) | Completion ($/1K) |
 |---|---|---|

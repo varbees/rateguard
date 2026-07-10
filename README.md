@@ -28,7 +28,8 @@ Rate limiting was invented to protect servers from too many users. In the agent 
 | **Content guardrails** | PII detection, prompt injection detection, token/length limits. Middleware in all 3 languages can reject violations with 422; guardrail violations are tracked in a bounded log with a Prometheus counter. |
 | **Prometheus metrics** | Go `/metrics` endpoint with live counters; Node/Python expose zero-dependency exposition helpers. |
 | **Streaming-aware** | SSE bytes pass through untouched while usage, TTFT, and TPOT are extracted on the side. Bounded memory, always. |
-| **14 models priced** | Pricing table for GPT-4o/4.1, o3/o4-mini, Claude, Gemini, Llama, and DeepSeek families. Unknown models return `$0.00`; verify provider pages before release. |
+| **Cost estimates, your prices** | A starter table prices common models (GPT-4o/4.1, o3/o4-mini, Claude, Gemini, Llama, DeepSeek); dated snapshots (`gpt-4o-2024-08-06`) resolve to their base entry. Bring a `PricingProvider`/`StaticPricing` map to price custom, fine-tuned, or unlisted models — no fetched file, no network. Unknown everywhere → `$0.00` (never fabricated; cost is a display estimate, never enforcement). |
+| **Per-customer attribution** | Send an `X-RateGuard-Customer` header and budgets scope per end-user — one runaway customer can't exhaust the tenant's budget, and spend is tracked per customer. The header is stripped before the provider sees it. All 3 languages. |
 | **Adaptive rate limiting** | Opt-in AIMD controller auto-tunes the effective limit from observed upstream error rate — grows on healthy traffic, cuts before the circuit breaker has to trip. All 3 languages. |
 | **Semantic caching** | Bring your own `Embedder` (OpenAI/Cohere/Voyage embeddings — anything), or use the built-in static embedder below. A cosine-similarity hit skips the network call, breaker, and budget entirely. Streaming requests always bypass it. All 3 languages. |
 | **Static embedder** | Local embeddings with zero inference dependencies: load a converted model2vec/potion model (~8MB file, downloaded — never bundled) and get WordPiece + mean-pool + normalize in pure stdlib. Token-id-exact with the reference HF tokenizer, conformance-tested across all 3 languages against output from the model2vec library itself. |
@@ -61,7 +62,7 @@ const client = new OpenAI({ fetch: rg.wrapFetch() });
 client = OpenAI(http_client=rg.wrap_httpx_client())
 ```
 
-Every call through the wrapped client is budgeted, breaker-protected per provider, and metered with **real** token usage — including streaming (OpenAI `usage:null` intermediates and Anthropic's split `message_start`/`message_delta` shapes are handled correctly). Go also emits GenAI OTel spans from the outbound wrapper; Node/Python expose the same usage extraction and GenAI attribute/cost helpers for app-level tracing. 16 provider hosts detected out of the box, plus Azure OpenAI, Bedrock, Vertex, and any self-hosted OpenAI-compatible server.
+Every call through the wrapped client is budgeted, breaker-protected per provider, and metered with **real** token usage — including streaming (OpenAI `usage:null` intermediates and Anthropic's split `message_start`/`message_delta` shapes are handled correctly). Go also emits GenAI OTel spans from the outbound wrapper; Node/Python expose the same usage extraction and GenAI attribute/cost helpers for app-level tracing. 26 hosts across 23 OpenAI-compatible providers detected out of the box, plus Anthropic, Gemini, Vertex, Azure OpenAI, and AWS Bedrock (28 providers total) — and any self-hosted OpenAI-compatible server.
 
 ## Quick Start
 
