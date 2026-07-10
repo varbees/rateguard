@@ -1,0 +1,157 @@
+{
+ "note": "Realtime server events -> expected parsed usage, all 3 SDKs. Gemini events are REAL frames captured from the live API on 2026-07-10 (models/gemini-2.5-flash-native-audio-latest, free tier; audio delta truncated for size). OpenAI events follow the documented response.done schema \u2014 live verification pending (no free tier). Session semantics: usage events are SUMMED per session (per-response / per-turn), verified per-turn for Gemini with a two-turn live session.",
+ "cases": [
+  {
+   "name": "gemini live turn-complete with usageMetadata (real capture)",
+   "provider": "gemini",
+   "event": {
+    "serverContent": {
+     "turnComplete": true
+    },
+    "usageMetadata": {
+     "promptTokenCount": 375,
+     "responseTokenCount": 18,
+     "totalTokenCount": 393,
+     "promptTokensDetails": [
+      {
+       "modality": "TEXT",
+       "tokenCount": 375
+      }
+     ],
+     "responseTokensDetails": [
+      {
+       "modality": "AUDIO",
+       "tokenCount": 18
+      }
+     ],
+     "thoughtsTokenCount": 21
+    }
+   },
+   "expect": {
+    "type": "serverContent",
+    "turn_complete": true,
+    "has_usage": true,
+    "usage": {
+     "input_tokens": 375,
+     "output_tokens": 18,
+     "total_tokens": 393,
+     "input_text_tokens": 375,
+     "input_audio_tokens": 0,
+     "output_text_tokens": 0,
+     "output_audio_tokens": 18,
+     "input_cached_tokens": 0,
+     "thoughts_tokens": 21
+    }
+   }
+  },
+  {
+   "name": "gemini live audio delta without usage (real capture, truncated)",
+   "provider": "gemini",
+   "event": {
+    "serverContent": {
+     "modelTurn": {
+      "parts": [
+       {
+        "text": "**Acknowledge the Request**\n\nI've registered the request and have formulated a simple response. My task has been interpreted, and my course is set. The plan is in motion. \n\n\n",
+        "thought": true
+       }
+      ]
+     }
+    }
+   },
+   "expect": {
+    "type": "serverContent",
+    "turn_complete": false,
+    "has_usage": false
+   }
+  },
+  {
+   "name": "gemini setupComplete (real capture shape)",
+   "provider": "gemini",
+   "event": {
+    "setupComplete": {}
+   },
+   "expect": {
+    "type": "setupComplete",
+    "turn_complete": false,
+    "has_usage": false
+   }
+  },
+  {
+   "name": "openai response.done with usage (documented schema)",
+   "provider": "openai",
+   "event": {
+    "type": "response.done",
+    "event_id": "event_abc",
+    "response": {
+     "id": "resp_001",
+     "status": "completed",
+     "usage": {
+      "total_tokens": 1240,
+      "input_tokens": 1000,
+      "output_tokens": 240,
+      "input_token_details": {
+       "text_tokens": 400,
+       "audio_tokens": 550,
+       "cached_tokens": 50
+      },
+      "output_token_details": {
+       "text_tokens": 40,
+       "audio_tokens": 200
+      }
+     }
+    }
+   },
+   "expect": {
+    "type": "response.done",
+    "turn_complete": true,
+    "has_usage": true,
+    "usage": {
+     "input_tokens": 1000,
+     "output_tokens": 240,
+     "total_tokens": 1240,
+     "input_text_tokens": 400,
+     "input_audio_tokens": 550,
+     "input_cached_tokens": 50,
+     "output_text_tokens": 40,
+     "output_audio_tokens": 200,
+     "thoughts_tokens": 0
+    }
+   }
+  },
+  {
+   "name": "openai delta without usage",
+   "provider": "openai",
+   "event": {
+    "type": "response.audio.delta",
+    "event_id": "event_x",
+    "delta": "b64..."
+   },
+   "expect": {
+    "type": "response.audio.delta",
+    "turn_complete": false,
+    "has_usage": false
+   }
+  },
+  {
+   "name": "openai rate_limits.updated carries no token usage",
+   "provider": "openai",
+   "event": {
+    "type": "rate_limits.updated",
+    "rate_limits": [
+     {
+      "name": "tokens",
+      "limit": 40000,
+      "remaining": 39000,
+      "reset_seconds": 1.2
+     }
+    ]
+   },
+   "expect": {
+    "type": "rate_limits.updated",
+    "turn_complete": false,
+    "has_usage": false
+   }
+  }
+ ]
+}
