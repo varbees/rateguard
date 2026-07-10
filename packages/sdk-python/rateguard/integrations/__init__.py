@@ -11,4 +11,9 @@ Available:
   enforcing a RealtimeSessionGuard inside a voice pipeline.
 - ``rateguard.integrations.livekit_adapter`` — LiveKit Agents
   metrics-event hook feeding a RealtimeSessionGuard.
+- ``rateguard.integrations.litellm_adapter`` — wrap ``litellm.completion``
+  to enforce token budgets from the response (the CrewAI hook). Exposed
+  ergonomically as ``RateGuard.wrap_completion`` / ``wrap_acompletion``.
+  Unlike the others this imports nothing at module load — it meters whatever
+  litellm hands back, so it needs no litellm import of its own.
 """

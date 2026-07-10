@@ -254,6 +254,25 @@ class RateGuard:
             base_url=client.base_url,
         )
 
+    def wrap_completion(self, completion_fn: Callable[..., Any]) -> Callable[..., Any]:
+        """Wrap ``litellm.completion`` to enforce token budgets — the CrewAI hook.
+
+        CrewAI routes calls through litellm; this meters from the response, so
+        it works regardless of litellm's internal transport::
+
+            import litellm
+            litellm.completion = rg.wrap_completion(litellm.completion)
+        """
+        from .integrations.litellm_adapter import wrap_completion
+
+        return wrap_completion(self, completion_fn)
+
+    def wrap_acompletion(self, acompletion_fn: Callable[..., Any]) -> Callable[..., Any]:
+        """Async counterpart of :meth:`wrap_completion` for ``litellm.acompletion``."""
+        from .integrations.litellm_adapter import wrap_acompletion
+
+        return wrap_acompletion(self, acompletion_fn)
+
     @property
     def asgi_middleware(self) -> type:
         from .adapters.asgi import RateGuardMiddleware as Middleware

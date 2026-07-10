@@ -74,15 +74,48 @@ from pydantic_ai.providers.openai import OpenAIProvider
 model = OpenAIModel("gpt-4o", provider=OpenAIProvider(http_client=rg.wrap_httpx_async_client()))
 ```
 
-### CrewAI — honest status
-CrewAI's native provider path does not currently expose custom HTTP client
-injection, and multi-provider routing has open issues
-([crewAI#5139](https://github.com/crewAIInc/crewAI/issues/5139)). Since
-CrewAI's own `token_usage` is known to disagree with provider counts (links
-above), we track client-injection support and will publish a recipe the day
-it lands. Until then: CrewAI's LiteLLM fallback path can point `base_url` at
-infrastructure you control, but that is a proxy pattern — not what RateGuard
-recommends.
+### CrewAI
+
+CrewAI routes every LLM call through `litellm.completion` / `litellm.acompletion`,
+and its own `token_usage` is known to disagree with provider counts (links
+above). Injecting a custom httpx client via `litellm.client_session` is
+[documented](https://docs.litellm.ai/docs/completion/shared_session) but
+provider-inconsistent (litellm routes some providers over aiohttp, silently
+bypassing the injected client) — so RateGuard wraps the completion function and
+meters from the **response**, which is reliable regardless of litellm's internal
+transport:
+
+```python
+import litellm
+from rateguard import RateGuard, TokenBudgetOptions
+
+rg = RateGuard(token_budget=TokenBudgetOptions(hour_limit=100_000))
+litellm.completion  = rg.wrap_completion(litellm.completion)    # sync
+litellm.acompletion = rg.wrap_acompletion(litellm.acompletion)  # async
+# every CrewAI agent call is now budgeted — no agent code changes
+```
+
+Each call reserves budget before and commits the real `response.usage` after; a
+hard-stop budget raises `BudgetExceeded` when exhausted. Streaming
+(`stream=True`) commits the reserved estimate — exact streaming usage isn't
+known until the caller consumes the generator, the same trade-off as the wire.
+
+### AutoGen (AG2)
+
+AutoGen's `LLMConfigEntry` accepts an `http_client`, so the wrapped async client
+threads straight into `llm_config` — no agent changes:
+
+```python
+from autogen import ConversableAgent
+from rateguard import RateGuard
+
+rg = RateGuard(preset="agent-orchestrator")
+llm_config = {"config_list": [{
+    "model": "gpt-4.1",
+    "http_client": rg.wrap_httpx_async_client(),  # one-line RateGuard hook
+}]}
+agent = ConversableAgent(name="Agent", llm_config=llm_config)
+```
 
 ### Pipecat (voice pipelines)
 
