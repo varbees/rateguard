@@ -81,6 +81,18 @@ from .core.redis_limiter import (
 )
 from .core.semantic_cache import CachedResponse, Embedder, SemanticCache, SemanticCacheOptions, is_streaming_request_body, prompt_text_from_request_body
 from .core.focus_export import FOCUS_HEADER, FOCUSRow, focus_row_from_receipt, write_focus_csv
+from .core.realtime import (
+    RealtimeCostRates,
+    RealtimeDecision,
+    RealtimeEvent,
+    RealtimeSessionGuard,
+    RealtimeSessionGuardOptions,
+    RealtimeSessionLimits,
+    RealtimeUsage,
+    parse_gemini_live_event,
+    parse_openai_realtime_event,
+    parse_realtime_event,
+)
 from .core.semantic_loop import SemanticLoopDecision, SemanticLoopDetector, SemanticLoopOptions
 from .core.sharded_limiter import ShardedLimiter
 from .core.spend_receipt import (
@@ -229,6 +241,17 @@ __all__ = [
     "SemanticLoopDecision",
     "SemanticLoopDetector",
     "SemanticLoopOptions",
+    # Realtime session enforcement (voice substrate)
+    "RealtimeCostRates",
+    "RealtimeDecision",
+    "RealtimeEvent",
+    "RealtimeSessionGuard",
+    "RealtimeSessionGuardOptions",
+    "RealtimeSessionLimits",
+    "RealtimeUsage",
+    "parse_gemini_live_event",
+    "parse_openai_realtime_event",
+    "parse_realtime_event",
     # Spend receipts + FOCUS export
     "SpendReceipt",
     "SpendReceiptClaims",
