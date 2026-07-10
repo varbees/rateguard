@@ -17,10 +17,12 @@ export const docsNav: DocSection[] = [
     pages: [
       { slug: "agents-mcp", title: "Agents & MCP" },
       { slug: "outbound", title: "Track LLM spend" },
+      { slug: "realtime-voice", title: "Realtime & voice sessions" },
       { slug: "rate-limiting", title: "Rate limit your API" },
       { slug: "adaptive-rate-limiting", title: "Adaptive rate limiting" },
       { slug: "semantic-caching", title: "Semantic caching" },
       { slug: "budget-attestation", title: "Budget attestation" },
+      { slug: "spend-receipts", title: "Spend receipts & FOCUS" },
       { slug: "token-budgets", title: "Token budgets" },
       { slug: "loop-detection", title: "Loop detection" },
       { slug: "provider-fallback", title: "Provider fallback" },

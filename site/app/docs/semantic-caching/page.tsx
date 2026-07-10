@@ -51,6 +51,34 @@ client := rg.WrapClient(&http.Client{}, rateguard.OutboundOptions{
         tell it apart from a live call.
       </P>
 
+      <DocH2 id="static-embedder">Batteries included: the static embedder</DocH2>
+      <P>
+        You no longer have to bring your own embedder. <code>StaticEmbedder</code> loads a
+        model2vec/potion-style model from RateGuard&apos;s <code>.rgemb</code> format and runs
+        inference in pure stdlib — a WordPiece tokenization, an embedding-row lookup, mean
+        pooling, and a normalize. No ONNX, no native extension, no network call per embed. An
+        ~8&nbsp;MB model file gives cosine separation good enough for caching and{" "}
+        semantic loop detection.
+      </P>
+      <CodeBlock
+        title="Convert once, load anywhere (model file is data, never bundled)"
+        code={`# One-time, dev machine — converts any potion-style model from Hugging Face:
+python3 scripts/convert_model2vec.py ./potion-base-2M ./potion-base-2M.rgemb
+# prints the file's SHA-256 — pin it; SDKs load from a local path only,
+# nothing is downloaded at runtime.
+
+# Go      emb, err := rateguard.LoadStaticEmbedder("potion-base-2M.rgemb")
+# Node    const emb = StaticEmbedder.load('potion-base-2M.rgemb')
+# Python  emb = StaticEmbedder.load("potion-base-2M.rgemb")`}
+      />
+      <P>
+        Parity is held the hard way: token ids are byte-exact with the reference Hugging Face
+        tokenizer, and embeddings match the model2vec library&apos;s own output within 1e-4 —{" "}
+        <code>conformance/static_embedding_vectors.json</code> is generated from the reference
+        library itself, and all three SDKs replay it (same text → same vector, in every
+        language).
+      </P>
+
       <DocH2 id="semantics">What gets cached, and what never does</DocH2>
       <Table
         head={["Rule", "Why"]}

@@ -73,9 +73,72 @@ allowed, reason  = detector.Peek(fp, depth)  // pre-flight, records nothing`,
         ]}
       />
       <Callout kind="tip">
-        <code>check_loop</code> is one of the five <Link href="/docs/agents-mcp">MCP tools</Link>{" "}
+        <code>check_loop</code> is one of the seven <Link href="/docs/agents-mcp">MCP tools</Link>{" "}
         — an agent can ask &quot;am I looping?&quot; about its own behavior before issuing the
         call. Peek semantics: asking records nothing.
+      </Callout>
+
+      <DocH2 id="semantic">Semantic loop detection — the paraphrase loop</DocH2>
+      <P>
+        Exact hashing has a blind spot it cannot close: an agent repeating the same step{" "}
+        <em>in different words</em>. The documented $47K incident was exactly this shape — two
+        agents ping-ponging semantically identical, byte-distinct messages for eleven days.
+        Every SHA-256 fingerprint differed; nothing tripped. <code>SemanticLoopDetector</code>{" "}
+        closes the gap: it embeds each step locally (see the built-in{" "}
+        <Link href="/docs/semantic-caching">static embedder</Link> — no network, no inference
+        runtime) and compares against a sliding window of the sequence&apos;s recent steps.
+      </P>
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `embedder, _ := rateguard.LoadStaticEmbedder("potion-base-2M.rgemb")
+detector := rateguard.NewSemanticLoopDetector(embedder,
+    rateguard.SemanticLoopOptions{}) // threshold 0.90, window 8, minRepeats 2
+
+decision, _ := detector.Check(ctx, "agent-key", stepText)
+if decision.Loop {
+    // the agent is circling — halt it
+}
+// Peek(ctx, key, text) gives the same verdict without recording.`,
+          },
+          {
+            label: "Node.js",
+            code: `const embedder = StaticEmbedder.load('potion-base-2M.rgemb');
+const detector = new SemanticLoopDetector(embedder);
+// defaults: threshold 0.90, window 8, minRepeats 2
+
+const decision = await detector.check('agent-key', stepText);
+if (decision.loop) {
+  // the agent is circling — halt it
+}
+// peek(key, text) gives the same verdict without recording.`,
+          },
+          {
+            label: "Python",
+            code: `embedder = StaticEmbedder.load("potion-base-2M.rgemb")
+detector = SemanticLoopDetector(embedder)
+# defaults: threshold 0.90, window 8, min_repeats 2
+
+decision = await detector.check("agent-key", step_text)
+if decision.loop:
+    ...  # the agent is circling — halt it
+# peek(key, text) gives the same verdict without recording.`,
+          },
+        ]}
+      />
+      <P>
+        The 0.90 threshold is calibrated from measured data, not intuition: tight rewordings of
+        one ask score 0.92–0.99, same-template/different-entity workloads (&quot;weather in
+        Paris&quot; / &quot;weather in London&quot;) top out near 0.80, and genuinely distinct
+        task steps stay under 0.67. Honest limitation: loosely reworded repeats (0.73–0.86) are
+        indistinguishable from enumeration at this model size and will not trip the default —
+        lowering the threshold trades that for false positives on template workloads.
+      </P>
+      <Callout>
+        Semantic loop detection is a public primitive with a <code>Check</code>/<code>Peek</code>{" "}
+        split (pre-flight never records). It is not yet wired into the HTTP middleware — pair it
+        with your agent loop or the <Link href="/docs/realtime-voice">voice adapters</Link>.
       </Callout>
       <DocsPager slug="loop-detection" />
     </>
