@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Callout, DocH1, DocH2, DocsPager, P } from "../../../components/docs/Docs";
-import { CodeBlock } from "../../../components/docs/CodeBlock";
+import { CodeTabs } from "../../../components/docs/CodeTabs";
 
 export const metadata: Metadata = {
   title: "Guardrails",
@@ -19,28 +19,68 @@ export default function GuardrailsPage() {
       </P>
 
       <DocH2 id="presets">Standard and strict chains</DocH2>
-      <CodeBlock
-        title="Go"
-        code={`// Standard: PII + injection + 100KB limit
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `// Standard: PII + injection + 100KB limit
 chain := rateguard.StandardGuardrails()
 
 // Strict: PII + injection + 32K token limit + 50KB limit
-chain = rateguard.StrictGuardrails()`}
+chain = rateguard.StrictGuardrails()`,
+          },
+          {
+            label: "Node.js",
+            code: `// Standard: PII + injection + 100KB limit
+let chain = standardGuardrails();
+
+// Strict: PII + injection + 32K token limit + 50KB limit
+chain = strictGuardrails();`,
+          },
+          {
+            label: "Python",
+            code: `# Standard: PII + injection + 100KB limit
+chain = standard_guardrails()
+
+# Strict: PII + injection + 32K token limit + 50KB limit
+chain = strict_guardrails()`,
+          },
+        ]}
       />
 
       <DocH2 id="middleware">Wire into the middleware</DocH2>
-      <CodeBlock
-        title="Go — every request body checked automatically"
-        code={`rg := rateguard.New(rateguard.Config{
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `rg := rateguard.New(rateguard.Config{
     Preset:     "standard",
     Guardrails: rateguard.StandardGuardrails(), // violations → 422
-})`}
+})`,
+          },
+          {
+            label: "Node.js",
+            code: `const rg = new RateGuard({
+  preset: 'standard',
+  guardrails: standardGuardrails(), // violations → 422
+});`,
+          },
+          {
+            label: "Python",
+            code: `rg = RateGuard(
+    preset="standard",
+    guardrails=standard_guardrails(), # violations → 422
+)`,
+          },
+        ]}
       />
 
       <DocH2 id="custom">Custom guardrails</DocH2>
-      <CodeBlock
-        title="Go"
-        code={`myGuardrail := MyCustomGuardrail{}
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `myGuardrail := MyCustomGuardrail{}
 
 chain := rateguard.NewGuardrailChain(
     rateguard.NewPIIGuardrail(),
@@ -50,7 +90,37 @@ chain := rateguard.NewGuardrailChain(
 
 if v := chain.Check(prompt); v != nil {
     rateguard.WriteGuardrailReject(w, v) // HTTP 422
-}`}
+}`,
+          },
+          {
+            label: "Node.js",
+            code: `const myGuardrail = new MyCustomGuardrail();
+
+const chain = new GuardrailChain([
+  new PIIGuardrail(),
+  new PromptInjectionGuardrail(),
+  myGuardrail,
+]);
+
+const v = chain.check(prompt);
+if (v) {
+  writeGuardrailReject(res, v); // HTTP 422
+}`,
+          },
+          {
+            label: "Python",
+            code: `my_guardrail = MyCustomGuardrail()
+
+chain = GuardrailChain([
+    PIIGuardrail(),
+    PromptInjectionGuardrail(),
+    my_guardrail,
+])
+
+if v := chain.check(prompt):
+    return JSONResponse(status_code=422, content={"error": v.message})`,
+          },
+        ]}
       />
       <Callout kind="note">
         Guardrails are a defense-in-depth layer, not a substitute for provider-side safety
