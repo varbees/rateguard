@@ -153,3 +153,4 @@ class _FakeRuntime:
 class _FakeConfig:
     def __init__(self, clock: FixedClock) -> None:
         self.clock = clock
+        self.pricing_provider = None

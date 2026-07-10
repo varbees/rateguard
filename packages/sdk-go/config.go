@@ -83,6 +83,13 @@ type Config struct {
 	Adaptive AdaptiveOptions
 
 	EventEmitter EventEmitter
+
+	// PricingProvider supplies USD-per-1K-token prices for cost estimates,
+	// checked before the built-in starter table. Bring your own, or use
+	// StaticPricing for a map of custom/fine-tuned/not-yet-tabled models.
+	// Cost is an observability estimate only — it never drives enforcement.
+	PricingProvider PricingProvider
+
 	// EventEndpoint enables webhook event delivery. The HTTP emitter it
 	// creates is wrapped in an AsyncEventEmitter so delivery never blocks
 	// the request hot path (bounded queue, drop-with-counter on overflow —

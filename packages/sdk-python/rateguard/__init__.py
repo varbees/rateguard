@@ -32,11 +32,16 @@ from .core.event_emitter import AsyncEventEmitter, ConsoleEventEmitter, HTTPEven
 from .core.genai import (
     GenAICall,
     GenAISpan,
+    ModelPrice,
+    PricingProvider,
+    StaticPricing,
     classify_error_type,
     estimate_cost,
+    estimate_cost_with,
     genai_span_attributes,
     genai_span_end_attributes,
     genai_span_name,
+    normalize_model_id,
     priced_models,
     start_genai_call,
 )
@@ -193,6 +198,11 @@ __all__ = [
     "TokenUsage",
     # GenAI observability
     "GenAICall",
+    "ModelPrice",
+    "PricingProvider",
+    "StaticPricing",
+    "estimate_cost_with",
+    "normalize_model_id",
     "GenAISpan",
     "classify_error_type",
     "estimate_cost",

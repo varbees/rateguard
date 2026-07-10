@@ -32,6 +32,7 @@ type SDK struct {
 	extract  TokenUsageExtractor
 	waiter   BudgetWaiter
 	otel     *observability
+	pricing  PricingProvider
 	emitter  EventEmitter
 	// asyncEmitter is set only when the SDK created the async wrapper
 	// itself (EventEndpoint config) — Shutdown drains it.
@@ -139,6 +140,7 @@ func New(cfg Config) *SDK {
 		extract:      extractor,
 		waiter:       waiter,
 		otel:         otel,
+		pricing:      cfg.PricingProvider,
 		emitter:      emitter,
 		asyncEmitter: asyncEmitter,
 		clock:        clock,

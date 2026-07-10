@@ -56,11 +56,86 @@ const MODEL_PRICING_2026: Record<string, { prompt: number; completion: number }>
   'deepseek-r1':         { prompt: 0.00055, completion: 0.00219 },
 };
 
-/** Estimate USD cost for an LLM call based on 2026 market rates. */
+/** USD cost per 1,000 tokens for one model, prompt (input) and completion (output). */
+export interface ModelPrice {
+  promptUSDPer1K: number;
+  completionUSDPer1K: number;
+}
+
+/**
+ * Resolves a per-1K-token price for a model. Return undefined to fall through
+ * to the built-in starter table (then to zero — costs are never fabricated).
+ * Same optional-interface pattern as Embedder/EventEmitter: bring your own, or
+ * use StaticPricing. Costs are observability estimates only; they never drive
+ * enforcement (the token budget is token-count based).
+ */
+export interface PricingProvider {
+  priceFor(model: string): ModelPrice | undefined;
+}
+
+/**
+ * A PricingProvider backed by a caller-owned map — the answer to "the model I
+ * use isn't in your table." Register base names; a dated snapshot the provider
+ * reports back ("gpt-4o-2024-08-06") resolves via normalization.
+ */
+export class StaticPricing implements PricingProvider {
+  constructor(private readonly prices: Record<string, ModelPrice>) {}
+  priceFor(model: string): ModelPrice | undefined {
+    return this.prices[model] ?? this.prices[normalizeModelId(model)];
+  }
+}
+
+// Trailing date/preview noise a provider appends to a base model ID. A bare
+// "-N" (a minor version like "claude-sonnet-4-5") is intentionally NOT stripped.
+const ISO_DATE = /-\d{4}-\d{2}-\d{2}$/; // OpenAI: -2024-08-06
+const COMPACT_DATE = /-\d{8}$/; // Anthropic: -20250929
+const MONTH_YEAR = /-\d{2}-\d{4}$/; // Gemini: -09-2025
+
+/**
+ * Lower-cases a model name and strips trailing date/preview suffixes so a
+ * provider-reported snapshot ID matches a base pricing key. Conservative: it
+ * removes only recognizable date shapes and -preview/-latest/-exp aliases,
+ * never meaningful words (mini, nano, lite, pro) or minor-version digits.
+ */
+export function normalizeModelId(model: string): string {
+  let m = model.trim().toLowerCase();
+  for (;;) {
+    const orig = m;
+    m = m.replace(ISO_DATE, '').replace(COMPACT_DATE, '').replace(MONTH_YEAR, '');
+    for (const suffix of ['-preview', '-latest', '-exp']) {
+      if (m.endsWith(suffix)) m = m.slice(0, -suffix.length);
+    }
+    if (m === orig) return m;
+  }
+}
+
+function builtinPriceFor(model: string): ModelPrice | undefined {
+  const p = MODEL_PRICING_2026[model] ?? MODEL_PRICING_2026[normalizeModelId(model)];
+  return p ? { promptUSDPer1K: p.prompt, completionUSDPer1K: p.completion } : undefined;
+}
+
+/**
+ * Price a call: caller's PricingProvider first, then the built-in starter
+ * table (normalized), then zero. Never fabricates a cost.
+ */
+export function estimateCostWith(
+  pricing: PricingProvider | undefined,
+  model: string,
+  promptTokens: number,
+  completionTokens: number,
+): number {
+  const price = pricing?.priceFor(model) ?? builtinPriceFor(model);
+  if (!price) return 0;
+  return (promptTokens / 1000) * price.promptUSDPer1K + (completionTokens / 1000) * price.completionUSDPer1K;
+}
+
+/**
+ * Estimate USD cost from the built-in starter table (model-ID normalized, so
+ * a dated snapshot matches its base entry). Unknown models return zero. For
+ * custom/not-yet-tabled models, supply a PricingProvider (see StaticPricing).
+ */
 export function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
-  const pricing = MODEL_PRICING_2026[model];
-  if (!pricing) return 0; // unknown model — don't fabricate costs
-  return (promptTokens / 1000) * pricing.prompt + (completionTokens / 1000) * pricing.completion;
+  return estimateCostWith(undefined, model, promptTokens, completionTokens);
 }
 
 /** Return all priced model names. */

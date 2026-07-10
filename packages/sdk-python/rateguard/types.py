@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable, Literal, Mapping, Protoco
 
 if TYPE_CHECKING:
     from .core.adaptive import AdaptiveOptions
+    from .core.genai import PricingProvider
     from .core.guardrails import GuardrailChain
     from .core.redis_limiter import AsyncRedisLimiterClient, RedisLimiterClient
 
@@ -108,6 +109,11 @@ class RateGuardOptions:
     # injection, length). Mirrors Go's cfg.Guardrails — None (default)
     # disables the check entirely.
     guardrails: "GuardrailChain | None" = None
+    # Supplies USD-per-1K-token prices for cost estimates, checked before the
+    # built-in starter table. Bring your own, or use StaticPricing for a map of
+    # custom/fine-tuned/not-yet-tabled models. Mirrors Go's cfg.PricingProvider.
+    # Cost is an observability estimate only — it never drives enforcement.
+    pricing_provider: "PricingProvider | None" = None
     # Enables agent loop detection for requests carrying an
     # X-Sequence-Depth header. Mirrors Go's cfg.LoopDetection. Opt-in.
     loop_detection: bool = False
@@ -163,6 +169,7 @@ class ResolvedRateGuardOptions:
     event_endpoint: str | None
     event_queue_size: int | None
     guardrails: "GuardrailChain | None"
+    pricing_provider: "PricingProvider | None"
     loop_detection: bool
     estimated_tokens_per_request: int
     adaptive_rate_limit: bool

@@ -111,12 +111,59 @@ aclient = AsyncOpenAI(http_client=rg.wrap_httpx_async_client())  # async
         window rolls. See <Link href="/docs/token-budgets">Token budgets</Link>.
       </P>
 
+      <DocH2 id="pricing">Pricing your own models</DocH2>
+      <P>
+        RateGuard ships a small starter table of common models for the OTel{" "}
+        <code>gen_ai.usage.cost_usd</code> estimate. It deliberately does <em>not</em> bundle
+        hundreds of models or fetch a pricing file at startup — that would trade the zero-network,
+        zero-dependency posture for a maintenance treadmill and a supply-chain surface. Instead you
+        own the lever: supply a <code>PricingProvider</code> and price exactly what you are billed.
+      </P>
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `rg := rateguard.New(rateguard.Config{
+    PricingProvider: rateguard.StaticPricing{
+        "my-finetune":  {PromptUSDPer1K: 0.001, CompletionUSDPer1K: 0.002},
+        "gpt-4o":       {PromptUSDPer1K: 0.0025, CompletionUSDPer1K: 0.010}, // override
+    },
+})`,
+          },
+          {
+            label: "Node.js",
+            code: `const rg = new RateGuard({
+  pricingProvider: new StaticPricing({
+    'my-finetune': { promptUSDPer1K: 0.001, completionUSDPer1K: 0.002 },
+    'gpt-4o':      { promptUSDPer1K: 0.0025, completionUSDPer1K: 0.010 },
+  }),
+});`,
+          },
+          {
+            label: "Python",
+            code: `rg = RateGuard(pricing_provider=StaticPricing({
+    "my-finetune": ModelPrice(0.001, 0.002),
+    "gpt-4o":      ModelPrice(0.0025, 0.010),  # override
+}))`,
+          },
+        ]}
+      />
+      <Callout kind="tip" title="Dated snapshots resolve automatically">
+        Lookups are model-ID normalized, so the dated ID a provider actually reports back —{" "}
+        <code>gpt-4o-2024-08-06</code>, <code>claude-sonnet-4-5-20250929</code>,{" "}
+        <code>gemini-2.5-flash-09-2025</code> — resolves to the base entry you registered. Register
+        base names. A minor-version segment like <code>claude-sonnet-4-5</code> is never stripped.
+        The order is: your provider → the built-in table → <code>$0</code> (costs are never
+        fabricated, and cost is an estimate only — it never drives enforcement).
+      </Callout>
+
       <DocH2 id="observability">What you get for free</DocH2>
       <P>
         Per-provider circuit breakers (an OpenAI outage doesn&apos;t trip DeepSeek),{" "}
         <Link href="/docs/provider-fallback">fallback chains</Link> across OpenAI-compatible
         providers, Prometheus counters for calls / fallbacks / tokens, and OTel{" "}
-        <code>gen_ai.*</code> spans with automatic cost estimation across 14 priced models — see{" "}
+        <code>gen_ai.*</code> spans with automatic cost estimation — a starter set of common models
+        out of the box, extended by your own <code>PricingProvider</code> — see{" "}
         <Link href="/docs/observability">Observability</Link>.
       </P>
       <DocsPager slug="outbound" />

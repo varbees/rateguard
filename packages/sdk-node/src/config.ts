@@ -257,6 +257,7 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
     eventQueueSize: options.eventQueueSize && options.eventQueueSize > 0 ? options.eventQueueSize : undefined,
     clock,
     guardrails: options.guardrails,
+    pricingProvider: options.pricingProvider,
     loopDetection: options.loopDetection ?? false,
     estimatedTokensPerRequest:
       typeof options.estimatedTokensPerRequest === 'number' && options.estimatedTokensPerRequest > 0

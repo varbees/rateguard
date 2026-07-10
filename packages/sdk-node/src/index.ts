@@ -116,7 +116,7 @@ export class RateGuard {
    * Mirrors Go's SDK.StartGenAICall.
    */
   startGenAICall(call: Partial<GenAICall> = {}, observer?: GenAIObserver): GenAISpan {
-    return openGenAISpan(this.runtime.config.clock, call, observer);
+    return openGenAISpan(this.runtime.config.clock, call, observer, this.runtime.config.pricingProvider);
   }
 
   /**

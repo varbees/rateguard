@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .core.admin import AdminApp
     from .core.genai import GenAICall, GenAISpan
     from .core.guardrail_log import GuardrailLog
+    from .core.genai import PricingProvider
     from .core.guardrails import GuardrailChain
     from .core.mcp import LoopDetector, MCPTool, MCPToolResult
     from .core.token_budget import TokenBudgetManager
@@ -94,6 +95,7 @@ class RateGuard:
         event_queue_size: int | None = None,
         clock: Clock | None = None,
         guardrails: "GuardrailChain | None" = None,
+        pricing_provider: "PricingProvider | None" = None,
         loop_detection: bool = False,
         estimated_tokens_per_request: int = 0,
         adaptive_rate_limit: bool = False,
@@ -121,6 +123,7 @@ class RateGuard:
             event_endpoint=event_endpoint,
             event_queue_size=event_queue_size,
             guardrails=guardrails,
+            pricing_provider=pricing_provider,
             loop_detection=loop_detection,
             estimated_tokens_per_request=estimated_tokens_per_request,
             adaptive_rate_limit=adaptive_rate_limit,

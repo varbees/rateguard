@@ -324,6 +324,7 @@ type GenAISpan struct {
 	span       trace.Span
 	call       GenAICall
 	clock      Clock
+	pricing    PricingProvider
 	start      time.Time
 	firstChunk time.Time
 	chunks     int64
@@ -336,7 +337,7 @@ type GenAISpan struct {
 //	resp, err := client.Chat(ctx, req)
 //	gspan.End(rateguard.GenAICall{PromptTokens: usage.Input, CompletionTokens: usage.Output, TotalTokens: usage.Total}, err)
 func (s *SDK) StartGenAICall(ctx context.Context, call GenAICall) (context.Context, *GenAISpan) {
-	gspan := &GenAISpan{call: call, clock: s.clock}
+	gspan := &GenAISpan{call: call, clock: s.clock, pricing: s.pricing}
 	if gspan.clock == nil {
 		gspan.clock = systemClock{}
 	}
@@ -394,7 +395,7 @@ func (g *GenAISpan) End(final GenAICall, err error) {
 		call.EstimatedCostUSD = final.EstimatedCostUSD
 	}
 	if call.EstimatedCostUSD == 0 {
-		call.EstimatedCostUSD = EstimateCost(call.Model, call.PromptTokens, call.CompletionTokens)
+		call.EstimatedCostUSD = estimateCostWith(g.pricing, call.Model, call.PromptTokens, call.CompletionTokens)
 	}
 	if final.ResponseID != "" {
 		call.ResponseID = final.ResponseID
@@ -452,14 +453,11 @@ var modelPricing2026 = map[string]modelPricing{
 	"deepseek-r1":   {PromptUSD: 0.00055, CompletionUSD: 0.00219},
 }
 
-// EstimateCost calculates approximate USD cost for an LLM call.
+// EstimateCost calculates approximate USD cost for an LLM call from the
+// built-in starter table. Model IDs are normalized, so a provider-reported
+// dated snapshot ("gpt-4o-2024-08-06") matches its base entry. Unknown models
+// return zero — costs are never fabricated. For custom, fine-tuned, or
+// not-yet-tabled models, supply Config.PricingProvider (see StaticPricing).
 func EstimateCost(model string, promptTokens, completionTokens int64) float64 {
-	pricing, ok := modelPricing2026[model]
-	if !ok {
-		// Unknown model — return zero (don't fabricate costs)
-		return 0
-	}
-	promptCost := float64(promptTokens) / 1000 * pricing.PromptUSD
-	completionCost := float64(completionTokens) / 1000 * pricing.CompletionUSD
-	return promptCost + completionCost
+	return estimateCostWith(nil, model, promptTokens, completionTokens)
 }

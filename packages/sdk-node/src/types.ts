@@ -1,4 +1,5 @@
 import type { Guardrail } from './core/guardrails.js';
+import type { PricingProvider } from './core/genai.js';
 import type { RedisLimiterClient } from './core/redis-limiter.js';
 
 /**
@@ -152,6 +153,13 @@ export interface RateGuardOptions {
    */
   guardrails?: Guardrail;
   /**
+   * Supplies USD-per-1K-token prices for cost estimates, checked before the
+   * built-in starter table. Bring your own, or use StaticPricing for a map of
+   * custom/fine-tuned/not-yet-tabled models. Mirrors Go's cfg.PricingProvider.
+   * Cost is an observability estimate only — it never drives enforcement.
+   */
+  pricingProvider?: PricingProvider;
+  /**
    * Enables agent loop detection for requests carrying an X-Sequence-Depth
    * header. Mirrors Go's cfg.LoopDetection. Opt-in, defaults to false.
    */
@@ -207,6 +215,7 @@ export interface ResolvedRateGuardOptions {
   eventQueueSize: number | undefined;
   clock: Clock;
   guardrails: Guardrail | undefined;
+  pricingProvider: PricingProvider | undefined;
   loopDetection: boolean;
   estimatedTokensPerRequest: number;
   adaptiveRateLimit: boolean;

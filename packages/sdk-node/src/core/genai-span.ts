@@ -13,7 +13,7 @@
  */
 
 import type { Clock } from '../types.js';
-import { estimateCost, genaiSpanAttributes, genaiSpanEndAttributes, type GenAICall } from './genai.js';
+import { estimateCostWith, genaiSpanAttributes, genaiSpanEndAttributes, type GenAICall, type PricingProvider } from './genai.js';
 
 /** Observes GenAI span lifecycle events — bring your own exporter. */
 export interface GenAIObserver {
@@ -48,10 +48,12 @@ export class GenAISpan {
   private firstChunkAt: number | undefined;
   private chunks = 0;
   private finalCall: GenAICall | undefined;
+  private readonly pricing: PricingProvider | undefined;
 
-  constructor(call: Partial<GenAICall>, clock: Clock, observer?: GenAIObserver) {
+  constructor(call: Partial<GenAICall>, clock: Clock, observer?: GenAIObserver, pricing?: PricingProvider) {
     this.clock = clock;
     this.observer = observer;
+    this.pricing = pricing;
     this.call = { ...ZERO_CALL, ...call };
     this.startedAt = clock.now();
     this.observer?.onSpanStart?.(genaiSpanAttributes(this.call), this.call);
@@ -91,7 +93,7 @@ export class GenAISpan {
     }
     if (typeof final.estimatedCostUSD === 'number' && final.estimatedCostUSD > 0) call.estimatedCostUSD = final.estimatedCostUSD;
     if (call.estimatedCostUSD === 0) {
-      call.estimatedCostUSD = estimateCost(call.model, call.promptTokens, call.completionTokens);
+      call.estimatedCostUSD = estimateCostWith(this.pricing, call.model, call.promptTokens, call.completionTokens);
     }
     if (final.responseId) call.responseId = final.responseId;
     if (final.conversationId) call.conversationId = final.conversationId;
@@ -125,6 +127,11 @@ export class GenAISpan {
  *   const resp = await client.chat(req);
  *   span.end({ promptTokens: usage.input, completionTokens: usage.output });
  */
-export function startGenAICall(clock: Clock, call: Partial<GenAICall> = {}, observer?: GenAIObserver): GenAISpan {
-  return new GenAISpan(call, clock, observer);
+export function startGenAICall(
+  clock: Clock,
+  call: Partial<GenAICall> = {},
+  observer?: GenAIObserver,
+  pricing?: PricingProvider,
+): GenAISpan {
+  return new GenAISpan(call, clock, observer, pricing);
 }
