@@ -1,6 +1,6 @@
 // Minimal line-art marks for the tools RateGuard plugs into — drawn in the
 // site's own geometric style rather than reproducing each project's official
-// logo, so the strip stays visually consistent with FeatureMicros/ChaosField
+// logo, so the strip stays visually consistent with the FeatureMicros icons
 // instead of becoming a clashing grid of foreign brand colors.
 const ITEMS: { label: string; icon: React.ReactNode }[] = [
   {

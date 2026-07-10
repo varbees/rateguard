@@ -3,8 +3,6 @@ import Link from "next/link";
 import { CodeTabs } from "@/components/docs/CodeTabs";
 import Reveal from "@/components/landing/Reveal";
 import LogoStrip from "@/components/landing/LogoStrip";
-import ChaosField from "@/components/landing/ChaosField";
-import ShieldReveal from "@/components/landing/ShieldReveal";
 import TokenBucket from "@/components/landing/TokenBucket";
 import StatCounter from "@/components/landing/StatCounter";
 import FeatureCard from "@/components/landing/FeatureCard";
@@ -72,7 +70,7 @@ const features = [
   },
   {
     title: "One algorithm, three runtimes",
-    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 540 tests — including shared conformance suites that replay identical admission sequences across all three — hold them to real behavioral parity, not just similar APIs.",
+    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 651 tests — including shared conformance suites that replay identical admission sequences across all three — hold them to real behavioral parity, not just similar APIs.",
     micro: <MicroParity />,
   },
   {
@@ -116,8 +114,7 @@ export default function Page() {
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden px-6 pt-28 pb-24">
-        <ChaosField count={20} />
+      <section className="relative px-6 pt-28 pb-24">
         <div className="relative mx-auto max-w-3xl text-center">
           <p className="mb-5 text-sm uppercase tracking-[0.2em] text-[var(--muted)]">
             Antharmaya Labs · Open Source · MIT
@@ -170,10 +167,7 @@ export default function Page() {
         </Reveal>
       </section>
 
-      {/* The mechanism — 3D scroll reveal */}
-      <ShieldReveal />
-
-      <section className="px-6 pb-32">
+      <section className="px-6 pt-8 pb-32">
         <Reveal className="mx-auto max-w-2xl text-center mb-14">
           <h2 className="font-display text-3xl sm:text-4xl font-bold mb-5">
             One bucket. Real math. No black box.
@@ -232,7 +226,7 @@ export default function Page() {
       {/* Stats */}
       <section className="mx-auto max-w-3xl px-6 pb-32">
         <Reveal className="grid grid-cols-2 sm:grid-cols-4 gap-8 rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
-          <StatCounter value={540} label="Tests" />
+          <StatCounter value={651} label="Tests" />
           <StatCounter value={28} label="Providers" />
           <StatCounter value={3} label="Languages" />
           <div className="text-center">

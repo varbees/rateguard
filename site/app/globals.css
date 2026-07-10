@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  /* Named palette — pulled from the shield artwork: chaos in, structure, order out */
+  /* Named palette: a restrained dark developer surface — amber as the single accent */
   --void: #050507;
   --bone: #f5f5f5;
   --amber: #f59e0b;
