@@ -24,7 +24,7 @@ from rateguard.core.budget_attestation import private_key_from_raw
 VECTORS = Path(__file__).resolve().parents[3] / "conformance" / "spend_receipt_vectors.json"
 
 
-def test_key():
+def signing_key():
     return private_key_from_raw(bytes(range(32)))
 
 
@@ -45,7 +45,7 @@ def sample_claims() -> SpendReceiptClaims:
 
 
 def test_issue_verify_roundtrip_including_dict_transport() -> None:
-    priv = test_key()
+    priv = signing_key()
     r = issue_spend_receipt(priv, sample_claims())
     pub = priv.public_key().public_bytes_raw()
     verify_spend_receipt(pub, r)
@@ -55,7 +55,7 @@ def test_issue_verify_roundtrip_including_dict_transport() -> None:
 
 
 def test_tamper_detection() -> None:
-    priv = test_key()
+    priv = signing_key()
     r = issue_spend_receipt(priv, sample_claims())
     pub = priv.public_key().public_bytes_raw()
 
@@ -93,7 +93,7 @@ def test_tamper_detection() -> None:
 
 
 def test_claim_validation() -> None:
-    priv = test_key()
+    priv = signing_key()
     with pytest.raises(ValueError):
         issue_spend_receipt(priv, SpendReceiptClaims(key="", window_start_unix=0, window_end_unix=1))
     with pytest.raises(ValueError):
@@ -133,7 +133,7 @@ def test_conformance_vectors_byte_exact_with_go_reference() -> None:
 
 
 def test_focus_export() -> None:
-    priv = test_key()
+    priv = signing_key()
     r = issue_spend_receipt(priv, sample_claims(), issued_at_unix=1_780_003_700)
 
     out = io.StringIO()
