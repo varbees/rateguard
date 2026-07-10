@@ -233,9 +233,22 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     return breaker;
   };
 
-  const finish = (budgetKey: string, reservationId: string | undefined, usage: TokenUsage | undefined): void => {
+  // reservedEstimate is committed when real usage can't be measured (a stream
+  // without include_usage, an over-cap body, an unrecognized provider schema).
+  // Recording zero would let a runaway agent spend without ever touching its
+  // budget — the exact denial-of-wallet this guards against. Set the provider's
+  // usage emission (e.g. stream_options.include_usage) for exact accounting;
+  // the estimate is the floor that keeps enforcement from going blind.
+  const finish = (
+    budgetKey: string,
+    reservationId: string | undefined,
+    usage: TokenUsage | undefined,
+    reservedEstimate = 0,
+  ): void => {
     if (usage && usage.totalTokens > 0) {
       runtime.tokenBudget.commitReservation(budgetKey, reservationId, usage.totalTokens);
+    } else if (reservedEstimate > 0) {
+      runtime.tokenBudget.commitReservation(budgetKey, reservationId, reservedEstimate);
     } else {
       runtime.tokenBudget.releaseReservation(budgetKey, reservationId);
     }
@@ -356,23 +369,23 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     if (contentType.startsWith('text/event-stream') && response.body) {
       const [forCaller, forScan] = response.body.tee();
       void scanSSEStream(forScan)
-        .then((usage) => finish(budgetKey, reservation.reservationId, usage))
-        .catch(() => finish(budgetKey, reservation.reservationId, undefined));
+        .then((usage) => finish(budgetKey, reservation.reservationId, usage, reservation.reserved))
+        .catch(() => finish(budgetKey, reservation.reservationId, undefined, reservation.reserved));
       return new Response(forCaller, response);
     }
 
     const declaredLength = Number(response.headers.get('content-length') ?? '0');
     if (declaredLength > MAX_EXTRACT_BYTES) {
-      finish(budgetKey, reservation.reservationId, undefined);
+      finish(budgetKey, reservation.reservationId, undefined, reservation.reserved);
       return response;
     }
 
     try {
       const text = await response.clone().text();
       const usage = text.length <= MAX_EXTRACT_BYTES ? extractTokenUsageFromText(text) : undefined;
-      finish(budgetKey, reservation.reservationId, usage);
+      finish(budgetKey, reservation.reservationId, usage, reservation.reserved);
     } catch {
-      finish(budgetKey, reservation.reservationId, undefined);
+      finish(budgetKey, reservation.reservationId, undefined, reservation.reserved);
     }
     return response;
   };

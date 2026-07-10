@@ -252,10 +252,25 @@ class _OutboundCore:
             self.budget_key(call), self.runtime.config.token_budget, self.estimated_tokens
         )
 
-    def finish(self, call: OutboundCall, reservation_id: str | None, usage: "TokenUsage | None") -> None:
+    def finish(
+        self,
+        call: OutboundCall,
+        reservation_id: str | None,
+        usage: "TokenUsage | None",
+        reserved_estimate: int = 0,
+    ) -> None:
+        # reserved_estimate is committed when real usage can't be measured (a
+        # stream without include_usage, an over-cap body, an unrecognized
+        # provider schema). Recording zero would let a runaway agent spend
+        # without ever touching its budget — the exact denial-of-wallet this
+        # guards against. Set the provider's usage emission (e.g.
+        # stream_options.include_usage) for exact accounting; the estimate is
+        # the floor that keeps enforcement from going blind.
         key = self.budget_key(call)
         if usage is not None and usage.total_tokens > 0:
             self.runtime.token_budget.commit_reservation(key, reservation_id, usage.total_tokens)
+        elif reserved_estimate > 0:
+            self.runtime.token_budget.commit_reservation(key, reservation_id, reserved_estimate)
         else:
             self.runtime.token_budget.release_reservation(key, reservation_id)
 
@@ -511,7 +526,7 @@ def create_httpx_transport(
                 # bytes with no buffering delay; usage is merged at EOF.
                 scanning = _ScanningByteStream(
                     response.stream,
-                    lambda usage: core.finish(call, reservation.reservation_id, usage),
+                    lambda usage: core.finish(call, reservation.reservation_id, usage, reservation.reserved),
                 )
                 return httpx.Response(
                     response.status_code,
@@ -525,7 +540,7 @@ def create_httpx_transport(
             usage: "TokenUsage | None" = None
             if len(content) <= _MAX_EXTRACT_BYTES:
                 usage = extract_token_usage_from_text(content.decode("utf-8", errors="replace"))
-            core.finish(call, reservation.reservation_id, usage)
+            core.finish(call, reservation.reservation_id, usage, reservation.reserved)
             return response
 
         def _retarget(self, request: Any, body: bytes, call: OutboundCall, target: FallbackProvider, depth: int) -> Any:
@@ -761,7 +776,7 @@ def create_httpx_async_transport(
             if content_type.startswith("text/event-stream"):
                 scanning = _AsyncScanningByteStream(
                     response.stream,
-                    lambda usage: core.finish(call, reservation.reservation_id, usage),
+                    lambda usage: core.finish(call, reservation.reservation_id, usage, reservation.reserved),
                 )
                 return httpx.Response(
                     response.status_code,
@@ -775,7 +790,7 @@ def create_httpx_async_transport(
             usage: "TokenUsage | None" = None
             if len(content) <= _MAX_EXTRACT_BYTES:
                 usage = extract_token_usage_from_text(content.decode("utf-8", errors="replace"))
-            core.finish(call, reservation.reservation_id, usage)
+            core.finish(call, reservation.reservation_id, usage, reservation.reserved)
             return response
 
         async def _retarget(self, request: Any, body: bytes, call: OutboundCall, target: FallbackProvider, depth: int) -> Any:

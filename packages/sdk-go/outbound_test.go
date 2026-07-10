@@ -170,6 +170,54 @@ func TestOutboundAnthropicStreamingUsage(t *testing.T) {
 	}
 }
 
+func TestOutboundStreamingWithoutUsageChargesEstimate(t *testing.T) {
+	// OpenAI-compatible streaming WITHOUT stream_options.include_usage: the
+	// provider emits content deltas and [DONE] but NO usage anywhere. Real
+	// tokens were spent upstream; recording zero would let a runaway agent
+	// stream forever without ever touching its budget. The reserved estimate
+	// must be committed instead — conservative enforcement, not blindness —
+	// and counted as estimated, never as measured usage.
+	sse := strings.Join([]string{
+		`data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{"content":"He"}}]}`,
+		``,
+		`data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{"content":"llo"}}]}`,
+		``,
+		`data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{}}]}`,
+		``,
+		`data: [DONE]`,
+		``,
+	}, "\n")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(sse))
+	}))
+	defer server.Close()
+
+	sdk := New(Config{Preset: "dev", TokenBudgetPerHour: 10000, EstimatedTokensPerRequest: 500})
+	client := wrapForHost(t, sdk, server)
+
+	req, _ := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4o","stream":true}`))
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("outbound streaming call failed: %v", err)
+	}
+	received, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if string(received) != sse {
+		t.Fatalf("SSE bytes altered in transit")
+	}
+
+	if consumed := sdk.metrics.tokensConsumed.Load(); consumed != 0 {
+		t.Errorf("no real usage present: tokensConsumed = %d, want 0", consumed)
+	}
+	if est := sdk.metrics.tokensEstimated.Load(); est != 500 {
+		t.Errorf("estimate not charged on missing usage: tokensEstimated = %d, want 500 "+
+			"(a streaming call with no usage must charge the budget, not record zero)", est)
+	}
+}
+
 func TestOutboundBudgetEnforcement(t *testing.T) {
 	server := httptest.NewServer(openAIJSONHandler("gpt-4o", 400, 100))
 	defer server.Close()

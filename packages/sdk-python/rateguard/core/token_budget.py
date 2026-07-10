@@ -51,6 +51,10 @@ class _TokenBudgetState:
 class _TokenBudgetReservationResult:
     decision: TokenBudgetDecision
     reservation_id: str | None = None
+    # Tokens reserved up front. Committed instead of recording zero when real
+    # usage can't be measured (a stream without include_usage, an over-cap
+    # body, an unrecognized schema) so enforcement stays conservative.
+    reserved: int = 0
 
 
 class TokenBudgetManager:
@@ -210,6 +214,7 @@ class TokenBudgetManager:
                 decision.warning,
             ),
             reservation_id,
+            reserved,
         )
 
     def _usage_locked(self, key: str, options: TokenBudgetOptions) -> _UsageSnapshot:

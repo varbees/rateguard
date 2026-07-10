@@ -76,6 +76,17 @@ aclient = AsyncOpenAI(http_client=rg.wrap_httpx_async_client())  # async
         <code>message_start</code>/<code>message_delta</code> shapes are both handled — the two
         places naive implementations break.
       </Callout>
+      <Callout kind="warn" title="Streaming needs usage turned on — or the budget can't see it">
+        OpenAI-compatible providers emit <strong>no usage at all</strong> in a stream unless you
+        ask for it: set <code>stream_options: {"{"} include_usage: true {"}"}</code> on the request
+        (Anthropic emits split usage automatically; Gemini emits <code>usageMetadata</code>). Without
+        an emitted usage record — or for a response larger than{" "}
+        <code>MaxBufferedResponseBytes</code> — the exact token count is unknowable at the wire, so
+        set <code>EstimatedTokens</code> (or <code>Config.EstimatedTokensPerRequest</code>) to a
+        conservative per-call estimate so the budget still accounts for the call. Exact accounting
+        needs the provider&apos;s emitted usage; the estimate is the floor that keeps enforcement
+        from going blind.
+      </Callout>
 
       <DocH2 id="modes">enforce vs observe</DocH2>
       <Table

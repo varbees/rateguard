@@ -100,6 +100,37 @@ def test_outbound_sse_streaming_usage_preserves_bytes():
     assert usage["hour"] == 35
 
 
+def test_outbound_streaming_without_usage_charges_estimate():
+    # OpenAI-compatible streaming WITHOUT stream_options.include_usage: content
+    # deltas and [DONE], no usage anywhere. Recording zero would let a runaway
+    # agent stream forever without touching its budget — the reserved estimate
+    # (default 4096) must be committed instead: conservative, not blind.
+    sse = "\n".join([
+        'data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{"content":"He"}}]}',
+        "",
+        'data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{"content":"llo"}}]}',
+        "",
+        "data: [DONE]",
+        "",
+    ])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=sse.encode())
+
+    rg = RateGuard(preset="dev", token_budget=TokenBudgetOptions(hour_limit=10_000))
+    client = make_client(rg, handler)
+
+    received = b""
+    with client.stream("POST", "https://api.openai.com/v1/chat/completions", json={"model": "gpt-4o", "stream": True}) as resp:
+        for chunk in resp.iter_bytes():
+            received += chunk
+    assert received == sse.encode(), "SSE bytes must pass through unchanged"
+
+    key = f"{rg.runtime.config.tenant_id}:openai:gpt-4o:outbound"
+    usage = rg.runtime.token_budget.usage(key, rg.runtime.config.token_budget)
+    assert usage["hour"] == 4096, "missing usage must charge the reserved estimate, not zero"
+
+
 def test_outbound_anthropic_split_usage_merges_max():
     sse = "\n".join([
         "event: message_start",

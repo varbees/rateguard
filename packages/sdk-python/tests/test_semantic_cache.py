@@ -7,7 +7,7 @@ import json
 import httpx
 import pytest
 
-from rateguard import RateGuard, SemanticCacheOptions
+from rateguard import RateGuard, SemanticCacheOptions, TokenBudgetOptions
 from rateguard.core.outbound import create_httpx_async_transport, create_httpx_transport
 from rateguard.core.semantic_cache import (
     CachedResponse,
@@ -261,7 +261,10 @@ def test_outbound_semantic_cache_miss_on_dissimilar_prompt_still_calls_network()
         call_count += 1
         return httpx.Response(200, json={"id": "c1", "model": "gpt-4o", "choices": []})
 
-    rg = RateGuard(preset="dev")
+    # Generous budget so this cache test isn't confounded by budget: these
+    # no-usage responses now charge the reserved estimate (dev's 1k/hr budget
+    # would otherwise block the second call). Cache behavior is what's under test.
+    rg = RateGuard(preset="dev", token_budget=TokenBudgetOptions(hour_limit=1_000_000))
     client = make_client(rg, handler, semantic_cache=SemanticCacheOptions(embedder=_FakeEmbedder(), similarity_threshold=0.9))
 
     client.post("https://api.openai.com/v1/chat/completions", json={"model": "gpt-4o", "messages": [{"role": "user", "content": "What is the capital of France?"}]})
@@ -278,7 +281,10 @@ def test_outbound_semantic_cache_never_caches_or_serves_streaming_requests():
         call_count += 1
         return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=b"data: [DONE]\n\n")
 
-    rg = RateGuard(preset="dev")
+    # Generous budget so a streaming call with no usage (which now charges the
+    # reserved estimate) doesn't exhaust dev's 1k/hr budget and block the second
+    # request — this test is about cache bypass for streaming, not budget.
+    rg = RateGuard(preset="dev", token_budget=TokenBudgetOptions(hour_limit=1_000_000))
     embedder = _FakeEmbedder()
     client = make_client(rg, handler, semantic_cache=SemanticCacheOptions(embedder=embedder, similarity_threshold=0.5))
 

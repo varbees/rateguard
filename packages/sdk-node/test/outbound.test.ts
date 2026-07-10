@@ -105,6 +105,39 @@ describe('wrapFetch', () => {
     expect(usage.hour).toBe(35);
   });
 
+  it('charges the reserved estimate when a stream carries no usage', async () => {
+    // OpenAI-compatible streaming WITHOUT stream_options.include_usage: content
+    // deltas and [DONE], no usage anywhere. Recording zero would let a runaway
+    // agent stream forever without touching its budget — the reserved estimate
+    // must be committed instead (conservative enforcement, not blindness).
+    const sse = [
+      'data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{"content":"He"}}]}',
+      '',
+      'data: {"id":"c1","model":"gpt-4o","choices":[{"delta":{"content":"llo"}}]}',
+      '',
+      'data: [DONE]',
+      '',
+    ].join('\n');
+
+    const rg = new RateGuard({ preset: 'dev', tokenBudget: { hourLimit: 10_000, mode: 'hard-stop' } });
+    const wrapped = rg.wrapFetch({
+      estimatedTokens: 500,
+      fetch: (async () =>
+        new Response(sse, { status: 200, headers: { 'content-type': 'text/event-stream' } })) as typeof fetch,
+    });
+
+    const resp = await wrapped('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      body: JSON.stringify({ model: 'gpt-4o', stream: true }),
+    });
+    expect(await resp.text()).toBe(sse);
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const budgetKey = `${rg.runtime.config.tenantId}:openai:gpt-4o:outbound`;
+    const usage = rg.runtime.tokenBudget.usage(budgetKey, rg.runtime.config.tokenBudget);
+    expect(usage.hour).toBe(500);
+  });
+
   it('merges Anthropic split usage with max semantics', async () => {
     const sse = [
       'event: message_start',

@@ -357,7 +357,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 
 	if isSSEResponse(resp) {
 		resp.Body = newStreamUsageBody(resp.Body, func(usage TokenUsage, chunks int64, ok bool) {
-			t.finish(span, breaker, budgetKey, reservation.reservationID, usage, ok)
+			t.finish(span, breaker, budgetKey, reservation.reservationID, usage, ok, reservation.reserved)
 		}, span)
 		return resp, nil
 	}
@@ -366,19 +366,34 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 	// hand the caller an identical replacement body.
 	usage, restored := t.extractJSONUsage(resp)
 	resp.Body = restored
-	t.finish(span, breaker, budgetKey, reservation.reservationID, usage, usage.TotalTokens > 0)
+	t.finish(span, breaker, budgetKey, reservation.reservationID, usage, usage.TotalTokens > 0, reservation.reserved)
 	return resp, nil
 }
 
 // finish commits usage, records the breaker outcome, ends the span, and
 // bumps metrics. Shared by the JSON and SSE paths.
-func (t *genaiTransport) finish(span *GenAISpan, breaker *circuitBreaker, budgetKey, reservationID string, usage TokenUsage, ok bool) {
+//
+// reservedEstimate is the amount this call reserved up front. When the real
+// token usage cannot be determined (a stream without include_usage, a body
+// over the buffer cap, or an unrecognized provider schema), committing zero
+// would let a runaway agent spend without ever touching its budget — the
+// exact denial-of-wallet this exists to stop. In that case the reserved
+// estimate is committed instead: enforcement stays conservative rather than
+// silently going blind. The estimate is counted separately (tokensEstimated,
+// not tokensConsumed) so it never masquerades as measured truth — set the
+// provider's usage emission (e.g. stream_options.include_usage) for exact
+// accounting.
+func (t *genaiTransport) finish(span *GenAISpan, breaker *circuitBreaker, budgetKey, reservationID string, usage TokenUsage, ok bool, reservedEstimate int64) {
 	s := t.sdk
 	breaker.RecordOutcome(true)
-	if ok && usage.TotalTokens > 0 {
+	switch {
+	case ok && usage.TotalTokens > 0:
 		s.tokens.commitReservation(budgetKey, reservationID, usage.TotalTokens)
 		s.metrics.tokensConsumed.Add(usage.TotalTokens)
-	} else {
+	case reservedEstimate > 0:
+		s.tokens.commitReservation(budgetKey, reservationID, reservedEstimate)
+		s.metrics.tokensEstimated.Add(reservedEstimate)
+	default:
 		s.tokens.releaseReservation(budgetKey, reservationID)
 	}
 	span.End(GenAICall{

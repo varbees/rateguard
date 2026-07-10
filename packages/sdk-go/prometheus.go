@@ -118,6 +118,7 @@ type atomicMetrics struct {
 	tokenBudgetExhausted atomic.Int64
 	circuitBreakerTrips  atomic.Int64
 	tokensConsumed       atomic.Int64
+	tokensEstimated      atomic.Int64
 	outboundCalls        atomic.Int64
 	outboundFallbacks    atomic.Int64
 	semanticCacheHits    atomic.Int64
@@ -139,9 +140,12 @@ func (m *atomicMetrics) prometheusText() string {
 			"# HELP rateguard_circuit_breaker_trips_total Circuit breaker trip events\n"+
 			"# TYPE rateguard_circuit_breaker_trips_total counter\n"+
 			"rateguard_circuit_breaker_trips_total %d\n"+
-			"# HELP rateguard_tokens_consumed_total Total tokens consumed\n"+
+			"# HELP rateguard_tokens_consumed_total Total tokens consumed (measured from provider usage)\n"+
 			"# TYPE rateguard_tokens_consumed_total counter\n"+
 			"rateguard_tokens_consumed_total %d\n"+
+			"# HELP rateguard_tokens_estimated_total Tokens charged to budgets by estimate when provider usage was unavailable (enable stream include_usage for exact accounting)\n"+
+			"# TYPE rateguard_tokens_estimated_total counter\n"+
+			"rateguard_tokens_estimated_total %d\n"+
 			"# HELP rateguard_outbound_calls_total Total outbound LLM calls tracked\n"+
 			"# TYPE rateguard_outbound_calls_total counter\n"+
 			"rateguard_outbound_calls_total %d\n"+
@@ -162,6 +166,7 @@ func (m *atomicMetrics) prometheusText() string {
 		m.tokenBudgetExhausted.Load(),
 		m.circuitBreakerTrips.Load(),
 		m.tokensConsumed.Load(),
+		m.tokensEstimated.Load(),
 		m.outboundCalls.Load(),
 		m.outboundFallbacks.Load(),
 		m.semanticCacheHits.Load(),

@@ -24,6 +24,13 @@ interface TokenBudgetState {
 export interface TokenBudgetReservation {
   decision: TokenBudgetDecision;
   reservationId?: string;
+  /**
+   * Tokens reserved up front for this call. When real usage cannot be
+   * measured (a stream without include_usage, an over-cap body, an
+   * unrecognized schema), this is committed instead of recording zero, so
+   * enforcement stays conservative rather than going blind.
+   */
+  reserved?: number;
 }
 
 const reservationTtlMs = 15 * 60 * 1000;
@@ -77,6 +84,7 @@ export class TokenBudgetManager {
         remaining: decision.remaining - reserved,
       },
       reservationId,
+      reserved,
     };
   }
 
