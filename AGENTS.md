@@ -59,6 +59,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Loop detection (SHA-256, max-depth, LRU-bounded) | ✅ | ✅ | ✅ | `loop_detector.go` |
 | Loop detection wired into middleware (X-Sequence-Depth) | ✅ | ✅ | ✅ | `sdk.go` |
 | IETF RateLimit-* response headers | ✅ | ✅ | ✅ | `sdk.go` |
+| Realtime session enforcement (voice substrate: OpenAI Realtime + Gemini Live usage parsers — Gemini LIVE-verified 2026-07-10, per-turn semantics proven; per-session guard: total/audio tokens, turns, duration, caller-priced cost; terminal breach + once-only callback; transport-agnostic — integrator feeds frames; Pipecat/LiveKit adapters pending) | ✅ | ✅ | ✅ | `realtime_usage.go`, `realtime_session.go` |
 | Outbound GenAI transport (WrapClient/wrapFetch/httpx) | ✅ | ✅ | ✅ | `outbound.go` |
 | SSE streaming usage extraction (transparent tee) | ✅ | ✅ | ✅ | `sse_usage.go` |
 | Provider fallback (OpenAI-compatible, credential-isolated) | ✅ | ✅ | ✅ | `outbound.go` |
@@ -88,16 +89,16 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (181 test funcs, all with -race)
+# Go tests (188 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (214 passing)
+# Node tests (226 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (232 passing)
+# Python tests (238 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
-# Python strict typecheck (mypy --strict passes clean on all 43 source files)
+# Python strict typecheck (mypy --strict passes clean on all 44 source files)
 cd packages/sdk-python && RATEGUARD_STRICT_TYPES=1 python3 scripts/typecheck.py
 
 # Cross-language conformance (shared oracle, all 3 SDKs replay the same
