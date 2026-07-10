@@ -49,6 +49,4 @@ build/
 .cache/
 codex_resume.txt
 packages/connect/
-
-# Cloned competitor/research repos — never commit (1.7GB)
 /_external/
