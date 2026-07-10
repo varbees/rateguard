@@ -242,6 +242,35 @@ export default function Page() {
         </Reveal>
       </section>
 
+      {/* Enterprise — demand validation, not a built product */}
+      <section className="mx-auto max-w-3xl px-6 pb-32">
+        <Reveal className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
+          <p className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--amber)]">Enterprise</p>
+          <h2 className="font-display text-2xl font-bold mb-4">
+            Compliance evidence for the EU AI Act era
+          </h2>
+          <p className="text-[var(--muted)] leading-relaxed mb-4">
+            High-risk AI system obligations begin enforcement August 2, 2026. Article 12
+            requires tamper-evident record-keeping; Article 14 requires demonstrable human
+            oversight. RateGuard&apos;s Ed25519-signed spend receipts, budget delegation
+            chains, and FOCUS-aligned cost exports are technical evidence of exactly that —
+            who authorized an agent&apos;s budget, what it actually spent, and where the
+            hard limits were enforced.
+          </p>
+          <p className="text-[var(--muted)] leading-relaxed mb-6 text-sm">
+            We&apos;re assembling an auditor-ready Compliance Evidence Pack (export bundles
+            mapped to EU AI Act, NIST AI RMF, and ISO 42001 language) plus enterprise
+            support. Evidence, not certification — your compliance program stays yours.
+          </p>
+          <a
+            href="mailto:harshavar968@gmail.com?subject=RateGuard%20Enterprise%20%2F%20Compliance%20Evidence%20Pack"
+            className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--amber)] text-[var(--amber)] rounded-lg font-medium hover:bg-[var(--amber)] hover:text-black transition-colors"
+          >
+            Talk to us about early access
+          </a>
+        </Reveal>
+      </section>
+
       {/* CTA */}
       <section className="mx-auto max-w-2xl px-6 pb-32 text-center">
         <Reveal>
