@@ -80,8 +80,16 @@ from .core.redis_limiter import (
     build_redis_gcra_tier,
 )
 from .core.semantic_cache import CachedResponse, Embedder, SemanticCache, SemanticCacheOptions, is_streaming_request_body, prompt_text_from_request_body
+from .core.focus_export import FOCUS_HEADER, FOCUSRow, focus_row_from_receipt, write_focus_csv
 from .core.semantic_loop import SemanticLoopDecision, SemanticLoopDetector, SemanticLoopOptions
 from .core.sharded_limiter import ShardedLimiter
+from .core.spend_receipt import (
+    SpendReceipt,
+    SpendReceiptClaims,
+    issue_spend_receipt,
+    receipt_signing_payload,
+    verify_spend_receipt,
+)
 from .core.static_embedder import StaticEmbedder
 from .core.token_budget import TokenBudgetManager
 from .exceptions import BudgetExceeded, RateGuardException
@@ -221,6 +229,16 @@ __all__ = [
     "SemanticLoopDecision",
     "SemanticLoopDetector",
     "SemanticLoopOptions",
+    # Spend receipts + FOCUS export
+    "SpendReceipt",
+    "SpendReceiptClaims",
+    "issue_spend_receipt",
+    "receipt_signing_payload",
+    "verify_spend_receipt",
+    "FOCUS_HEADER",
+    "FOCUSRow",
+    "focus_row_from_receipt",
+    "write_focus_csv",
     # Prometheus
     "prometheus_text",
     # Provider chain
