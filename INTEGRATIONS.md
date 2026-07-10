@@ -84,6 +84,63 @@ it lands. Until then: CrewAI's LiteLLM fallback path can point `base_url` at
 infrastructure you control, but that is a proxy pattern — not what RateGuard
 recommends.
 
+### Pipecat (voice pipelines)
+
+Production voice terminates media inside the framework, so enforcement lives
+there too. `RateGuardBudgetProcessor` is a drop-in `FrameProcessor`: it watches
+the LLM usage metrics Pipecat itself emits, passes every frame through
+untouched, and on breach pushes Pipecat's own fatal-error stop (or calls your
+callback first — say goodbye politely, then stop). Requires `pipecat-ai`
+(verified against 1.5.0).
+
+```python
+from rateguard import RealtimeSessionGuard, RealtimeSessionGuardOptions, RealtimeSessionLimits
+from rateguard.integrations.pipecat_adapter import RateGuardBudgetProcessor
+
+guard = RealtimeSessionGuard("openai", RealtimeSessionGuardOptions(
+    limits=RealtimeSessionLimits(
+        max_total_tokens=200_000,       # session token ceiling
+        max_duration_seconds=1_800,     # 30-minute call cap
+    ),
+))
+
+pipeline = Pipeline([
+    transport.input(), stt, llm,
+    RateGuardBudgetProcessor(guard),    # anywhere after the LLM works
+    tts, transport.output(),
+])
+```
+
+Set `fatal_on_exceeded=False` to observe without stopping, and
+`on_exceeded=` (sync or async) to act before the stop lands.
+
+### LiveKit Agents (voice sessions)
+
+LiveKit emits per-inference metrics for both the LLM path and the realtime
+path (with audio/text/cached token splits) — `attach_rateguard` subscribes
+and feeds the guard. The guard decides; your callback acts. Requires
+`livekit-agents` (verified against 1.6.5).
+
+```python
+from rateguard import (RealtimeCostRates, RealtimeSessionGuard,
+                       RealtimeSessionGuardOptions, RealtimeSessionLimits)
+from rateguard.integrations.livekit_adapter import attach_rateguard
+
+guard = RealtimeSessionGuard("openai", RealtimeSessionGuardOptions(
+    limits=RealtimeSessionLimits(max_estimated_cost_micro_usd=500_000),  # $0.50/session
+    cost_rates=RealtimeCostRates(input_audio_per_m_tokens=32_000_000,    # $32/M
+                                 output_audio_per_m_tokens=64_000_000),  # $64/M
+))
+
+def stop(decision):
+    session.interrupt()  # or schedule session.aclose()
+
+attach_rateguard(session, guard, on_exceeded=stop)
+```
+
+Cost rates are caller-supplied (micro-USD per million tokens) — realtime
+pricing changes too often to bake in, and the estimate is never invoice truth.
+
 ---
 
 ## Node / TypeScript
