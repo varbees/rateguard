@@ -123,31 +123,6 @@ earlier waves but still marked Go-only. Verified each individually (export +
 grep for the actual mechanism) before flipping. Dashboard remains the one
 legitimately Go-only row.
 
-## Unreleased (v0.2.0-dev) — July 5, 2026, part 4 (packages/connect — universal proxy)
-
-### The proxy pattern graduates from "hack for one instance" to sanctioned companion package
-`packages/connect` — a one-command reverse proxy (`rateguard-connect -upstream <url> -port <port>`)
-that puts RateGuard in front of any OpenAI-compatible or Anthropic-compatible endpoint, for tools
-you don't control the source of. Generalizes the ad hoc proxy built earlier this session for
-Hermes: configurable upstream/port/name/limits via flags, a derived human-readable dashboard key
-(`api.deepseek.com` → `deepseek`, correcting a real off-by-one in the first version of that logic
-— every "api.<provider>.com" host's first label is the generic word "api", not the provider name,
-so the fix skips past it instead of falling back to the full host), and a friendly root-page
-response instead of forwarding an unauthenticated browser visit to the real upstream (which
-returns a confusing vendor-specific error).
-
-Updated `AGENTS.md` rule 6: `packages/dashboard` and `packages/connect` are now explicit, scoped
-exceptions to "SDK-only" — companion tools that depend on the SDK like any consumer, never the
-reverse. Billing/marketplace/platform code still doesn't belong here.
-
-**Pluggability matrix in `packages/connect/README.md`** is confidence-labeled throughout — rows
-verified against official docs or a live test are marked distinctly from rows carried over from
-research that wasn't independently re-checked. Two corrections caught doing the verification pass
-Claude Code's `ANTHROPIC_BASE_URL` only takes effect on a new process (not an already-running
-session) and disables MCP tool search by default on non-first-party hosts; Cursor's custom base
-URL override only affects its chat panel, not Composer/inline-edit/autocomplete — the tool's actual
-agentic features don't route through it at all.
-
 ## Unreleased (v0.2.0-dev) — July 5, 2026, part 3 (dashboard rebuild + guardrail tracking)
 
 ### From single page to real control center
