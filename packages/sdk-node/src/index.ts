@@ -19,6 +19,8 @@ export * from './core/genai.js';
 export * from './core/genai-span.js';
 export * from './core/semantic-cache.js';
 export * from './core/semantic-loop.js';
+export * from './core/spend-receipt.js';
+export * from './core/focus-export.js';
 export * from './core/static-embedder.js';
 export * from './core/prometheus.js';
 export * from './core/outbound.js';
