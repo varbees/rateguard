@@ -147,22 +147,26 @@ span.End(rateguard.GenAICall{PromptTokens: in, CompletionTokens: out}, err)
 | Python | `varbees-rateguard` | `pip install` |
 | Dashboard | `packages/dashboard` — self-hosted control center | `docker compose up` |
 
-## vs the competition
+## How it compares
 
-| | RateGuard | express-rate-limit | LiteLLM | Kong |
+The honest comparison is about **where enforcement lives**, not who has the longer feature
+list. LiteLLM and Kong AI Gateway both ship token-aware LLM rate limiting today — the difference
+is architectural: they are a service you deploy in front of your app, RateGuard is a library that
+runs inside it.
+
+| | RateGuard | express-rate-limit | LiteLLM | Kong AI Gateway |
 |---|---|---|---|---|
-| Multi-language | ✅ Go+Node+Python | ❌ JS only | ❌ Python only | ❌ |
-| Zero infrastructure | ✅ Middleware | ✅ | ❌ Proxy required | ❌ Gateway |
-| In-process outbound spend tracking | ✅ Client wrapper | ❌ | ❌ Proxy only | ❌ |
-| Agent pre-flight queries (MCP) | ✅ 7 tools + stdio server, all 3 languages | ❌ | ❌ | ❌ |
-| Agent loop detection | ✅ Library/MCP; Go middleware | ❌ | ❌ | ❌ |
-| LLM token budgets | ✅ | ❌ | ✅ | ❌ |
-| GenAI OTel conventions | ✅ | ❌ | ❌ | ❌ |
-| Circuit breakers | ✅ | ❌ | ❌ | ❌ |
-| Content guardrails | ✅ | ❌ | ✅ | ❌ |
-| Provider chain | ✅ | ❌ | ✅ | ❌ |
-| Prometheus metrics | ✅ Go endpoint + helpers | ❌ | ❌ | ✅ |
-| Open source (MIT) | ✅ | ✅ | ✅ | Partial |
+| Shape | In-process library | In-process library | Proxy you deploy | Gateway you operate |
+| Embeddable in | Go · Node · Python | Node only | Python¹ | — |
+| Meters outbound LLM spend inside your process | ✅ | ❌ | at the proxy hop | at the gateway hop |
+| Agent queries its own limit pre-flight (MCP, no 429) | ✅ 7 tools | ❌ | ❌ | ❌ |
+| Cryptographic budget delegation (Ed25519) | ✅ | ❌ | ❌ | ❌ |
+| API keys never leave your app | ✅ | n/a | ❌ terminate at proxy | ❌ terminate at gateway |
+| Open source | MIT | MIT | MIT | OSS core + Enterprise |
+
+¹ LiteLLM's proxy is callable over HTTP from any language; its embeddable SDK is Python.
+RateGuard's durable claim is the architecture — in your process, no hop, keys never leave — plus
+budget delegation you can verify with a signature, not a longer list of checkmarks.
 
 ## Docs
 

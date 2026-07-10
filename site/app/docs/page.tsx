@@ -20,9 +20,10 @@ export default function IntroPage() {
         identical behavior, one API.
       </P>
       <P>
-        Every other rate limiting tool was built for REST APIs. RateGuard was built for the LLM
-        era — where a single request can consume 100,000 tokens, streaming responses span
-        minutes, and your provider bill depends on how well you control it.
+        Most rate limiters were built for REST APIs, where requests are cheap and roughly
+        uniform. RateGuard is built for the LLM era — where a single request can consume 100,000
+        tokens, streaming responses span minutes, and your provider bill depends on how well you
+        control it.
       </P>
       <Callout kind="note" title="Not a proxy">
         RateGuard runs <strong>inside your application process</strong>. No gateway, no extra
@@ -61,8 +62,8 @@ openai := openai.NewClient(option.WithHTTPClient(client))`,
 
       <DocH2 id="agents">Built for agents</DocH2>
       <P>
-        Every AI gateway makes agents discover limits by hitting 429s. RateGuard answers{" "}
-        <strong>before the request leaves the process</strong>: MCP tools with peek
+        Most tools make agents discover limits by hitting a 429 and backing off. RateGuard
+        answers <strong>before the request leaves the process</strong>: MCP tools with peek
         semantics let any agent — Claude Code, Cursor, or your own — ask &quot;can I make this
         call?&quot; without consuming budget. See{" "}
         <Link href="/docs/agents-mcp">Agents &amp; MCP</Link>.
@@ -84,19 +85,30 @@ openai := openai.NewClient(option.WithHTTPClient(client))`,
       />
 
       <DocH2 id="vs">How it compares</DocH2>
+      <P>
+        The honest comparison is about <strong>where enforcement lives</strong>, not who has the
+        longer feature list. LiteLLM and Kong AI Gateway both ship token-aware LLM rate limiting
+        today. The difference is architectural: they are a service you deploy in front of your
+        app, RateGuard is a library that runs inside it.
+      </P>
       <Table
-        head={["", "RateGuard", "express-rate-limit", "LiteLLM", "Kong"]}
+        head={["", "RateGuard", "express-rate-limit", "LiteLLM", "Kong AI Gateway"]}
         rows={[
-          ["Multi-language", "✅ Go + Node + Python", "❌ JS only", "❌ Python only", "❌"],
-          ["Zero infrastructure", "✅ Middleware", "✅", "❌ Proxy required", "❌ Gateway"],
-          ["In-process outbound tracking", "✅ Client wrapper", "❌", "❌ Proxy only", "❌"],
-          ["Agent pre-flight (MCP)", "✅ 7 tools + stdio", "❌", "❌", "❌"],
-          ["Agent loop detection", "✅", "❌", "❌", "❌"],
-          ["LLM token budgets", "✅", "❌", "✅", "❌"],
-          ["GenAI OTel conventions", "✅", "❌", "❌", "❌"],
-          ["Open source", "✅ MIT", "✅", "✅", "Partial"],
+          ["Shape", "In-process library", "In-process library", "Proxy you deploy", "Gateway you operate"],
+          ["Embeddable in", "Go · Node · Python", "Node only", "Python¹", "—"],
+          ["Meters outbound LLM spend inside your process", "✅", "❌", "At the proxy hop", "At the gateway hop"],
+          ["Agent queries its own limit pre-flight (MCP, no 429)", "✅ 7 tools", "❌", "❌", "❌"],
+          ["Cryptographic budget delegation (Ed25519)", "✅", "❌", "❌", "❌"],
+          ["API keys never leave your app", "✅", "n/a", "❌ terminate at proxy", "❌ terminate at gateway"],
+          ["Open source", "MIT", "MIT", "MIT", "OSS core + Enterprise"],
         ]}
       />
+      <P>
+        ¹ LiteLLM&apos;s proxy is callable over HTTP from any language; its embeddable SDK is
+        Python. RateGuard&apos;s durable claim is the architecture — in your process, no hop, keys
+        never leave — plus budget delegation you can verify with a signature, not a longer list of
+        checkmarks.
+      </P>
       <P>
         Ready? <Link href="/docs/quickstart">Install it in one line →</Link>
       </P>

@@ -81,9 +81,10 @@ allowed, reason  = detector.Peek(fp, depth)  // pre-flight, records nothing`,
       <DocH2 id="semantic">Semantic loop detection — the paraphrase loop</DocH2>
       <P>
         Exact hashing has a blind spot it cannot close: an agent repeating the same step{" "}
-        <em>in different words</em>. The documented $47K incident was exactly this shape — two
-        agents ping-ponging semantically identical, byte-distinct messages for eleven days.
-        Every SHA-256 fingerprint differed; nothing tripped. <code>SemanticLoopDetector</code>{" "}
+        <em>in different words</em>. The{" "}
+        <Link href="/denial-of-wallet">reported $47K ping-pong incident</Link> was this shape — two
+        agents passing semantically identical, byte-distinct messages back and forth for eleven
+        days. Every SHA-256 fingerprint differed; nothing tripped. <code>SemanticLoopDetector</code>{" "}
         closes the gap: it embeds each step locally (see the built-in{" "}
         <Link href="/docs/semantic-caching">static embedder</Link> — no network, no inference
         runtime) and compares against a sliding window of the sequence&apos;s recent steps.
