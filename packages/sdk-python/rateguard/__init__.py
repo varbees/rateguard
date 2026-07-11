@@ -45,6 +45,8 @@ from .core.genai import (
     priced_models,
     start_genai_call,
 )
+from .core.enforcement_log import EnforcementEvent, EnforcementLog
+from .core.freeze import FreezeController
 from .core.guardrail_log import GuardrailEvent, GuardrailLog
 from .core.guardrails import (
     Guardrail,
@@ -224,6 +226,10 @@ __all__ = [
     # Guardrail violation tracking
     "GuardrailEvent",
     "GuardrailLog",
+    # Kill switch + enforcement audit trail
+    "FreezeController",
+    "EnforcementEvent",
+    "EnforcementLog",
     # MCP + loop detection
     "LoopDetector",
     "MCPTool",

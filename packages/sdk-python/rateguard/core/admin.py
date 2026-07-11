@@ -27,6 +27,11 @@ the RateGuard dashboard (packages/dashboard) or any operator tooling.
                                    else a customer id). Returns the frozen list.
     POST  /admin/unfreeze          {"scope": ""} — lift a freeze
     GET   /admin/frozen            the currently frozen scopes
+    GET   /admin/events            recent enforcement events (budget stops,
+                                   rate limits, freezes), newest first — the
+                                   pull-side audit trail. ?limit=N caps the
+                                   count; ?format=csv returns a CSV export
+                                   instead of JSON, for finance and the record
 
 Security posture: this app has NO authentication and is not safe to expose
 on the public internet — anyone who can reach it can read your current
@@ -53,12 +58,15 @@ API via a cross-origin fetch.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from urllib.parse import parse_qs
 
 if TYPE_CHECKING:
     from ..facade import RateGuard
+    from .enforcement_log import EnforcementEvent
     from .mcp import MCPTool
 
 ASGIReceive = Callable[[], Awaitable[dict[str, Any]]]
@@ -127,6 +135,8 @@ class AdminApp:
             await self._handle_freeze(method, receive, send, freeze=False)
         elif path == "/admin/frozen":
             await self._handle_frozen(method, send)
+        elif path == "/admin/events":
+            await self._handle_events(scope, method, send)
         else:
             await _send_error(send, 404, "not found")
 
@@ -177,6 +187,37 @@ class AdminApp:
             await _send_error(send, 405, "GET only")
             return
         await _send_json(send, 200, {"frozen": self._guard.frozen_scopes()})
+
+    async def _handle_events(self, scope: dict[str, Any], method: str, send: ASGISend) -> None:
+        if method != "GET":
+            await _send_error(send, 405, "GET only")
+            return
+        query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
+        limit = 0
+        raw_limit = (query.get("limit") or ["0"])[0]
+        try:
+            limit = int(raw_limit)
+        except ValueError:
+            limit = 0
+        events = self._guard.enforcement_events(limit)
+        if (query.get("format") or [""])[0] == "csv":
+            await _send_csv(send, events)
+            return
+        await _send_json(
+            send,
+            200,
+            [
+                {
+                    "at": e.at,
+                    "type": e.type,
+                    "customer": e.customer,
+                    "provider": e.provider,
+                    "model": e.model,
+                    "detail": e.detail,
+                }
+                for e in events
+            ],
+        )
 
     async def _handle_policy(self, method: str, receive: ASGIReceive, send: ASGISend) -> None:
         runtime = self._guard.runtime
@@ -299,6 +340,26 @@ async def _send_json(send: ASGISend, status: int, body: Any) -> None:
             "type": "http.response.start",
             "status": status,
             "headers": [(b"content-type", b"application/json")],
+        }
+    )
+    await send({"type": "http.response.body", "body": payload})
+
+
+async def _send_csv(send: ASGISend, events: list["EnforcementEvent"]) -> None:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["at", "type", "customer", "provider", "model", "detail"])
+    for e in events:
+        writer.writerow([e.at, e.type, e.customer, e.provider, e.model, e.detail])
+    payload = buf.getvalue().encode("utf-8")
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 200,
+            "headers": [
+                (b"content-type", b"text/csv; charset=utf-8"),
+                (b"content-disposition", b'attachment; filename="rateguard-events.csv"'),
+            ],
         }
     )
     await send({"type": "http.response.body", "body": payload})

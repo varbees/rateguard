@@ -23,6 +23,7 @@ if TYPE_CHECKING:
     from .adapters.wsgi import WSGIApp
     from .core.adaptive import AdaptiveLimiter, AdaptiveOptions
     from .core.admin import AdminApp
+    from .core.enforcement_log import EnforcementEvent
     from .core.genai import GenAICall, GenAISpan
     from .core.guardrail_log import GuardrailLog
     from .core.genai import PricingProvider
@@ -290,6 +291,12 @@ class RateGuard:
     def frozen_scopes(self) -> list[str]:
         """Active freezes: ``*`` for a global freeze, ``customer=<id>`` per customer."""
         return self.runtime.freeze.frozen_scopes()
+
+    def enforcement_events(self, limit: int = 0) -> list["EnforcementEvent"]:
+        """Recent enforcement events (budget stops, rate limits, freezes),
+        newest first. ``limit <= 0`` returns all. The pull-side audit trail —
+        no webhook required — for finance and the compliance record."""
+        return self.runtime.enforcement_log.recent(limit)
 
     @property
     def asgi_middleware(self) -> type:

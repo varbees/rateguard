@@ -1,10 +1,13 @@
 package rateguard
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
+	"time"
 )
 
 // AdminHandler serves a small read/write control-plane API for the
@@ -56,6 +59,7 @@ func (s *SDK) AdminHandler() http.Handler {
 	mux.HandleFunc("/admin/freeze", s.handleAdminFreeze)
 	mux.HandleFunc("/admin/unfreeze", s.handleAdminUnfreeze)
 	mux.HandleFunc("/admin/frozen", s.handleAdminFrozen)
+	mux.HandleFunc("/admin/events", s.handleAdminEvents)
 	return withAdminCORS(mux, s.cfg.AdminCORSOrigin)
 }
 
@@ -233,6 +237,36 @@ func (s *SDK) handleAdminFrozen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAdminJSON(w, http.StatusOK, map[string]any{"frozen": s.freeze.FrozenScopes()})
+}
+
+// handleAdminEvents serves the enforcement audit trail: the most recent blocks,
+// budget stops, and freezes. ?limit=N caps the count; ?format=csv streams a
+// spreadsheet for finance instead of JSON.
+func (s *SDK) handleAdminEvents(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	limit := 0
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			limit = n
+		}
+	}
+	events := s.EnforcementEvents(limit)
+
+	if r.URL.Query().Get("format") == "csv" {
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="rateguard-events.csv"`)
+		cw := csv.NewWriter(w)
+		_ = cw.Write([]string{"at", "type", "customer", "provider", "model", "detail"})
+		for _, e := range events {
+			_ = cw.Write([]string{e.At.Format(time.RFC3339), e.Type, e.Customer, e.Provider, e.Model, e.Detail})
+		}
+		cw.Flush()
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, map[string]any{"events": events, "total": s.enforceLog.lifetimeTotal()})
 }
 
 func writeAdminJSON(w http.ResponseWriter, status int, body any) {

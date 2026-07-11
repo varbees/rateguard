@@ -423,6 +423,7 @@ def create_httpx_transport(
             # Kill switch: an operator freeze halts the call before anything
             # else. Respects observe mode, which never blocks.
             if core.enforce and core.runtime.freeze.halts(call.customer):
+                core.runtime.enforcement_log.record("frozen", customer=call.customer, provider=call.provider, model=call.model)
                 return synthesized(request, 403, "frozen", "rateguard: outbound calls frozen by operator", 0)
 
             body = request.read()
@@ -510,11 +511,13 @@ def create_httpx_transport(
 
                 blocked, retry_after_ms = core.rate_limit_blocked(call)
                 if blocked and core.enforce:
+                    core.runtime.enforcement_log.record("rate_limited", customer=call.customer, provider=call.provider, model=call.model)
                     return synthesized(request, 429, "rate_limit_exceeded",
                                        f"rateguard: outbound rate limit for provider {call.provider}", retry_after_ms)
 
                 reservation = core.reserve(call)
                 if reservation.decision.applied and not reservation.decision.allowed and core.enforce:
+                    core.runtime.enforcement_log.record("token_budget_exceeded", customer=call.customer, provider=call.provider, model=call.model, detail=reservation.decision.window or "")
                     return synthesized(request, 429, "token_budget_exceeded",
                                        f"rateguard: outbound token budget exhausted for {call.provider}",
                                        reservation.decision.retry_after_ms)
@@ -698,6 +701,7 @@ def create_httpx_async_transport(
             # Kill switch: an operator freeze halts the call before anything
             # else. Respects observe mode, which never blocks.
             if core.enforce and core.runtime.freeze.halts(call.customer):
+                core.runtime.enforcement_log.record("frozen", customer=call.customer, provider=call.provider, model=call.model)
                 return synthesized(request, 403, "frozen", "rateguard: outbound calls frozen by operator", 0)
 
             body = await request.aread()
@@ -773,11 +777,13 @@ def create_httpx_async_transport(
 
                 blocked, retry_after_ms = core.rate_limit_blocked(call)
                 if blocked and core.enforce:
+                    core.runtime.enforcement_log.record("rate_limited", customer=call.customer, provider=call.provider, model=call.model)
                     return synthesized(request, 429, "rate_limit_exceeded",
                                        f"rateguard: outbound rate limit for provider {call.provider}", retry_after_ms)
 
                 reservation = core.reserve(call)
                 if reservation.decision.applied and not reservation.decision.allowed and core.enforce:
+                    core.runtime.enforcement_log.record("token_budget_exceeded", customer=call.customer, provider=call.provider, model=call.model, detail=reservation.decision.window or "")
                     return synthesized(request, 429, "token_budget_exceeded",
                                        f"rateguard: outbound token budget exhausted for {call.provider}",
                                        reservation.decision.retry_after_ms)

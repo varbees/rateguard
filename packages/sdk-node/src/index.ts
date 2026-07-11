@@ -17,6 +17,7 @@ export * from './core/guardrails.js';
 export * from './core/guardrail-log.js';
 export * from './core/genai.js';
 export * from './core/genai-span.js';
+export * from './core/enforcement-log.js';
 export * from './core/semantic-cache.js';
 export * from './core/semantic-loop.js';
 export * from './core/spend-receipt.js';
@@ -43,6 +44,7 @@ import type { GuardrailLog } from './core/guardrail-log.js';
 import { wrapFetch, type WrapFetchOptions } from './core/outbound.js';
 import { startGenAICall as openGenAISpan, type GenAIObserver, type GenAISpan } from './core/genai-span.js';
 import type { GenAICall } from './core/genai.js';
+import type { EnforcementEvent } from './core/enforcement-log.js';
 import { middleware as expressMiddleware } from './adapters/express.js';
 import { rateguardPlugin } from './adapters/fastify.js';
 import { rateguard } from './adapters/hono.js';
@@ -132,6 +134,15 @@ export class RateGuard {
   /** The active freezes: '*' for a global freeze, 'customer=<id>' per customer. */
   frozenScopes(): string[] {
     return this.runtime.freeze.frozenScopes();
+  }
+
+  /**
+   * Recent enforcement events (budget stops, rate limits, freezes), newest
+   * first. `limit <= 0` returns every buffered event. The pull-side audit
+   * trail — no webhook required — for finance and the compliance record.
+   */
+  enforcementEvents(limit = 0): EnforcementEvent[] {
+    return this.runtime.enforcementLog.recent(limit);
   }
 
   /**

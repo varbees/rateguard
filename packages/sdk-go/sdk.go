@@ -42,6 +42,7 @@ type SDK struct {
 	loops        *LoopDetector
 	guardLog     *guardrailLog
 	freeze       *FreezeController
+	enforceLog   *enforcementLog
 }
 
 // New constructs a new SDK instance with sensible defaults.
@@ -148,6 +149,7 @@ func New(cfg Config) *SDK {
 		loops:        NewLoopDetector(cfg.LoopMaxDepth),
 		guardLog:     newGuardrailLog(),
 		freeze:       newFreezeController(),
+		enforceLog:   newEnforcementLog(clock, defaultEnforcementLogCapacity),
 	}
 }
 

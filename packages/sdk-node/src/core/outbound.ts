@@ -346,6 +346,12 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
         apiKey: runtime.config.apiKey,
       });
       if (decision.applied && !decision.allowed && enforce) {
+        runtime.enforcementLog.record({
+          type: 'rate_limited',
+          provider: call.provider,
+          ...(call.customer ? { customer: call.customer } : {}),
+          ...(call.model ? { model: call.model } : {}),
+        });
         return synthesizedResponse(429, 'rate_limit_exceeded', `rateguard: outbound rate limit for provider ${call.provider}`, decision.retryAfterMs);
       }
     }
@@ -354,6 +360,13 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     const budgetKey = `${runtime.config.tenantId}${customerSegment}:${call.provider}:${call.model || 'default'}:outbound`;
     const reservation = runtime.tokenBudget.reserve(budgetKey, runtime.config.tokenBudget, estimatedTokens);
     if (reservation.decision.applied && !reservation.decision.allowed && enforce) {
+      runtime.enforcementLog.record({
+        type: 'token_budget_exceeded',
+        provider: call.provider,
+        ...(call.customer ? { customer: call.customer } : {}),
+        ...(call.model ? { model: call.model } : {}),
+        ...(reservation.decision.window ? { detail: reservation.decision.window } : {}),
+      });
       return synthesizedResponse(429, 'token_budget_exceeded', `rateguard: outbound token budget exhausted for ${call.provider}`, reservation.decision.retryAfterMs);
     }
 
@@ -515,6 +528,12 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     // Kill switch: an operator freeze halts the call before anything else.
     // Respects observe mode, which never blocks.
     if (mode !== 'observe' && runtime.freeze.halts(call.customer)) {
+      runtime.enforcementLog.record({
+        type: 'frozen',
+        provider: call.provider,
+        ...(call.customer ? { customer: call.customer } : {}),
+        ...(call.model ? { model: call.model } : {}),
+      });
       return synthesizedResponse(403, 'frozen', 'rateguard: outbound calls frozen by operator', 0);
     }
 

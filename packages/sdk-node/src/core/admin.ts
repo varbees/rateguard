@@ -49,6 +49,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { MCPTool } from './mcp.js';
 import type { PolicyPreset, PolicyUpdate } from '../types.js';
+import type { EnforcementEvent } from './enforcement-log.js';
 
 /**
  * The slice of the RateGuard facade the admin API needs — structural so it
@@ -62,6 +63,7 @@ export interface AdminHost {
   freeze(scope: string): void;
   unfreeze(scope: string): void;
   frozenScopes(): string[];
+  enforcementEvents(limit: number): EnforcementEvent[];
 }
 
 /**
@@ -120,6 +122,8 @@ async function route(guard: AdminHost, req: IncomingMessage, res: ServerResponse
       return handleAdminFreeze(guard, req, res, false);
     case '/admin/frozen':
       return handleAdminFrozen(guard, req, res);
+    case '/admin/events':
+      return handleAdminEvents(guard, req, res, url);
     default:
       writeAdminError(res, 404, 'not found');
   }
@@ -318,6 +322,34 @@ function handleAdminFrozen(guard: AdminHost, req: IncomingMessage, res: ServerRe
     return;
   }
   writeAdminJSON(res, 200, { frozen: guard.frozenScopes() });
+}
+
+function csvCell(value: string): string {
+  return /["\n,]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function handleAdminEvents(guard: AdminHost, req: IncomingMessage, res: ServerResponse, url: URL): void {
+  if (req.method !== 'GET') {
+    writeAdminError(res, 405, 'GET only');
+    return;
+  }
+  const limitParam = url.searchParams.get('limit');
+  const limit = limitParam ? Number.parseInt(limitParam, 10) || 0 : 0;
+  const events = guard.enforcementEvents(limit);
+
+  if (url.searchParams.get('format') === 'csv') {
+    const rows = ['at,type,customer,provider,model,detail'];
+    for (const e of events) {
+      rows.push([e.at, e.type, e.customer ?? '', e.provider ?? '', e.model ?? '', e.detail ?? ''].map(csvCell).join(','));
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="rateguard-events.csv"',
+    });
+    res.end(rows.join('\n') + '\n');
+    return;
+  }
+  writeAdminJSON(res, 200, { events });
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

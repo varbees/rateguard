@@ -183,6 +183,7 @@ func (t *genaiTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Respects observe mode, which never blocks.
 	if t.opts.Mode != OutboundModeObserve && t.sdk.freeze.halts(call.Customer) {
 		t.sdk.metrics.outboundFrozen.Add(1)
+		t.sdk.enforceLog.record(EnforcementEvent{Type: "frozen", Customer: call.Customer, Provider: call.Provider, Model: call.Model})
 		return synthesizedResponse(req, http.StatusForbidden, "frozen",
 			"rateguard: outbound calls frozen by operator", nil), nil
 	}
@@ -343,6 +344,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 	if !t.opts.DisableRateLimit && !s.cfg.DisableRateLimit {
 		decision, err := s.limiter.Allow(req.Context(), "outbound:"+call.Provider, s.Policy())
 		if err == nil && decision.Applied && !decision.Allowed && enforce {
+			s.enforceLog.record(EnforcementEvent{Type: "rate_limited", Customer: call.Customer, Provider: call.Provider, Model: call.Model})
 			return synthesizedResponse(req, http.StatusTooManyRequests, "rate_limit_exceeded",
 				fmt.Sprintf("rateguard: outbound rate limit for provider %s", call.Provider), decision.RetryAfter), nil
 		}
@@ -361,6 +363,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 	reservation := s.tokens.reserveWithEstimate(budgetKey, s.Policy(), TokenBudgetMode(s.Policy().TokenBudgetMode), t.opts.EstimatedTokens)
 	if reservation.Applied && !reservation.Allowed && enforce {
 		s.metrics.tokenBudgetExhausted.Add(1)
+		s.enforceLog.record(EnforcementEvent{Type: "token_budget_exceeded", Customer: call.Customer, Provider: call.Provider, Model: nonEmpty(call.Model, "default"), Detail: reservation.Window})
 		return synthesizedResponse(req, http.StatusTooManyRequests, "token_budget_exceeded",
 			fmt.Sprintf("rateguard: outbound token budget exhausted for %s", call.Provider), reservation.RetryAfter), nil
 	}
