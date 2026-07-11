@@ -4,11 +4,11 @@ import { CodeTabs } from "@/components/docs/CodeTabs";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rateguard.antharmaya.com"),
-  title: "Denial of Wallet — documented AI agent runaway-cost incidents, and the config that stops each one",
+  title: "Denial of Wallet: documented AI agent runaway-cost incidents, and the config that stops each one",
   description:
-    "A sourced library of real AI agent budget-overrun incidents — the $6,531 DN42 loop, the reported $47K two-agent ping-pong, a 63-incident academic catalog — each mapped to the in-process enforcement that stops it.",
+    "A sourced library of real AI agent budget-overrun incidents (the $6,531 DN42 loop, the reported $47K two-agent ping-pong, a 63-incident academic catalog), each mapped to the in-process enforcement that stops it.",
   openGraph: {
-    title: "Denial of Wallet — when your own agent is the attacker",
+    title: "Denial of Wallet: when your own agent is the attacker",
     description:
       "Documented runaway-agent-spend incidents, primary sources only, each mapped to the RateGuard config that stops it.",
     type: "website",
@@ -149,7 +149,7 @@ export default function DenialOfWalletPage() {
           </h1>
           <p className="mx-auto max-w-2xl text-lg text-[var(--muted)] leading-relaxed">
             When software spends money at machine speed, the dangerous actor isn&apos;t
-            inbound traffic — it&apos;s your own agent. These incidents are real, each
+            inbound traffic. It&apos;s your own agent. These incidents are real, each
             linked to its primary source. No invented dollar figures: the internet is
             full of viral runaway-cost numbers that dissolve under a citation check,
             and we checked. Each incident is mapped to the enforcement that stops it.
@@ -195,7 +195,7 @@ export default function DenialOfWalletPage() {
             fired into channels nobody was watching at 3am. Provider spend caps were
             monthly, so the meter had weeks of headroom. What was missing in every
             single case is the same thing: <span className="text-[var(--fg)]">enforcement
-            in the process where the agent runs</span> — something that denies the next
+            in the process where the agent runs</span>. Something that denies the next
             call instead of describing it. Observability explains the bill afterward.
             Gateways cap the perimeter, coarsely. Flight controls belong inside the aircraft.
           </p>
@@ -206,7 +206,7 @@ export default function DenialOfWalletPage() {
       <section className="mx-auto max-w-3xl px-6 pb-20">
         <h2 className="font-display text-2xl font-bold mb-3 text-center">The config that stops them</h2>
         <p className="text-center text-[var(--muted)] mb-8 text-sm">
-          In-process, three languages, identical behavior — conformance-tested, not just similar APIs.
+          In-process, three languages, identical behavior. Conformance-tested, not just similar APIs.
         </p>
         <CodeTabs tabs={configTabs} />
       </section>
@@ -216,13 +216,13 @@ export default function DenialOfWalletPage() {
         <h2 className="font-display text-2xl font-bold mb-6 text-center">Who else works on this</h2>
         <p className="text-[var(--muted)] leading-relaxed mb-6 text-sm text-center max-w-2xl mx-auto">
           An honest map, because the problem is bigger than any one tool. Gateways
-          (LiteLLM, Portkey, Bifrost, Helicone) enforce budgets at a proxy you deploy —
+          (LiteLLM, Portkey, Bifrost, Helicone) enforce budgets at a proxy you deploy:
           strong for org-wide policy, blind to anything that doesn&apos;t route through
           them. In-process attempts exist too: ironcurtain is an actively developed
           security-policy runtime for agents (TypeScript); several single-language
           budget guards have appeared and mostly gone dormant. What none of them
           combine, as of July 2026: cross-language parity held by shared conformance
-          vectors, cryptographic budget delegation with narrowing, and loop detection —
+          vectors, cryptographic budget delegation with narrowing, and loop detection, all
           in the same process as your agent.
         </p>
         <div className="flex justify-center">

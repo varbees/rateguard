@@ -18,20 +18,20 @@ import {
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rateguard.antharmaya.com"),
-  title: "RateGuard — Flight Controls for AI Agents | Runtime Enforcement & Rate Limiting",
+  title: "RateGuard: Flight Controls for AI Agents | Runtime Enforcement & Rate Limiting",
   description:
-    "Agent runtime enforcement in Go, Node, and Python: token budgets, rate limits, circuit breakers, loop detection, and cryptographic budget delegation — inside your process, no proxy. Open source (MIT).",
+    "Agent runtime enforcement in Go, Node, and Python: token budgets, rate limits, circuit breakers, loop detection, and cryptographic budget delegation, inside your process, no proxy. Open source (MIT).",
   openGraph: {
-    title: "RateGuard — AI Agents That Know Their Limits",
+    title: "RateGuard: AI Agents That Know Their Limits",
     description:
       "Multi-language middleware that lets AI agents query their own rate limits before making API calls. No proxy, no latency, MIT license.",
     type: "website",
     siteName: "Antharmaya Labs",
-    images: [{ url: "/og.png", width: 1280, height: 640, alt: "RateGuard — AI agents that know their limits. Go, Node.js, Python. MIT." }],
+    images: [{ url: "/og.png", width: 1280, height: 640, alt: "RateGuard: AI agents that know their limits. Go, Node.js, Python. MIT." }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "RateGuard — AI Agents That Know Their Limits",
+    title: "RateGuard: AI Agents That Know Their Limits",
     description: "Multi-language AI-native rate limiting middleware. Go/Node/Python. MCP tools. MIT.",
     images: ["/og.png"],
   },
@@ -55,12 +55,12 @@ const codeTabs = [
 const features = [
   {
     title: "Ask before you call",
-    desc: "Seven MCP tools let Claude Code, Cursor, or any MCP client check its own limit — or mint a cryptographic sub-budget — before making a request. The agent asks permission instead of hitting a 429.",
+    desc: "Seven MCP tools let Claude Code, Cursor, or any MCP client check its own limit, or mint a cryptographic sub-budget, before making a request. The agent asks permission instead of hitting a 429.",
     micro: <MicroHandshake />,
   },
   {
     title: "Real spend, not estimates",
-    desc: "The outbound RoundTripper wraps your HTTP client and meters every OpenAI, Anthropic, or Google call as it actually happens — budgeted, traced, priced.",
+    desc: "The outbound wrapper rides your HTTP client and meters every OpenAI, Anthropic, or Google call as it happens: budgeted, traced, priced.",
     micro: <MicroMeter />,
   },
   {
@@ -70,17 +70,17 @@ const features = [
   },
   {
     title: "One algorithm, three runtimes",
-    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 689 tests — including shared conformance suites that replay identical admission sequences across all three — hold them to real behavioral parity, not just similar APIs.",
+    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 696 tests, including shared conformance suites that replay identical admission sequences across all three, hold them to real behavioral parity rather than just similar APIs.",
     micro: <MicroParity />,
   },
   {
     title: "Nothing else to run",
-    desc: "No proxy, no sidecar, no extra service to keep alive. RateGuard runs inside your process — drop in a middleware and every call becomes governed.",
+    desc: "No proxy, no sidecar, no extra service to keep alive. RateGuard runs inside your process: drop in the middleware and every call is governed.",
     micro: <MicroSingleNode />,
   },
   {
     title: "Failure reroutes, it doesn't cascade",
-    desc: "Circuit breakers open on a failing provider and the chain moves to the next one automatically — your application never sees the outage.",
+    desc: "Circuit breakers open on a failing provider and the chain moves to the next one automatically. Your application never sees the outage.",
     micro: <MicroFallback />,
   },
 ];
@@ -125,8 +125,9 @@ export default function Page() {
             know their limits.
           </h1>
           <p className="mx-auto max-w-xl text-lg text-[var(--muted)] leading-relaxed mb-10">
-            Agents don&apos;t stop when they should. RateGuard does it for them —
-            in-process, in three languages, before the bill arrives.
+            Your agent holds your API key and no sense of when to stop. RateGuard enforces token
+            budgets, kills runaway loops, and trips breakers on failing providers, all from inside
+            your process. Go, Node, Python. No proxy.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <a href="https://github.com/varbees/rateguard" className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--bone)] text-black rounded-lg font-medium hover:bg-white transition-colors">
@@ -156,13 +157,15 @@ export default function Page() {
             An agent will call an API as many times as it thinks it needs to.
           </h2>
           <p className="text-[var(--muted)] leading-relaxed">
-            No rate awareness, no budget sense, no idea it&apos;s stuck in a loop.
-            Every unguarded call is a chance to blow through a limit you find out about
-            after the invoice. The failure mode has a name now —{" "}
+            One unsupervised agent scanning a hobbyist network ran up a $6,531 cloud bill overnight.
+            Two agents in a research pipeline passed work back and forth for eleven days before a
+            billing alert caught it. The failure mode has a name now,{" "}
             <Link href="/denial-of-wallet" className="text-[var(--amber)] hover:underline">
               denial of wallet
             </Link>
-            {" "}— and a documented incident record.
+            , with a sourced incident record. Observability explains the bill after it arrives. A
+            gateway cap is coarse and sits outside your process. Enforcement has to run where the
+            agent runs.
           </p>
         </Reveal>
       </section>
@@ -173,9 +176,9 @@ export default function Page() {
             One bucket. Real math. No black box.
           </h2>
           <p className="text-[var(--muted)] leading-relaxed">
-            This is the actual formula running in production right now — not a mockup.
-            Tokens refill continuously, requests consume them one at a time, and the
-            bucket never lies about what it has left.
+            This is the formula the limiter actually runs, not a mockup. Tokens refill
+            continuously, requests consume them one at a time, and the bucket never lies about
+            what it has left.
           </p>
         </Reveal>
         <Reveal delay={0.1} className="flex justify-center">
@@ -214,8 +217,8 @@ export default function Page() {
           <Reveal>
             <Link href="/docs/dashboard">
               <FeatureCard
-                title="Dashboard — a control center for a running instance"
-                desc="Self-hosted, six sections: live budgets, breakers, agent loop stats, guardrail violations, an MCP tool console, and runtime policy tweaks. Same dashboard, any of the 3 languages — docker compose up (Go), --profile node-demo, or --profile python-demo, each already generating traffic."
+                title="Dashboard: a control center for a running instance"
+                desc="Self-hosted, six sections: live budgets, breakers, agent loop stats, guardrail violations, an MCP tool console, and runtime policy tweaks. Same dashboard, any of the 3 languages. docker compose up (Go), --profile node-demo, or --profile python-demo, each already generating traffic."
                 micro={<MicroDashboard />}
               />
             </Link>
@@ -226,7 +229,7 @@ export default function Page() {
       {/* Stats */}
       <section className="mx-auto max-w-3xl px-6 pb-32">
         <Reveal className="grid grid-cols-2 sm:grid-cols-4 gap-8 rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
-          <StatCounter value={689} label="Tests" />
+          <StatCounter value={696} label="Tests" />
           <StatCounter value={28} label="Providers" />
           <StatCounter value={3} label="Languages" />
           <div className="text-center">
@@ -241,20 +244,20 @@ export default function Page() {
         <Reveal className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
           <p className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--amber)]">Enterprise</p>
           <h2 className="font-display text-2xl font-bold mb-4">
-            Compliance evidence for the EU AI Act era
+            Signed records for the AI Act era
           </h2>
           <p className="text-[var(--muted)] leading-relaxed mb-4">
-            High-risk AI system obligations begin enforcement August 2, 2026. Article 12
-            requires tamper-evident record-keeping; Article 14 requires demonstrable human
-            oversight. RateGuard&apos;s Ed25519-signed spend receipts, budget delegation
-            chains, and FOCUS-aligned cost exports are technical evidence of exactly that —
-            who authorized an agent&apos;s budget, what it actually spent, and where the
-            hard limits were enforced.
+            High-risk obligations under the EU AI Act arrive in phases; the record-keeping and
+            human-oversight rules (Articles 12 and 14) are now expected around December 2027.
+            RateGuard produces the raw material an audit wants: Ed25519-signed spend receipts,
+            budget delegation chains, and FOCUS-aligned cost exports that show who authorized a
+            budget, what an agent spent, and where a limit stopped it.
           </p>
           <p className="text-[var(--muted)] leading-relaxed mb-6 text-sm">
-            We&apos;re assembling an auditor-ready Compliance Evidence Pack (export bundles
-            mapped to EU AI Act, NIST AI RMF, and ISO 42001 language) plus enterprise
-            support. Evidence, not certification — your compliance program stays yours.
+            For records an auditor treats as tamper-proof, sign them with a key held outside the
+            app, in your own KMS: a library that signs with its own key can&apos;t prove it
+            didn&apos;t write its own log. You own the conformity case (the AI Act puts that on the
+            deployer). RateGuard gives you verifiable inputs, not a certification.
           </p>
           <a
             href="mailto:harshavar968@gmail.com?subject=RateGuard%20Enterprise%20%2F%20Compliance%20Evidence%20Pack"

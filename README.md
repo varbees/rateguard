@@ -1,14 +1,21 @@
 # RateGuard
 
-**Flight controls for AI agents — runtime enforcement in Go, Node.js, and Python.**
+**Flight controls for AI agents. Runtime enforcement in Go, Node.js, and Python.**
 
-RateGuard is agent runtime enforcement: token budgets, rate limits, circuit breakers, loop detection, and cryptographically delegable spend authority, running inside your application process. Every token consumed, every limit hit, every breaker trip is an enforced decision *and* a traceable event — with zero infrastructure.
+An agent holds your API key and no sense of when to stop. RateGuard enforces token budgets, kills runaway loops, and trips breakers on failing providers, all from inside your process. Go, Node, Python. No proxy, no gateway, no added latency.
 
-Three SDKs, one architecture: the same core algorithms with idiomatic APIs for each language, held to behavioral parity by shared cross-language conformance vectors.
+One unsupervised agent scanning a hobbyist network ran up a $6,531 cloud bill overnight. Two agents in a research pipeline passed work back and forth for eleven days before a billing alert caught it. The failure mode has a name now, [denial of wallet](https://rateguard.antharmaya.com/denial-of-wallet), with a sourced incident record.
+
+```go
+// One line. Every OpenAI/Anthropic/Google call is now budgeted, metered, and breaker-protected.
+client := rg.WrapClient(&http.Client{})
+```
+
+Every token consumed, every limit hit, every breaker trip is an enforced decision and a traceable event, with zero infrastructure. Three SDKs, one architecture: the same core algorithms with idiomatic APIs for each language, held to behavioral parity by shared cross-language conformance vectors.
 
 ## Why RateGuard
 
-Rate limiting was invented to protect servers from too many users. In the agent era the dangerous actor is your own software, spending real money at machine speed behind your own credentials — a failure mode with a name ([denial of wallet](https://rateguard.antharmaya.com/denial-of-wallet)) and a documented incident record. Observability explains the bill afterward; gateway caps are coarse and perimeter-bound. Enforcement has to live where the agent runs.
+Rate limiting was invented to protect servers from too many users. In the agent era the dangerous actor is your own software, spending real money at machine speed behind your own credentials. Observability explains the bill afterward. A gateway cap is coarse and sits at the perimeter. Enforcement has to live where the agent runs.
 
 **No proxy. No extra service. No latency overhead.** RateGuard runs inside your application process.
 
