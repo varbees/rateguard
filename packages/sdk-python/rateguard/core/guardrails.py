@@ -9,6 +9,8 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
+from .tokenizer import Tokenizer, estimate_with
+
 
 @dataclass
 class GuardrailViolation:
@@ -71,11 +73,14 @@ class PromptInjectionGuardrail:
 
 
 class TokenLimitGuardrail:
-    def __init__(self, max_tokens: int) -> None:
+    def __init__(self, max_tokens: int, tokenizer: "Tokenizer | None" = None) -> None:
         self.max_tokens = max_tokens
+        # None = the default CJK-aware heuristic; supply a Tokenizer for exact
+        # counts. The naive len//4 this replaced undercounted CJK ~75%.
+        self.tokenizer = tokenizer
 
     def check(self, content: str) -> GuardrailViolation | None:
-        if len(content) // 4 > self.max_tokens:
+        if estimate_with(self.tokenizer, content) > self.max_tokens:
             return GuardrailViolation("token_limit_exceeded", "prompt exceeds token limit", 1.0)
         return None
 

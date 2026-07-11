@@ -1,0 +1,60 @@
+{
+  "_comment": "Shared oracle for RateGuard EstimateTokens/estimateTokens/estimate_tokens. CJK code points count ~1 token each; all other characters ~4 chars/token (rounded up). Go/Node/Python must all reproduce expected_tokens exactly. Iterate by CODE POINT (not byte/UTF-16 unit). Generated from the Python reference implementation in packages/sdk-python/rateguard/core/tokenizer.py.",
+  "vectors": [
+    {
+      "name": "empty",
+      "text": "",
+      "expected_tokens": 0
+    },
+    {
+      "name": "ascii_short",
+      "text": "hello world",
+      "expected_tokens": 3
+    },
+    {
+      "name": "ascii_sentence",
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "expected_tokens": 11
+    },
+    {
+      "name": "chinese",
+      "text": "你好世界",
+      "expected_tokens": 4
+    },
+    {
+      "name": "chinese_sentence",
+      "text": "人工智能正在改变世界",
+      "expected_tokens": 10
+    },
+    {
+      "name": "japanese_hiragana",
+      "text": "こんにちは",
+      "expected_tokens": 5
+    },
+    {
+      "name": "japanese_katakana",
+      "text": "コンニチハ",
+      "expected_tokens": 5
+    },
+    {
+      "name": "korean",
+      "text": "안녕하세요",
+      "expected_tokens": 5
+    },
+    {
+      "name": "mixed_en_cjk",
+      "text": "hello 你好",
+      "expected_tokens": 4
+    },
+    {
+      "name": "emoji_astral",
+      "text": "hi 😀",
+      "expected_tokens": 1
+    },
+    {
+      "name": "cjk_ext_b_astral",
+      "text": "𠀀𠀁",
+      "expected_tokens": 2
+    }
+  ]
+}

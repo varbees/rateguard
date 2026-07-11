@@ -111,6 +111,7 @@ from .core.spend_receipt import (
 )
 from .core.static_embedder import StaticEmbedder
 from .core.token_budget import TokenBudgetManager
+from .core.tokenizer import Tokenizer, estimate_tokens, estimate_with
 from .exceptions import BudgetExceeded, RateGuardException
 from .facade import RateGuard
 from .runtime import RateGuardRuntime
@@ -223,6 +224,10 @@ __all__ = [
     "TokenLimitGuardrail",
     "standard_guardrails",
     "strict_guardrails",
+    # CJK-aware token estimation (pluggable)
+    "Tokenizer",
+    "estimate_tokens",
+    "estimate_with",
     # Guardrail violation tracking
     "GuardrailEvent",
     "GuardrailLog",

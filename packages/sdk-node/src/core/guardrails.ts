@@ -6,6 +6,8 @@
  * Each guardrail is pluggable — bring your own or use built-ins.
  */
 
+import { estimateWith, type Tokenizer } from './tokenizer.js';
+
 export interface GuardrailViolation {
   code: string;     // e.g. "pii_detected", "prompt_injection"
   message: string;  // human-readable explanation
@@ -70,9 +72,14 @@ export class PromptInjectionGuardrail implements Guardrail {
 }
 
 export class TokenLimitGuardrail implements Guardrail {
-  constructor(private maxTokens: number) {}
+  // tokenizer undefined = the default CJK-aware heuristic; supply one for exact
+  // counts. The naive content.length/4 this replaced undercounted CJK ~75%.
+  constructor(
+    private maxTokens: number,
+    private tokenizer?: Tokenizer,
+  ) {}
   check(content: string): GuardrailViolation | null {
-    if (content.length / 4 > this.maxTokens) {
+    if (estimateWith(this.tokenizer, content) > this.maxTokens) {
       return { code: 'token_limit_exceeded', message: 'prompt exceeds token limit', score: 1.0 };
     }
     return null;

@@ -122,6 +122,63 @@ if v := chain.check(prompt):
           },
         ]}
       />
+      <DocH2 id="token-limits">Token limits and CJK</DocH2>
+      <P>
+        <code>TokenLimitGuardrail</code> rejects prompts over a token budget. It estimates tokens
+        without calling the provider, using a CJK-aware heuristic: Chinese, Japanese, and Korean
+        characters count as about one token each, other text as about four characters per token.
+        A naive chars/4 rule undercounts CJK by roughly 75%, so a large CJK prompt could slip past
+        a limit sized in tokens. The estimate is deliberately biased not to under-count, so the
+        limit fails safe. All three SDKs produce the same number for the same string, locked by a
+        shared conformance vector.
+      </P>
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `// Default heuristic:
+guard := rateguard.NewTokenLimitGuardrail(8000)
+
+// Exact counts — plug in your own tokenizer (e.g. tiktoken):
+guard = &rateguard.TokenLimitGuardrail{
+    MaxTokens: 8000,
+    Tokenizer: rateguard.TokenizerFunc(myExactCount),
+}
+
+// Estimate directly:
+n := rateguard.EstimateTokens("你好世界") // 4, not 1`,
+          },
+          {
+            label: "Node.js",
+            code: `// Default heuristic:
+const guard = new TokenLimitGuardrail(8000);
+
+// Exact counts — plug in your own tokenizer:
+const exact = new TokenLimitGuardrail(8000, {
+  estimateTokens: (text) => myExactCount(text),
+});
+
+// Estimate directly:
+estimateTokens('你好世界'); // 4, not 1`,
+          },
+          {
+            label: "Python",
+            code: `# Default heuristic:
+guard = TokenLimitGuardrail(8000)
+
+# Exact counts — plug in your own tokenizer:
+class Tiktoken:
+    def estimate_tokens(self, text: str) -> int:
+        return my_exact_count(text)
+
+guard = TokenLimitGuardrail(8000, tokenizer=Tiktoken())
+
+# Estimate directly:
+estimate_tokens("你好世界")  # 4, not 1`,
+          },
+        ]}
+      />
+
       <Callout kind="note">
         Guardrails are a defense-in-depth layer, not a substitute for provider-side safety
         systems. They catch the obvious cases (a PAN number in a prompt, a &quot;ignore previous

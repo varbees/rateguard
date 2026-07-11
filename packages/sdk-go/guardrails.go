@@ -132,7 +132,11 @@ func (g *PromptInjectionGuardrail) Check(content string) *GuardrailViolation {
 
 // TokenLimitGuardrail rejects prompts that exceed a maximum token count.
 type TokenLimitGuardrail struct {
-	MaxTokens int // approximate — chars/4
+	MaxTokens int
+	// Tokenizer is optional; nil uses the default CJK-aware heuristic
+	// (EstimateTokens). Supply one for exact counts. The naive chars/4 this
+	// replaced undercounted CJK ~75%.
+	Tokenizer Tokenizer
 }
 
 func NewTokenLimitGuardrail(maxTokens int) *TokenLimitGuardrail {
@@ -140,7 +144,7 @@ func NewTokenLimitGuardrail(maxTokens int) *TokenLimitGuardrail {
 }
 
 func (g *TokenLimitGuardrail) Check(content string) *GuardrailViolation {
-	estimatedTokens := len(content) / 4
+	estimatedTokens := estimateWith(g.Tokenizer, content)
 	if estimatedTokens > g.MaxTokens {
 		return &GuardrailViolation{
 			Code:    "token_limit_exceeded",
