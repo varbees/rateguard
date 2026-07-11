@@ -13,6 +13,14 @@ client := rg.WrapClient(&http.Client{})
 
 Every token consumed, every limit hit, every breaker trip is an enforced decision and a traceable event, with zero infrastructure. Three SDKs, one architecture: the same core algorithms with idiomatic APIs for each language, held to behavioral parity by shared cross-language conformance vectors.
 
+**Watch a runaway agent get halted** (real wrapped client, local fake provider, no API key, ~20 seconds):
+
+<!-- demo GIF drops in here: packages/sdk-go/examples/runaway-demo/runaway.gif -->
+
+```bash
+go run ./examples/runaway-demo    # from packages/sdk-go: a budget burns down, then RateGuard stops the loop
+```
+
 ## Why RateGuard
 
 Rate limiting was invented to protect servers from too many users. In the agent era the dangerous actor is your own software, spending real money at machine speed behind your own credentials. Observability explains the bill afterward. A gateway cap is coarse and sits at the perimeter. Enforcement has to live where the agent runs.
