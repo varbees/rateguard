@@ -121,6 +121,7 @@ type atomicMetrics struct {
 	tokensEstimated      atomic.Int64
 	outboundCalls        atomic.Int64
 	outboundFallbacks    atomic.Int64
+	outboundFrozen       atomic.Int64
 	semanticCacheHits    atomic.Int64
 	semanticCacheMisses  atomic.Int64
 	guardrailViolations  atomic.Int64
@@ -152,6 +153,9 @@ func (m *atomicMetrics) prometheusText() string {
 			"# HELP rateguard_outbound_fallbacks_total Provider fallback events\n"+
 			"# TYPE rateguard_outbound_fallbacks_total counter\n"+
 			"rateguard_outbound_fallbacks_total %d\n"+
+			"# HELP rateguard_outbound_frozen_total Outbound calls halted by an operator freeze (kill switch)\n"+
+			"# TYPE rateguard_outbound_frozen_total counter\n"+
+			"rateguard_outbound_frozen_total %d\n"+
 			"# HELP rateguard_semantic_cache_hits_total Outbound calls served from the semantic cache\n"+
 			"# TYPE rateguard_semantic_cache_hits_total counter\n"+
 			"rateguard_semantic_cache_hits_total %d\n"+
@@ -169,6 +173,7 @@ func (m *atomicMetrics) prometheusText() string {
 		m.tokensEstimated.Load(),
 		m.outboundCalls.Load(),
 		m.outboundFallbacks.Load(),
+		m.outboundFrozen.Load(),
 		m.semanticCacheHits.Load(),
 		m.semanticCacheMisses.Load(),
 		m.guardrailViolations.Load(),

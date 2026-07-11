@@ -41,6 +41,7 @@ type SDK struct {
 	metrics      atomicMetrics
 	loops        *LoopDetector
 	guardLog     *guardrailLog
+	freeze       *FreezeController
 }
 
 // New constructs a new SDK instance with sensible defaults.
@@ -146,6 +147,7 @@ func New(cfg Config) *SDK {
 		clock:        clock,
 		loops:        NewLoopDetector(cfg.LoopMaxDepth),
 		guardLog:     newGuardrailLog(),
+		freeze:       newFreezeController(),
 	}
 }
 

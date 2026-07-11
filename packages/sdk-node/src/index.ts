@@ -111,6 +111,30 @@ export class RateGuard {
   }
 
   /**
+   * Kill switch: halt outbound LLM calls for a scope from inside the process.
+   * Empty scope ('') freezes everything; any other value freezes that customer
+   * (the X-RateGuard-Customer header). Frozen calls return a synthesized 403.
+   */
+  freeze(scope = ''): void {
+    this.runtime.freeze.freeze(scope);
+  }
+
+  /** Lift a freeze set by {@link freeze}. */
+  unfreeze(scope = ''): void {
+    this.runtime.freeze.unfreeze(scope);
+  }
+
+  /** Whether a scope is currently frozen. */
+  isFrozen(scope = ''): boolean {
+    return this.runtime.freeze.isFrozen(scope);
+  }
+
+  /** The active freezes: '*' for a global freeze, 'customer=<id>' per customer. */
+  frozenScopes(): string[] {
+    return this.runtime.freeze.frozenScopes();
+  }
+
+  /**
    * Opens a GenAI observability span for one outbound LLM call — token
    * counts, cost estimation, and (for streaming calls) TTFT/TPOT timing.
    * Mirrors Go's SDK.StartGenAICall.

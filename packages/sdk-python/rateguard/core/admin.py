@@ -22,6 +22,11 @@ the RateGuard dashboard (packages/dashboard) or any operator tooling.
                                    for a UI to render directly instead of
                                    parsing MCP's text-envelope transport
                                    shape
+    POST  /admin/freeze            {"scope": ""} — kill switch: halt outbound
+                                   LLM calls for a scope (empty = everything,
+                                   else a customer id). Returns the frozen list.
+    POST  /admin/unfreeze          {"scope": ""} — lift a freeze
+    GET   /admin/frozen            the currently frozen scopes
 
 Security posture: this app has NO authentication and is not safe to expose
 on the public internet — anyone who can reach it can read your current
@@ -116,6 +121,12 @@ class AdminApp:
             await self._handle_mcp_tools(method, send)
         elif path == "/admin/mcp/call":
             await self._handle_mcp_call(method, receive, send)
+        elif path == "/admin/freeze":
+            await self._handle_freeze(method, receive, send, freeze=True)
+        elif path == "/admin/unfreeze":
+            await self._handle_freeze(method, receive, send, freeze=False)
+        elif path == "/admin/frozen":
+            await self._handle_frozen(method, send)
         else:
             await _send_error(send, 404, "not found")
 
@@ -140,6 +151,32 @@ class AdminApp:
             await _send_error(send, 500, str(exc))
             return
         await _send_json(send, 200, result)
+
+    async def _handle_freeze(self, method: str, receive: ASGIReceive, send: ASGISend, *, freeze: bool) -> None:
+        if method != "POST":
+            await _send_error(send, 405, "POST only")
+            return
+        body = await _read_body(receive)
+        scope = ""
+        if body and body.strip():
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError as exc:
+                await _send_error(send, 400, f"invalid JSON body: {exc}")
+                return
+            if isinstance(data, dict) and isinstance(data.get("scope"), str):
+                scope = data["scope"]
+        if freeze:
+            self._guard.freeze(scope)
+        else:
+            self._guard.unfreeze(scope)
+        await _send_json(send, 200, {"frozen": self._guard.frozen_scopes()})
+
+    async def _handle_frozen(self, method: str, send: ASGISend) -> None:
+        if method != "GET":
+            await _send_error(send, 405, "GET only")
+            return
+        await _send_json(send, 200, {"frozen": self._guard.frozen_scopes()})
 
     async def _handle_policy(self, method: str, receive: ASGIReceive, send: ASGISend) -> None:
         runtime = self._guard.runtime

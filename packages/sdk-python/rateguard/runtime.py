@@ -11,6 +11,7 @@ from .config import resolve_rateguard_options
 from .core.adaptive import AdaptiveLimiter
 from .core.circuit_breaker import CircuitBreaker
 from .core.event_emitter import build_event_envelope, create_event_emitter
+from .core.freeze import FreezeController
 from .core.guardrail_log import GuardrailLog
 from .core.mcp import LoopDetector
 from .core.rate_limiter import RateLimiter
@@ -65,6 +66,7 @@ class RateGuardRuntime:
         self.event_emitter = create_event_emitter(self.config)
         self.loop_detector = LoopDetector()
         self.guardrail_log = GuardrailLog()
+        self.freeze = FreezeController()
         # Serializes policy mutation (set_policy) so a multi-field patch
         # applies atomically even under multi-threaded WSGI servers —
         # mirrors Go's sdk.go policyMu.

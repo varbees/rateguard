@@ -128,6 +128,38 @@ aclient = AsyncOpenAI(http_client=rg.wrap_httpx_async_client())  # async
         or <code>outbound_customer_header</code> (Python). Attribution survives provider fallback.
       </Callout>
 
+      <DocH2 id="kill-switch">Kill switch: freeze outbound calls</DocH2>
+      <P>
+        When an agent goes wrong in production you need a stop button that does not require a
+        redeploy. <code>Freeze</code> halts outbound LLM calls the instant it is called, from inside
+        the process. Freeze everything, or freeze one customer (the same{" "}
+        <code>X-RateGuard-Customer</code> scope) to stop a single runaway user without touching the
+        rest. Frozen calls return a synthesized 403; unfreeze to resume.
+      </P>
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `rg.Freeze("")            // freeze everything\nrg.Freeze("acme-corp")   // or one customer\nrg.Unfreeze("acme-corp")\nrg.IsFrozen("acme-corp")  // true\nrg.FrozenScopes()         // ["customer=acme-corp"]`,
+          },
+          {
+            label: "Node.js",
+            code: `rg.freeze();             // freeze everything\nrg.freeze('acme-corp');  // or one customer\nrg.unfreeze('acme-corp');\nrg.isFrozen('acme-corp'); // true\nrg.frozenScopes();        // ['customer=acme-corp']`,
+          },
+          {
+            label: "Python",
+            code: `rg.freeze()              # freeze everything\nrg.freeze("acme-corp")   # or one customer\nrg.unfreeze("acme-corp")\nrg.is_frozen("acme-corp")  # True\nrg.frozen_scopes()          # ["customer=acme-corp"]`,
+          },
+        ]}
+      />
+      <Callout kind="tip" title="Trip it from ops tooling, not just code">
+        The freeze is also on the admin API: <code>POST /admin/freeze</code> with a{" "}
+        <code>scope</code> field (empty scope freezes everything), <code>POST /admin/unfreeze</code>,
+        and <code>GET /admin/frozen</code>. An on-call engineer can halt a runaway agent from a
+        dashboard or a curl, no deploy. This is the in-process form of the human-oversight interrupt
+        the EU AI Act Article 14 expects.
+      </Callout>
+
       <DocH2 id="pricing">Pricing your own models</DocH2>
       <P>
         RateGuard ships a small starter table of common models for the OTel{" "}

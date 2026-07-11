@@ -420,6 +420,11 @@ def create_httpx_transport(
                 call.customer = customer
                 del request.headers[core.customer_header]
 
+            # Kill switch: an operator freeze halts the call before anything
+            # else. Respects observe mode, which never blocks.
+            if core.enforce and core.runtime.freeze.halts(call.customer):
+                return synthesized(request, 403, "frozen", "rateguard: outbound calls frozen by operator", 0)
+
             body = request.read()
             if call.model == "" and body:
                 call.model = _model_from_body(body)
@@ -689,6 +694,11 @@ def create_httpx_async_transport(
             if customer:
                 call.customer = customer
                 del request.headers[core.customer_header]
+
+            # Kill switch: an operator freeze halts the call before anything
+            # else. Respects observe mode, which never blocks.
+            if core.enforce and core.runtime.freeze.halts(call.customer):
+                return synthesized(request, 403, "frozen", "rateguard: outbound calls frozen by operator", 0)
 
             body = await request.aread()
             if call.model == "" and body:

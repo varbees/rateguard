@@ -10,6 +10,7 @@ import { RedisGCRALimiter } from './core/redis-limiter.js';
 import { TokenBudgetManager } from './core/token-budget.js';
 import { LoopDetector } from './core/mcp.js';
 import { GuardrailLog } from './core/guardrail-log.js';
+import { FreezeController } from './core/freeze.js';
 import { readFirstHeader } from './core/utils.js';
 import { normalizeTokenBudgetMode, resolveRateGuardOptions, systemClock } from './config.js';
 import {
@@ -51,6 +52,7 @@ export class RateGuardRuntime {
   readonly eventEmitter: ReturnType<typeof createEventEmitter>;
   readonly loopDetector: LoopDetector;
   readonly guardrailLog: GuardrailLog;
+  readonly freeze = new FreezeController();
 
   constructor(options: RateGuardOptions = {}) {
     this.config = resolveRateGuardOptions(options);

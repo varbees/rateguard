@@ -2,6 +2,8 @@ package rateguard
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 )
 
@@ -25,6 +27,11 @@ import (
 //	                                returns its result unwrapped, for a UI
 //	                                to render directly instead of parsing
 //	                                MCP's text-envelope transport shape
+//	POST  /admin/freeze             {"scope": ""} — kill switch: halt outbound
+//	                                LLM calls for a scope (empty = everything,
+//	                                else a customer id). Returns the frozen list.
+//	POST  /admin/unfreeze           {"scope": ""} — lift a freeze
+//	GET   /admin/frozen             the currently frozen scopes
 //
 // Security posture: this handler has NO authentication and is not safe to
 // expose on the public internet — anyone who can reach it can read your
@@ -46,6 +53,9 @@ func (s *SDK) AdminHandler() http.Handler {
 	mux.HandleFunc("/admin/policy", s.handleAdminPolicy)
 	mux.HandleFunc("/admin/mcp/tools", s.handleAdminMCPTools)
 	mux.HandleFunc("/admin/mcp/call", s.handleAdminMCPCall)
+	mux.HandleFunc("/admin/freeze", s.handleAdminFreeze)
+	mux.HandleFunc("/admin/unfreeze", s.handleAdminUnfreeze)
+	mux.HandleFunc("/admin/frozen", s.handleAdminFrozen)
 	return withAdminCORS(mux, s.cfg.AdminCORSOrigin)
 }
 
@@ -185,6 +195,44 @@ func (s *SDK) handleAdminMCPCall(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeAdminError(w, http.StatusNotFound, "unknown tool \""+req.Tool+"\"")
+}
+
+// adminFreezeRequest is the body for /admin/freeze and /admin/unfreeze. An
+// empty scope (or an empty body) targets the global freeze; any other value
+// targets a single customer.
+type adminFreezeRequest struct {
+	Scope string `json:"scope"`
+}
+
+func (s *SDK) handleAdminFreeze(w http.ResponseWriter, r *http.Request) { s.freezeMutate(w, r, true) }
+func (s *SDK) handleAdminUnfreeze(w http.ResponseWriter, r *http.Request) {
+	s.freezeMutate(w, r, false)
+}
+
+func (s *SDK) freezeMutate(w http.ResponseWriter, r *http.Request, freeze bool) {
+	if r.Method != http.MethodPost {
+		writeAdminError(w, http.StatusMethodNotAllowed, "POST only")
+		return
+	}
+	var req adminFreezeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+		writeAdminError(w, http.StatusBadRequest, "invalid JSON body: "+err.Error())
+		return
+	}
+	if freeze {
+		s.freeze.Freeze(req.Scope)
+	} else {
+		s.freeze.Unfreeze(req.Scope)
+	}
+	writeAdminJSON(w, http.StatusOK, map[string]any{"frozen": s.freeze.FrozenScopes()})
+}
+
+func (s *SDK) handleAdminFrozen(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeAdminError(w, http.StatusMethodNotAllowed, "GET only")
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, map[string]any{"frozen": s.freeze.FrozenScopes()})
 }
 
 func writeAdminJSON(w http.ResponseWriter, status int, body any) {

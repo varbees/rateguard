@@ -512,6 +512,12 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
       requestInit.headers = entryHeaders;
     }
 
+    // Kill switch: an operator freeze halts the call before anything else.
+    // Respects observe mode, which never blocks.
+    if (mode !== 'observe' && runtime.freeze.halts(call.customer)) {
+      return synthesizedResponse(403, 'frozen', 'rateguard: outbound calls frozen by operator', 0);
+    }
+
     const body = typeof requestInit.body === 'string' ? requestInit.body : undefined;
     if (!call.model && body) {
       call.model = modelFromBody(body);

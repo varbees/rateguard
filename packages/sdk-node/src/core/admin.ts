@@ -19,6 +19,11 @@
  *                                   returns its result unwrapped, for a UI
  *                                   to render directly instead of parsing
  *                                   MCP's text-envelope transport shape
+ *   POST  /admin/freeze             {"scope": ""} — kill switch: halt outbound
+ *                                   LLM calls for a scope (empty = everything,
+ *                                   else a customer id). Returns the frozen list.
+ *   POST  /admin/unfreeze           {"scope": ""} — lift a freeze
+ *   GET   /admin/frozen             the currently frozen scopes
  *
  * Security posture: this handler has NO authentication and is not safe to
  * expose on the public internet — anyone who can reach it can read your
@@ -54,6 +59,9 @@ export interface AdminHost {
   mcpTools(): MCPTool[];
   policy(): PolicyPreset;
   setPolicy(update: PolicyUpdate): PolicyPreset;
+  freeze(scope: string): void;
+  unfreeze(scope: string): void;
+  frozenScopes(): string[];
 }
 
 /**
@@ -106,6 +114,12 @@ async function route(guard: AdminHost, req: IncomingMessage, res: ServerResponse
       return handleAdminMCPTools(guard, req, res);
     case '/admin/mcp/call':
       return handleAdminMCPCall(guard, req, res);
+    case '/admin/freeze':
+      return handleAdminFreeze(guard, req, res, true);
+    case '/admin/unfreeze':
+      return handleAdminFreeze(guard, req, res, false);
+    case '/admin/frozen':
+      return handleAdminFrozen(guard, req, res);
     default:
       writeAdminError(res, 404, 'not found');
   }
@@ -270,6 +284,40 @@ async function handleAdminMCPCall(guard: AdminHost, req: IncomingMessage, res: S
 
 function numberOrUndefined(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+async function handleAdminFreeze(
+  guard: AdminHost,
+  req: IncomingMessage,
+  res: ServerResponse,
+  freeze: boolean,
+): Promise<void> {
+  if (req.method !== 'POST') {
+    writeAdminError(res, 405, 'POST only');
+    return;
+  }
+  let scope = '';
+  try {
+    const raw = await readBody(req);
+    if (raw.trim()) {
+      const body = JSON.parse(raw) as { scope?: unknown };
+      scope = typeof body.scope === 'string' ? body.scope : '';
+    }
+  } catch (error) {
+    writeAdminError(res, 400, 'invalid JSON body: ' + (error as Error).message);
+    return;
+  }
+  if (freeze) guard.freeze(scope);
+  else guard.unfreeze(scope);
+  writeAdminJSON(res, 200, { frozen: guard.frozenScopes() });
+}
+
+function handleAdminFrozen(guard: AdminHost, req: IncomingMessage, res: ServerResponse): void {
+  if (req.method !== 'GET') {
+    writeAdminError(res, 405, 'GET only');
+    return;
+  }
+  writeAdminJSON(res, 200, { frozen: guard.frozenScopes() });
 }
 
 function readBody(req: IncomingMessage): Promise<string> {

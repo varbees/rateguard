@@ -179,6 +179,14 @@ func (t *genaiTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		req.Header.Del(customerHeader)
 	}
 
+	// Kill switch: an operator freeze halts the call before anything else.
+	// Respects observe mode, which never blocks.
+	if t.opts.Mode != OutboundModeObserve && t.sdk.freeze.halts(call.Customer) {
+		t.sdk.metrics.outboundFrozen.Add(1)
+		return synthesizedResponse(req, http.StatusForbidden, "frozen",
+			"rateguard: outbound calls frozen by operator", nil), nil
+	}
+
 	// Buffer the request body: needed for model detection and fallback retry.
 	var body []byte
 	if req.Body != nil {

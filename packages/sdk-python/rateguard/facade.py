@@ -273,6 +273,24 @@ class RateGuard:
 
         return wrap_acompletion(self, acompletion_fn)
 
+    def freeze(self, scope: str = "") -> None:
+        """Kill switch: halt outbound LLM calls for a scope from inside the
+        process. Empty scope freezes everything; any other value freezes that
+        customer (the X-RateGuard-Customer header). Frozen calls return a 403."""
+        self.runtime.freeze.freeze(scope)
+
+    def unfreeze(self, scope: str = "") -> None:
+        """Lift a freeze set by :meth:`freeze`."""
+        self.runtime.freeze.unfreeze(scope)
+
+    def is_frozen(self, scope: str = "") -> bool:
+        """Whether a scope is currently frozen."""
+        return self.runtime.freeze.is_frozen(scope)
+
+    def frozen_scopes(self) -> list[str]:
+        """Active freezes: ``*`` for a global freeze, ``customer=<id>`` per customer."""
+        return self.runtime.freeze.frozen_scopes()
+
     @property
     def asgi_middleware(self) -> type:
         from .adapters.asgi import RateGuardMiddleware as Middleware
