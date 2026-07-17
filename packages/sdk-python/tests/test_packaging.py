@@ -20,10 +20,18 @@ from __future__ import annotations
 
 import re
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
+
+# tomllib is 3.11+, and this package's declared floor is 3.10 — which the CI
+# matrix tests, and which this file promptly broke. The check is about repo
+# metadata, not runtime behaviour, so it is identical on every interpreter:
+# one matrix leg running it is full coverage. Skipping beats adding a tomli
+# dependency to a package whose whole point is having none.
+tomllib = pytest.importorskip(
+    "tomllib", reason="tomllib is 3.11+; the 3.13 matrix leg runs this check"
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 
