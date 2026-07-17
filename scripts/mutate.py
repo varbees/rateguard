@@ -471,6 +471,29 @@ def main() -> int:
             k = sum(1 for r in rs if r.killed)
             print(f"    {sdk:7} {100.0*k/len(rs):3.0f}%  ({k}/{len(rs)})")
 
+        # A score is only comparable across SDKs if the catalogues are.
+        # 100% over 4 mutations is not the same claim as 100% over 11, and
+        # printing them in one column implies it is. Worse, the asymmetry has a
+        # direction: the reference SDK accumulates mutations because it is the
+        # one we read, while the ports — which is where the SSE bug actually
+        # lived — accumulate fewer. Say it out loud rather than let the table
+        # flatter us.
+        if not args.sdk and len(by_sdk) > 1:
+            sizes = {sdk: len(rs) for sdk, rs in by_sdk.items()}
+            most, fewest = max(sizes.values()), min(sizes.values())
+            if most >= fewest * 2:
+                lagging = sorted(s for s, n in sizes.items() if n == fewest)
+                leading = sorted(s for s, n in sizes.items() if n == most)
+                print(
+                    f"\n  ⚠ catalogue is asymmetric: {', '.join(leading)}={most} vs "
+                    f"{', '.join(lagging)}={fewest}."
+                )
+                print(
+                    f"    {', '.join(lagging)} scoring 100% over {fewest} mutations is a weaker "
+                    f"claim than {', '.join(leading)} over {most} — these numbers are not "
+                    f"comparable.\n    Untested ports are exactly where the SSE bug lived."
+                )
+
         survivors = [r for r in results if not r.killed]
         if survivors:
             print(f"\n  {len(survivors)} SURVIVED — these bugs could ship today:\n")
