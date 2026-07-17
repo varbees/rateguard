@@ -23,6 +23,36 @@ describe('TokenBudgetManager', () => {
     expect(decision.retryAfterMs).toBeGreaterThanOrEqual(0);
   });
 
+  it('blocks at exactly the hourly cap, not one token past it', () => {
+    // The boundary is load-bearing and was undefended: mutation testing
+    // (scripts/mutate.py, node/budget-boundary-off-by-one) flipped the hour
+    // check from `used >= limit` to `used > limit` and NO test noticed. Every
+    // budget test either used hourLimit:0 (disabled) or exercised the month
+    // window, so the exact-cap hour boundary — where >= and > disagree — was
+    // never asserted. `>` there is a one-token overspend on every budget,
+    // forever. This pins it: usage exactly at the cap must block.
+    const budget = new TokenBudgetManager({ clock, capacity: 50_000 });
+    const key = 'tenant:route:upstream:GET';
+    budget.record(key, 100); // exactly the limit
+
+    const atCap = budget.check(key, {
+      hourLimit: 100,
+      dayLimit: 0,
+      monthLimit: 0,
+      mode: 'hard-stop',
+      softStopAt: 0.8,
+    });
+    expect(atCap.allowed, 'usage exactly at the hourly cap must block').toBe(false);
+
+    // And one below the cap must still pass, or `>=` would be over-strict.
+    const belowCap = new TokenBudgetManager({ clock, capacity: 50_000 });
+    belowCap.record(key, 99);
+    expect(
+      belowCap.check(key, { hourLimit: 100, dayLimit: 0, monthLimit: 0, mode: 'hard-stop', softStopAt: 0.8 }).allowed,
+      'usage one below the cap must be allowed',
+    ).toBe(true);
+  });
+
   it('reserves hard-budget capacity to prevent concurrent double spend', () => {
     const budget = new TokenBudgetManager({ clock, capacity: 50_000 });
     const key = 'tenant:route:upstream:GET';
