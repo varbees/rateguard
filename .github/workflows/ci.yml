@@ -123,6 +123,38 @@ jobs:
       - name: Every manifest capability must resolve in all three SDKs
         run: python3 scripts/parity_guard.py
 
+  mutation:
+    name: Would the tests notice? (mutation score)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: packages/sdk-go/go.sum
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Node deps
+        working-directory: packages/sdk-node
+        run: bun install --frozen-lockfile
+      - name: Install Python SDK
+        working-directory: packages/sdk-python
+        run: pip install -e '.[dev]'
+      # Coverage measures whether a line RAN. This measures whether a test would
+      # NOTICE the line being wrong — the only question that matters, and one
+      # ~800 green tests answered "no" to three times this month.
+      #
+      # Every mutation reproduces a defect this repo actually shipped. A
+      # survivor means we could ship that bug again today and stay green, so
+      # anything below 100% fails: the catalogue is small and hand-picked, not
+      # a generated spray where a survivor might be an equivalent mutant.
+      - name: Every known defect must be detected
+        run: python3 scripts/mutate.py --min-score 100
+
   doc-samples:
     name: Docs tell the truth
     runs-on: ubuntu-latest
