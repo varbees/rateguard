@@ -156,3 +156,33 @@ def test_unknown_schema_is_bounded_by_size(name: str, body: bytes) -> None:
     got = estimate_request_tokens(body)
     assert got > 0, f"{name}: reserve-all would serialize the whole budget key"
     assert got <= len(body) + DEFAULT_OUTPUT_ALLOWANCE, f"{name}: exceeds its own byte-count bound"
+
+
+def test_unknown_schema_estimate_scales_with_body_size() -> None:
+    """A bigger unknown body must reserve more. This is the property that matters.
+
+    Caught by mutation testing (scripts/mutate.py). The bounds assertions above
+    look thorough and are not: with the body's size ignored entirely — every
+    unknown body reserving a flat DEFAULT_OUTPUT_ALLOWANCE — both still pass.
+    4096 > 0 holds, and 4096 <= len(body) + 4096 holds for any body. So a
+    30-byte payload and a 300KB payload were indistinguishable to the suite,
+    which is exactly the under-reservation the size-bound exists to prevent.
+
+    Bounds are not behaviour. The behaviour is: the estimate tracks the bytes.
+    """
+    small = b'{"unknown_api": "' + b"x" * 100 + b'"}'
+    large = b'{"unknown_api": "' + b"x" * 100_000 + b'"}'
+
+    small_estimate = estimate_request_tokens(small)
+    large_estimate = estimate_request_tokens(large)
+
+    assert large_estimate > small_estimate, (
+        f"a 100KB unrecognized body reserved {large_estimate} and a 100-byte one "
+        f"reserved {small_estimate} — the estimate is ignoring the body's size, so a "
+        f"large prompt in a schema we do not parse slips through under-reserved"
+    )
+    # And it must actually track the bytes, not merely differ by one.
+    assert large_estimate >= small_estimate + 20_000, (
+        f"100KB of unknown body only moved the estimate from {small_estimate} to "
+        f"{large_estimate} — far below the ~25K tokens those bytes could carry"
+    )
