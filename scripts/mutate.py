@@ -188,6 +188,55 @@ CATALOGUE: list[Mutation] = [
         models="the DoW hole (b7f0fb6): provider reports no usage → charge 0 → a runaway streams free",
         expect="outbound streaming-without-usage suite",
     ),
+    # ── The kill switch ──
+    #
+    # Freeze is the operator's stop button — the thing you reach for at 3am
+    # while the bill climbs. A freeze that does not halt is worse than no
+    # freeze: you believe you stopped it.
+    Mutation(
+        id="go/freeze-does-not-halt",
+        sdk="go",
+        path="packages/sdk-go/freeze.go",
+        find="\treturn f.global || (customer != \"\" && f.customers[customer])",
+        replace="\treturn false",
+        models="the stop button does nothing — operator believes the bleeding stopped",
+        expect="freeze suite / TestLiveFreezeHaltsRealCalls",
+    ),
+    Mutation(
+        id="go/freeze-ignores-per-customer-scope",
+        sdk="go",
+        path="packages/sdk-go/freeze.go",
+        find="\treturn f.global || (customer != \"\" && f.customers[customer])",
+        replace="\treturn f.global",
+        models="Freeze(\"customer\") silently no-ops — only global freeze works",
+        expect="per-customer freeze suite",
+    ),
+    # ── The circuit breaker ──
+    #
+    # A breaker that never opens hammers a provider that is already failing,
+    # burning budget on calls that cannot succeed.
+    Mutation(
+        id="go/breaker-never-opens",
+        sdk="go",
+        path="packages/sdk-go/circuit_breaker.go",
+        find="\t\tif b.total >= b.minSamplesToTrip && b.errorRateLocked() > b.errorRateThreshold {",
+        replace="\t\tif false {",
+        models="breaker never trips → keep paying for calls to a dead provider",
+        expect="circuit breaker suite",
+    ),
+    # ── Rule 5 parity: Node and Python must peek by default too ──
+    #
+    # Go had this mutation from the start; Node and Python did not — the same
+    # reference-SDK bias the catalogue was built to eliminate.
+    Mutation(
+        id="python/rule5-checkloop-records-by-default",
+        sdk="python",
+        path="packages/sdk-python/rateguard/core/mcp.py",
+        find='        record = args.get("record", False)',
+        replace='        record = args.get("record", True)',
+        models="rule 5 violation: a passive check mutates state → agent halts over its own diligence",
+        expect="rule 5 / check_loop peek suite",
+    ),
     # ── CJK: a token is not four bytes ──
     Mutation(
         id="go/tokenizer-cjk-undercount",
