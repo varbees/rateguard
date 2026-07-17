@@ -1,0 +1,50 @@
+{
+  "note": "Shared oracle for streaming usage extraction. All 3 SDKs must produce identical usage from identical SSE bytes. These vectors exist because Python and Node silently reported NO usage for the single-usage-event case (the OpenAI-compatible shape) while Go handled it correctly: both gated the SSE path on the text containing a newline, so a lone 'data: {...}' line fell through to a JSON parser with the 'data: ' prefix still attached. A per-language test suite passed throughout. Captured shapes are real provider bytes where noted.",
+  "cases": [
+    {
+      "name": "openai_compatible_single_usage_final_chunk",
+      "note": "REAL bytes captured from NVIDIA NIM (meta/llama-3.1-8b-instruct) 2026-07-17. Only the final chunk carries usage and intermediates omit the field entirely — one usage-bearing line, no newline after the join. This is the case that was broken in Python and Node.",
+      "sse": "data: {\"id\":\"chatcmpl-x\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"One\"}}],\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-x\",\"choices\":[],\"created\":1784262533,\"model\":\"meta/llama-3.1-8b-instruct\",\"object\":\"chat.completion.chunk\",\"usage\":{\"prompt_tokens\":39,\"completion_tokens\":15,\"total_tokens\":54,\"prompt_tokens_details\":{\"cached_tokens\":16}}}\n\ndata: [DONE]\n\n",
+      "expect_found": true,
+      "expect_input_tokens": 39,
+      "expect_output_tokens": 15,
+      "expect_total_tokens": 54
+    },
+    {
+      "name": "openai_null_usage_intermediates",
+      "note": "OpenAI proper sends \"usage\":null in every intermediate chunk and the real numbers in the final one. MAX-merge must ignore the nulls rather than reset on them.",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"a\"}}],\"usage\":null}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"b\"}}],\"usage\":null}\n\ndata: {\"choices\":[],\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":30,\"total_tokens\":150}}\n\ndata: [DONE]\n\n",
+      "expect_found": true,
+      "expect_input_tokens": 120,
+      "expect_output_tokens": 30,
+      "expect_total_tokens": 150
+    },
+    {
+      "name": "anthropic_split_input_output",
+      "note": "Anthropic reports input tokens at message_start and output tokens at message_delta, repeating fields. Summing would double-count input; MAX per field is correct.",
+      "sse": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"usage\":{\"input_tokens\":100,\"output_tokens\":1}}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"usage\":{\"output_tokens\":45}}\n\n",
+      "expect_found": true,
+      "expect_input_tokens": 100,
+      "expect_output_tokens": 45,
+      "expect_total_tokens": 145
+    },
+    {
+      "name": "no_usage_anywhere",
+      "note": "A stream without include_usage emits no usage at all. Extraction must report NOT FOUND so the caller commits its reserved estimate rather than zero — the denial-of-wallet path.",
+      "sse": "data: {\"choices\":[{\"delta\":{\"content\":\"hello\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" world\"}}]}\n\ndata: [DONE]\n\n",
+      "expect_found": false,
+      "expect_input_tokens": 0,
+      "expect_output_tokens": 0,
+      "expect_total_tokens": 0
+    },
+    {
+      "name": "single_line_no_trailing_newline",
+      "note": "The minimal reproduction: exactly one data line, no trailing newline. Newline-gated SSE detection fails here and returns nothing.",
+      "sse": "data: {\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":3,\"total_tokens\":10}}",
+      "expect_found": true,
+      "expect_input_tokens": 7,
+      "expect_output_tokens": 3,
+      "expect_total_tokens": 10
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import { ShardedLimiter } from '../src/core/sharded-limiter.js';
 import { privateKeyFromRaw, signingPayload } from '../src/core/budget-attestation.js';
 import { EvidenceChain, GENESIS_PREV_HASH } from '../src/core/evidence-chain.js';
 import { issueSpendReceipt } from '../src/core/spend-receipt.js';
+import { extractTokenUsageFromText } from '../src/core/utils.js';
 
 interface ConformanceVectors {
   policy: { requests_per_second: number; burst: number };
@@ -196,4 +197,48 @@ describe('Conformance: evidence chain', () => {
     expect(pkg.totalTokens).toBe(v.total_tokens);
     expect(pkg.totalEstimatedCostMicroUSD).toBe(v.total_estimated_cost_micro_usd);
   });
+});
+
+// ── Streaming usage extraction ──
+//
+// Rule 13: parity claims must be conformance-tested, not assumed. These
+// vectors exist because Node and Python silently reported NO usage for the
+// single-usage-event case (the OpenAI-compatible shape) while Go handled it
+// correctly — a real divergence that every per-language suite passed through.
+
+interface SSEUsageVectors {
+  cases: Array<{
+    name: string;
+    note: string;
+    sse: string;
+    expect_found: boolean;
+    expect_input_tokens: number;
+    expect_output_tokens: number;
+    expect_total_tokens: number;
+  }>;
+}
+
+describe('Conformance: streaming usage extraction', () => {
+  const sseVectors: SSEUsageVectors = JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL('../../../conformance/sse_usage_vectors.json', import.meta.url)),
+      'utf-8',
+    ),
+  );
+
+  for (const c of sseVectors.cases) {
+    it(c.name, () => {
+      const usage = extractTokenUsageFromText(c.sse);
+
+      if (!c.expect_found) {
+        expect(usage === undefined || usage.totalTokens === 0, c.note).toBe(true);
+        return;
+      }
+
+      expect(usage, `no usage extracted — ${c.note}`).toBeDefined();
+      expect(usage!.inputTokens, c.note).toBe(c.expect_input_tokens);
+      expect(usage!.outputTokens, c.note).toBe(c.expect_output_tokens);
+      expect(usage!.totalTokens, c.note).toBe(c.expect_total_tokens);
+    });
+  }
 });

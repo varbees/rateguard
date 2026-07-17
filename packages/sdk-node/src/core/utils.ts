@@ -197,12 +197,25 @@ function mergeUsage(base: TokenUsage, addition: TokenUsage): TokenUsage {
 /**
  * Extract token usage from a JSON or SSE response body.
  */
+/** True when any line begins an SSE data event. */
+function hasSSEDataLine(text: string): boolean {
+  return text.split(/\r?\n/).some((line) => line.trim().startsWith('data:'));
+}
+
 export function extractTokenUsageFromText(text: string): TokenUsage | undefined {
   if (!text.trim()) {
     return undefined;
   }
 
-  if (text.includes('\n') && text.includes('data:')) {
+  // SSE is decided by a line ACTUALLY starting with "data:", not by the text
+  // containing a newline. Requiring a newline broke the single-usage-event
+  // case — which is the OpenAI-compatible shape, where only the final chunk
+  // carries usage. That text is one "data: {...}" line with no newline, so it
+  // fell through and got JSON-parsed WITH the "data: " prefix still on it,
+  // failing silently and reporting no usage at all. Substring-matching
+  // 'data:' alone is not enough either: a plain JSON body like {"data":[...]}
+  // contains it.
+  if (hasSSEDataLine(text)) {
     const chunks = text
       .split(/\r?\n/)
       .map((line) => line.trim())

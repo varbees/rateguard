@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import base64
 import json
+
+import pytest
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,6 +26,7 @@ from rateguard import (
     signing_payload,
 )
 from rateguard.core.budget_attestation import private_key_from_raw
+from rateguard.core.outbound import _extract_sse_usage
 from rateguard.types import RateLimitOptions
 
 from .helpers import FixedClock
@@ -144,3 +147,27 @@ def test_conformance_evidence_chain() -> None:
     pkg = chain.export_evidence(v["issued_at_unix"])
     assert pkg.total_tokens == v["total_tokens"]
     assert pkg.total_estimated_cost_micro_usd == v["total_estimated_cost_micro_usd"]
+
+
+# ── Streaming usage extraction ──
+#
+# Rule 13: parity claims must be conformance-tested, not assumed. These
+# vectors exist because Python and Node silently reported NO usage for the
+# single-usage-event case (the OpenAI-compatible shape) while Go handled it
+# correctly — a real divergence that every per-language suite passed through.
+
+SSE_VECTORS_PATH = Path(__file__).resolve().parents[3] / "conformance" / "sse_usage_vectors.json"
+
+
+@pytest.mark.parametrize("case", json.loads(SSE_VECTORS_PATH.read_text())["cases"], ids=lambda c: c["name"])
+def test_conformance_sse_usage(case: dict) -> None:
+    usage = _extract_sse_usage(case["sse"])
+
+    if not case["expect_found"]:
+        assert usage is None or usage.total_tokens == 0, case["note"]
+        return
+
+    assert usage is not None, f"no usage extracted — {case['note']}"
+    assert usage.input_tokens == case["expect_input_tokens"], case["note"]
+    assert usage.output_tokens == case["expect_output_tokens"], case["note"]
+    assert usage.total_tokens == case["expect_total_tokens"], case["note"]

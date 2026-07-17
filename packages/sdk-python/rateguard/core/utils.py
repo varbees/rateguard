@@ -95,13 +95,26 @@ def is_json_value(value: object) -> TypeGuard[JsonValue]:
     return False
 
 
+def _has_sse_data_line(text: str) -> bool:
+    """True when any line begins an SSE data event."""
+    return any(line.strip().startswith("data:") for line in text.splitlines())
+
+
 def extract_token_usage_from_text(text: str) -> TokenUsage | None:
     from ..extractors.generic import extract_token_usage_from_value
 
     stripped = text.strip()
     if not stripped:
         return None
-    if "data:" in text and "\n" in text:
+    # SSE is decided by a line ACTUALLY starting with "data:", not by the text
+    # containing a newline. Requiring a newline broke the single-usage-event
+    # case — which is the OpenAI-compatible shape, where only the final chunk
+    # carries usage. That text is one "data: {...}" line with no newline, so
+    # it fell through and got JSON-parsed WITH the "data: " prefix still on
+    # it, failing silently and reporting no usage at all. Substring-matching
+    # "data:" alone is not enough either: a plain JSON body like
+    # {"data":[...]} contains it.
+    if _has_sse_data_line(stripped):
         aggregate: TokenUsage | None = None
         for line in stripped.splitlines():
             line = line.strip()
