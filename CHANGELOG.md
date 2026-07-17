@@ -95,7 +95,7 @@ found by ~790 passing tests.
   tokens for a 50-token call**. MAX-per-field is what makes it correct, and that
   is now pinned. DeepSeek carries `prompt_cache_hit_tokens`; NIM sends a null
   `audio_tokens`.
-- **CI, for the first time.** ~790 tests across three SDKs and no pipeline —
+- **CI, for the first time.** 800+ tests across three SDKs and no pipeline —
   every run was manual, which is how the SSE bug stayed green. Adds Go
   (`-race`), Node, Python (3.10 + 3.13, `mypy --strict`), a zero-dependency
   import check, cross-SDK parity, and doc-sample verification.
