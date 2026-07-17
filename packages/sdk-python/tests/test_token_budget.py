@@ -9,6 +9,30 @@ from .helpers import FixedClock, RecorderEmitter, Usage
 
 
 @pytest.mark.asyncio
+async def test_token_budget_blocks_at_exactly_the_hourly_cap() -> None:
+    # The boundary was undefended: mutation testing (scripts/mutate.py,
+    # python/budget-boundary-off-by-one) flipped the hour check from
+    # `hour >= limit` to `hour > limit` and no test noticed — every budget test
+    # used hour_limit=0 (disabled) or the month window, so the exact-cap hour
+    # boundary, the only place >= and > disagree, was never asserted. `>` there
+    # is a one-token overspend on every budget, forever. Node hid the identical
+    # gap; the symmetric mutation catalogue found both.
+    budget = TokenBudget(clock=FixedClock(), hour_limit=100, day_limit=0, month_limit=0, mode="hard-stop", soft_stop_at=0.8)
+    budget.record("user:cap", 100)  # exactly the limit
+    with pytest.raises(BudgetExceeded):
+        async with budget.enforce("user:cap"):
+            raise AssertionError("usage exactly at the hourly cap must block")
+
+    # One below the cap must still pass, or `>=` would be over-strict.
+    below = TokenBudget(clock=FixedClock(), hour_limit=100, day_limit=0, month_limit=0, mode="hard-stop", soft_stop_at=0.8)
+    below.record("user:cap", 99)
+    ran = False
+    async with below.enforce("user:cap"):
+        ran = True
+    assert ran, "usage one below the cap must be allowed"
+
+
+@pytest.mark.asyncio
 async def test_token_budget_hard_stop_blocks_before_call() -> None:
     emitter = RecorderEmitter()
     budget = TokenBudget(
