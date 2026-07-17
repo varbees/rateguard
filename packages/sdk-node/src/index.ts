@@ -22,6 +22,7 @@ export * from './core/enforcement-log.js';
 export * from './core/semantic-cache.js';
 export * from './core/semantic-loop.js';
 export * from './core/spend-receipt.js';
+export * from './core/evidence-chain.js';
 export * from './core/focus-export.js';
 export * from './core/realtime.js';
 export * from './core/static-embedder.js';

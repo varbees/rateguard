@@ -174,7 +174,7 @@ describe.skipIf(!MODEL_PATH)('StaticEmbedder golden conformance', () => {
       expect(vec).toHaveLength(c.embedding.length);
       for (let j = 0; j < vec.length; j++) {
         expect(
-          Math.abs(vec[j] - c.embedding[j]),
+          Math.abs(vec[j]! - c.embedding[j]!),
           `dim ${j} of ${JSON.stringify(c.text)}`,
         ).toBeLessThanOrEqual(1e-4);
       }
@@ -217,7 +217,8 @@ describe('StaticEmbedder verified loading', () => {
     // Flip one byte deep in the embedding matrix: parses perfectly, silently
     // returns different vectors. This is the attack the digest exists to catch.
     const data = readFileSync(path);
-    data[data.length - 3] ^= 0xff;
+    const idx = data.length - 3;
+    data.writeUInt8(data.readUInt8(idx) ^ 0xff, idx);
     writeFileSync(path, data);
 
     // Still a loadable model — proving the digest, not the parser, rejects it.

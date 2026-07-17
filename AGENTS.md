@@ -55,6 +55,9 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Semantic loop detection (paraphrase loops via local embeddings; cosine window, Check/Peek split, threshold 0.90 empirically calibrated — public primitive, NOT yet wired into middleware/outbound) | ✅ | ✅ | ✅ | `semantic_loop.go` |
 | Budget attestation (Ed25519 delegation chains) | ✅ | ✅ | ✅ | `budget_attestation.go` |
 | Spend receipts (Ed25519-signed proof of spend; integer-only signing payload — unix seconds + micro-USD; caller-fed, RateGuard holds no keys; optional attestation binding) | ✅ | ✅ | ✅ | `spend_receipt.go` |
+| Evidence chain (hash-linked receipt log — SHA-256 `prev_hash`, integer-only hashed payload, conformance-locked; catches deletion/reorder/edit; `wantHead` catches wholesale rewrite only if the head was witnessed externally) | ✅ | ✅ | ✅ | `evidence_chain.go` |
+| External signer (`Signer` interface — private key lives in a KMS/HSM the process cannot read; mismatched-key and short-signature rejected at issue time; the prerequisite for any "independently verifiable" claim) | ✅ | ✅ | ✅ | `evidence_chain.go` |
+| Evidence package export (auditor-ready JSON: entries + head + issuer key + recomputed totals + embedded caveats; `BilledCost`-style honesty — estimates, never invoice truth) | ✅ | ✅ | ✅ | `evidence_chain.go` |
 | FOCUS-aligned cost export (core FOCUS columns, tokens via ConsumedQuantity/ConsumedUnit, x_-prefixed extensions; BilledCost always 0 — estimates, never invoice truth) | ✅ | ✅ | ✅ | `focus_export.go` |
 | MCP stdio server (zero-dep JSON-RPC) | ✅ | ✅ | ✅ | `mcp_server.go` |
 | Loop detection (SHA-256, max-depth, LRU-bounded) | ✅ | ✅ | ✅ | `loop_detector.go` |
@@ -91,13 +94,13 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (207 test funcs, all with -race)
+# Go tests (225 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (257 passing)
+# Node tests (276 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (276 passing)
+# Python tests (296 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Python strict typecheck (mypy --strict passes clean on all 51 source files)
@@ -132,7 +135,7 @@ opensrc path github.com/varbees/rateguard/packages/sdk-go
 10. **Pre-flight queries must never consume.** Anything advertised as a "check before you call" (MCP tools, dashboards) must use Peek/read-only paths — never `Allow()`, which consumes a token, and never `breaker.Allow()`, which claims the half-open probe.
 11. **Transports must be byte-transparent.** The outbound wrapper delivers the exact bytes the provider sent — never rewrite line endings, never buffer a stream whole, never alter framing. Usage extraction happens on a bounded side-scan (see `sse_usage.go`).
 12. **Streaming usage events must be decoded individually and merged with MAX semantics.** OpenAI sends `"usage":null` in every intermediate chunk; Anthropic splits input (message_start) from output (message_delta) and repeats fields. Concatenating chunks or summing fields double-counts — all three SDKs merge per-event maxima.
-13. **Parity claims must be conformance-tested, not assumed.** `conformance/token_bucket_vectors.json` is the shared oracle all 3 SDKs replay (`TestConformanceTokenBucket`, `conformance.test.ts`, `test_conformance.py`) — a passing per-language test suite does not by itself prove cross-language behavioral parity. `retry_after_ms` rounding is unified across all 3 SDKs (ceil to the nearest whole second, floored at 1000ms) and asserted by the conformance vectors on every deny step, including a >1s-deficit case that distinguishes whole-second ceiling from millisecond ceiling. `conformance/budget_attestation_expiry_vectors.json` is the same idea for budget attestation: Go's time.Time JSON marshaling trims trailing zero fractional digits, Python's isoformat emits fixed microseconds, and Node's toISOString emits fixed milliseconds — three different byte strings for the same instant, silently breaking cross-language Ed25519 verification. `expires_at` is truncated to whole seconds before it enters the signing payload in all 3 SDKs (`TestConformanceBudgetAttestationExpiry`, `conformance.test.ts`, `test_conformance.py`) specifically to remove the fractional component that caused the mismatch.
+13. **Parity claims must be conformance-tested, not assumed.** `conformance/token_bucket_vectors.json` is the shared oracle all 3 SDKs replay (`TestConformanceTokenBucket`, `conformance.test.ts`, `test_conformance.py`) — a passing per-language test suite does not by itself prove cross-language behavioral parity. `retry_after_ms` rounding is unified across all 3 SDKs (ceil to the nearest whole second, floored at 1000ms) and asserted by the conformance vectors on every deny step, including a >1s-deficit case that distinguishes whole-second ceiling from millisecond ceiling. `conformance/budget_attestation_expiry_vectors.json` is the same idea for budget attestation: Go's time.Time JSON marshaling trims trailing zero fractional digits, Python's isoformat emits fixed microseconds, and Node's toISOString emits fixed milliseconds — three different byte strings for the same instant, silently breaking cross-language Ed25519 verification. `expires_at` is truncated to whole seconds before it enters the signing payload in all 3 SDKs (`TestConformanceBudgetAttestationExpiry`, `conformance.test.ts`, `test_conformance.py`) specifically to remove the fractional component that caused the mismatch. `conformance/evidence_chain_vectors.json` extends the same discipline to the evidence chain: a hash-linked log is only verifiable across languages if every SDK hashes identical bytes, so the vectors pin each `entry_hash` and the final `chain_head` against the Go reference (`TestConformanceEvidenceChain`, `conformance.test.ts`, `test_conformance.py`). The hashed payload is `{v, seq, prev_hash, receipt_signature}` — integers and strings only, receipt represented by its signature (which already covers the claims) rather than by re-canonicalizing the claims in three languages.
 
 ## Domain types
 

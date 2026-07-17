@@ -102,6 +102,17 @@ from .core.realtime import (
 )
 from .core.semantic_loop import SemanticLoopDecision, SemanticLoopDetector, SemanticLoopOptions
 from .core.sharded_limiter import ShardedLimiter
+from .core.evidence_chain import (
+    GENESIS_PREV_HASH,
+    EvidenceChain,
+    EvidenceChainEntry,
+    EvidencePackage,
+    KeySigner,
+    Signer,
+    issue_spend_receipt_with_signer,
+    verify_evidence_chain,
+    verify_evidence_package,
+)
 from .core.spend_receipt import (
     SpendReceipt,
     SpendReceiptClaims,
@@ -279,6 +290,16 @@ __all__ = [
     "issue_spend_receipt",
     "receipt_signing_payload",
     "verify_spend_receipt",
+    # Evidence chain (tamper-evident spend history + external signers)
+    "EvidenceChain",
+    "EvidenceChainEntry",
+    "EvidencePackage",
+    "GENESIS_PREV_HASH",
+    "KeySigner",
+    "Signer",
+    "issue_spend_receipt_with_signer",
+    "verify_evidence_chain",
+    "verify_evidence_package",
     "FOCUS_HEADER",
     "FOCUSRow",
     "focus_row_from_receipt",

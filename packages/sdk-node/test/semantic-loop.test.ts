@@ -38,8 +38,7 @@ describe("SemanticLoopDetector", () => {
       ["B",  false],
       ["A2", true],
     ];
-    for (let i = 0; i < steps.length; i++) {
-      const [text, wantLoop] = steps[i];
+    for (const [text, wantLoop] of steps) {
       const dec = await d.check("agent-1", text);
       expect(dec.loop).toBe(wantLoop);
     }
@@ -131,7 +130,7 @@ describe.skipIf(!process.env.RATEGUARD_EMBED_MODEL)("real model paraphrase loop"
 
     let tripped = -1;
     for (let i = 0; i < steps.length; i++) {
-      const dec = await d.check("analyzer-verifier", steps[i]);
+      const dec = await d.check("analyzer-verifier", steps[i]!);
       if (dec.loop) {
         tripped = i;
         break;
