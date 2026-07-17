@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25.x'
           cache-dependency-path: packages/sdk-go/go.sum
       - run: go build ./...
       - run: go vet ./...
@@ -104,7 +104,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25.x'
           cache-dependency-path: packages/sdk-go/go.sum
       - uses: oven-sh/setup-bun@v2
         with:
@@ -130,7 +130,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25.x'
           cache-dependency-path: packages/sdk-go/go.sum
       - uses: oven-sh/setup-bun@v2
         with:
@@ -154,6 +154,57 @@ jobs:
       # a generated spray where a survivor might be an equivalent mutant.
       - name: Every known defect must be detected
         run: python3 scripts/mutate.py --min-score 100
+
+  supply-chain:
+    name: Dependencies have no known vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: packages/sdk-go/go.sum
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # Go: govulncheck traces ACTUAL CALLED CODE, not just the dep list — the
+      # gold standard. It found (and we fixed) x/net and otel/sdk vulns, and it
+      # is why CI pins go 1.25.x: the stdlib fixes ship in the toolchain patch.
+      # A crypto library that ships known-vulnerable transitive deps has no
+      # business asking anyone to trust its signatures.
+      - name: Go — govulncheck (fails on called vulnerabilities)
+        working-directory: packages/sdk-go
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+      # Node: the gate is what SHIPS, and the published package has zero runtime
+      # dependencies (files: ["dist"]). --prod audits exactly that surface and
+      # must be clean. Dev-tooling advisories (vite/esbuild/vitest — all
+      # Windows-dev-server issues that never ship and CI never runs) are
+      # reported but do not fail the build: failing on a vuln that cannot reach
+      # a user teaches everyone to ignore the gate.
+      - name: Node — audit shipped deps (fails); report dev deps
+        working-directory: packages/sdk-node
+        run: |
+          bun install --frozen-lockfile
+          echo "::group::dev-dependency advisories (informational)"
+          bun audit || true
+          echo "::endgroup::"
+          echo "shipped dependencies (must be clean):"
+          bun audit --prod
+
+      # Python: the runtime is stdlib-only (crypto/httpx/redis are optional
+      # extras, lazily imported). pip-audit against a no-deps install is the
+      # shipped surface.
+      - name: Python — pip-audit the shipped install
+        working-directory: packages/sdk-python
+        run: |
+          python -m pip install --quiet pip-audit
+          python -m pip install --quiet --no-deps -e .
+          pip-audit --progress-spinner off
 
   doc-samples:
     name: Docs tell the truth
