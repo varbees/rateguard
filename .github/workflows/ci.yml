@@ -121,3 +121,27 @@ jobs:
       # conformance suites in each language job above.
       - name: Every manifest capability must resolve in all three SDKs
         run: python3 scripts/parity_guard.py
+
+  doc-samples:
+    name: Docs tell the truth
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: packages/sdk-node/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Node deps
+        working-directory: packages/sdk-node
+        run: npm ci
+      # The docs told users to write `tokenBudgetPerHour: 250_000`, which does
+      # not exist: Python raised TypeError, and Node SILENTLY ignored it and
+      # handed back the preset's 10,000. A spend-control product whose docs
+      # misconfigure the spend control is the worst failure available to it, and
+      # it shipped because nothing ever ran the samples.
+      - name: Every Node and Python doc sample must typecheck against the real API
+        run: python3 scripts/check_doc_samples.py
