@@ -382,7 +382,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 	// the body is unparseable — the fail-safe direction.
 	estimate := t.opts.EstimatedTokens
 	if t.deriveEstimate {
-		estimate = estimateRequestTokens(body, nil)
+		estimate = EstimateRequestTokens(body, nil)
 	}
 	reservation := s.tokens.reserveWithEstimate(budgetKey, s.Policy(), TokenBudgetMode(s.Policy().TokenBudgetMode), estimate)
 	if reservation.Applied && !reservation.Allowed && enforce {

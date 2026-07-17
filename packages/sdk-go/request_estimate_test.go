@@ -22,7 +22,7 @@ func TestEstimateRequestTokensOpenAIChat(t *testing.T) {
 		"max_tokens": 500
 	}`)
 
-	got := estimateRequestTokens(body, nil)
+	got := EstimateRequestTokens(body, nil)
 
 	// Prompt is ~50 chars -> ~13 tokens; the request declares a 500-token
 	// ceiling. The estimate must be prompt + ceiling, not a constant.
@@ -49,7 +49,7 @@ func TestEstimateRequestTokensLongContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := estimateRequestTokens(body, nil)
+	got := EstimateRequestTokens(body, nil)
 
 	const oldConstant = 4096
 	if got <= oldConstant {
@@ -72,7 +72,7 @@ func TestEstimateRequestTokensAnthropicSystemAndCeiling(t *testing.T) {
 		"max_tokens": 2048
 	}`)
 
-	got := estimateRequestTokens(body, nil)
+	got := EstimateRequestTokens(body, nil)
 	if got <= 2048 {
 		t.Fatalf("estimate %d ignored the system prompt or the ceiling", got)
 	}
@@ -85,7 +85,7 @@ func TestEstimateRequestTokensGeminiShape(t *testing.T) {
 		"generationConfig": {"maxOutputTokens": 256}
 	}`)
 
-	got := estimateRequestTokens(body, nil)
+	got := EstimateRequestTokens(body, nil)
 	if got <= 256 {
 		t.Fatalf("estimate %d missed Gemini's contents/systemInstruction text", got)
 	}
@@ -104,7 +104,7 @@ func TestEstimateRequestTokensMultimodalPartsCountText(t *testing.T) {
 		"max_tokens": 100
 	}`)
 
-	got := estimateRequestTokens(body, nil)
+	got := EstimateRequestTokens(body, nil)
 	// The text part counts; the image does not (its cost is not derivable
 	// from the request). Documented under-count, asserted so it stays known.
 	if got <= 100 {
@@ -124,7 +124,7 @@ func TestEstimateRequestTokensCJKNotUndercounted(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got := estimateRequestTokens(body, nil)
+	got := EstimateRequestTokens(body, nil)
 	if got < 2000 {
 		t.Fatalf("CJK prompt estimated at %d — under-counted (~2000 tokens expected)", got)
 	}
@@ -142,12 +142,12 @@ func TestEstimateRequestTokensReserveAllOnlyWhenUnwalkable(t *testing.T) {
 	}{
 		{"empty", nil},
 		{"oversized", []byte(`{"messages":[{"role":"user","content":"` +
-			strings.Repeat("x", maxEstimateBodyBytes+1) + `"}]}`)},
+			strings.Repeat("x", MaxEstimateBodyBytes+1) + `"}]}`)},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := estimateRequestTokens(tc.body, nil); got != 0 {
+			if got := EstimateRequestTokens(tc.body, nil); got != 0 {
 				t.Fatalf("estimate %d for %s — want 0 (reserve-all)", got, tc.name)
 			}
 		})
@@ -172,14 +172,14 @@ func TestEstimateRequestTokensUnknownSchemaIsBoundedBySize(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := estimateRequestTokens(tc.body, nil)
+			got := EstimateRequestTokens(tc.body, nil)
 			if got == 0 {
 				t.Fatalf("%s: got reserve-all — a small unrecognized body must not "+
 					"serialize the whole budget key", tc.name)
 			}
 			// Upper bound: every byte counted as a token, plus the output
 			// allowance. Nothing can legitimately exceed that.
-			if max := int64(len(tc.body)) + defaultOutputAllowance; got > max {
+			if max := int64(len(tc.body)) + DefaultOutputAllowance; got > max {
 				t.Fatalf("%s: estimate %d exceeds its own byte-count bound %d", tc.name, got, max)
 			}
 		})
@@ -190,7 +190,7 @@ func TestEstimateRequestTokensHonorsCustomTokenizer(t *testing.T) {
 	body := []byte(`{"messages":[{"role":"user","content":"hello"}],"max_tokens":10}`)
 
 	// A tokenizer that claims every prompt is exactly 777 tokens.
-	got := estimateRequestTokens(body, TokenizerFunc(func(string) int { return 777 }))
+	got := EstimateRequestTokens(body, TokenizerFunc(func(string) int { return 777 }))
 	if want := int64(777 + 10); got != want {
 		t.Fatalf("custom tokenizer ignored: got %d, want %d", got, want)
 	}
@@ -204,7 +204,7 @@ func TestEstimateRequestTokensPrefersCompletionCeiling(t *testing.T) {
 		"max_completion_tokens": 4000
 	}`)
 
-	got := estimateRequestTokens(body, nil)
+	got := EstimateRequestTokens(body, nil)
 	if got < 4000 {
 		t.Fatalf("estimate %d used max_tokens (10) over max_completion_tokens (4000)", got)
 	}
@@ -224,7 +224,7 @@ func TestEstimateBoundsOvershootForLongContext(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	estimate := estimateRequestTokens(body, nil)
+	estimate := EstimateRequestTokens(body, nil)
 	actual := estimate // a call that burns exactly what it reserved
 
 	// The measured bound from token_budget_concurrency_test.go:

@@ -42,16 +42,16 @@ import (
 // Rule 6 (byte transparency) is preserved: this reads bytes the transport has
 // already buffered and never rewrites the request.
 
-// defaultOutputAllowance is reserved for the completion when a request
+// DefaultOutputAllowance is reserved for the completion when a request
 // declares no ceiling of its own. Providers default to "until the model
 // stops", so there is no true bound to read — this is an allowance, not a
 // measurement, and it is the one guess left in the estimate.
-const defaultOutputAllowance = 4096
+const DefaultOutputAllowance = 4096
 
-// maxEstimateBodyBytes caps the body size this will parse. Beyond it, fall
+// MaxEstimateBodyBytes caps the body size this will parse. Beyond it, fall
 // back to reserve-all (the safe direction) rather than spend unbounded CPU
 // walking a hostile payload on the hot path.
-const maxEstimateBodyBytes = 4 << 20 // 4 MiB
+const MaxEstimateBodyBytes = 4 << 20 // 4 MiB
 
 // estimateRequestBody is the request shape across OpenAI-compatible,
 // Anthropic, and Gemini APIs. Every field is optional; absent ones cost
@@ -94,7 +94,7 @@ type estimateRequestBody struct {
 //
 // Non-text parts (images, audio) are skipped: their token cost is
 // provider-specific and not derivable from the request bytes, so the estimate
-// under-counts them. Documented in estimateRequestTokens' contract, not hidden.
+// under-counts them. Documented in EstimateRequestTokens' contract, not hidden.
 func writeContent(raw json.RawMessage, sb *strings.Builder) {
 	if text := contentText(raw); text != "" {
 		sb.WriteString(text)
@@ -117,10 +117,10 @@ func writeContent(raw json.RawMessage, sb *strings.Builder) {
 // under-count what the model will read — it over-counts by the JSON structure
 // around it, which is the direction that protects the budget.
 func wholeBodyUpperBound(body []byte, tokenizer Tokenizer) int64 {
-	return int64(EstimateWith(tokenizer, string(body))) + defaultOutputAllowance
+	return int64(EstimateWith(tokenizer, string(body))) + DefaultOutputAllowance
 }
 
-// estimateRequestTokens derives a budget reservation from the request itself:
+// EstimateRequestTokens derives a budget reservation from the request itself:
 // measured prompt tokens plus the output ceiling the request declares.
 //
 // Unknown schemas do NOT fall back to reserve-all. That was the first cut, and
@@ -141,8 +141,8 @@ func wholeBodyUpperBound(body []byte, tokenizer Tokenizer) int64 {
 // Non-text modalities (images, audio) are not counted; their cost is not
 // derivable from the request bytes. For those workloads set EstimatedTokens
 // explicitly.
-func estimateRequestTokens(body []byte, tokenizer Tokenizer) int64 {
-	if len(body) == 0 || len(body) > maxEstimateBodyBytes {
+func EstimateRequestTokens(body []byte, tokenizer Tokenizer) int64 {
+	if len(body) == 0 || len(body) > MaxEstimateBodyBytes {
 		return 0
 	}
 
@@ -187,7 +187,7 @@ func estimateRequestTokens(body []byte, tokenizer Tokenizer) int64 {
 
 	input := int64(EstimateWith(tokenizer, promptText))
 
-	output := int64(defaultOutputAllowance)
+	output := int64(DefaultOutputAllowance)
 	switch {
 	case payload.MaxCompletionTokens != nil && *payload.MaxCompletionTokens > 0:
 		output = *payload.MaxCompletionTokens
