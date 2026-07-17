@@ -62,11 +62,14 @@ limiter.reset(key)
 ```
 
 Verified by a cross-language conformance suite (`conformance/token_bucket_vectors.json`) that
-replays one shared oracle — the same `(advance_ms, n, expected allowed, expected remaining)`
-sequence — against all 3 SDKs, proving real behavioral parity rather than just matching test
-counts. Known current exception: `retry_after_ms` rounding differs across SDKs (Go rounds up to
-the nearest whole second; Node/Python round up to the nearest whole millisecond, floored at
-1000ms) — not yet unified, see AGENTS.md rule 13.
+replays one shared oracle — the same `(advance_ms, n, expected allowed, expected remaining,
+expected retry_after_ms)` sequence — against all 3 SDKs, proving real behavioral parity rather
+than just matching test counts.
+
+`retry_after_ms` rounding **is** unified: `max(1000, ceil(deficit_seconds) * 1000)` — always a
+whole-second multiple, never a bare millisecond value. The vectors assert it on every deny step,
+including a >1s-deficit case that distinguishes whole-second ceiling from millisecond ceiling, so
+the three SDKs cannot drift on it silently. See AGENTS.md rule 13.
 
 ## Configuration (Go)
 
