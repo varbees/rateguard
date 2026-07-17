@@ -323,13 +323,33 @@ async function waitForRedis(port: number, deadlineMs: number): Promise<boolean> 
 // beforeAll-set `redisReady` would always still be `false` by the time
 // skipIf reads it, silently skipping the real-Redis suite forever.
 redisPort = 34_000 + Math.floor(Math.random() * 5_000);
-try {
-  redisProc = spawn('redis-server', ['--port', String(redisPort), '--save', '', '--appendonly', 'no'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  redisReady = await waitForRedis(redisPort, 4_000);
-} catch {
-  redisReady = false;
+
+// Don't spawn what we're about to skip. The suite below skips on CI by design,
+// so on CI this would start a server, prove nothing, and (before the error
+// handler below existed) crash the run.
+const skipRealRedis = Boolean(process.env.CI);
+
+if (!skipRealRedis) {
+  try {
+    redisProc = spawn('redis-server', ['--port', String(redisPort), '--save', '', '--appendonly', 'no'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    // spawn() does NOT throw synchronously when the binary is missing — it
+    // emits 'error' asynchronously, so the try/catch around it never fired.
+    // An unhandled 'error' event then failed the whole run with ENOENT, which
+    // is exactly what this suite was written to avoid ("if spawning fails for
+    // any reason, the suite skips instead of failing"). It skipped on the dev
+    // box only because redis-server happened to be installed; the first clean
+    // runner crashed on it, and so would any contributor without Redis.
+    redisProc.on('error', () => {
+      redisReady = false;
+    });
+
+    redisReady = await waitForRedis(redisPort, 4_000);
+  } catch {
+    redisReady = false;
+  }
 }
 
 afterAll(() => {
