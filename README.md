@@ -249,6 +249,41 @@ cd packages/sdk-node && bun run test
 cd packages/sdk-python && python3 -m pytest -q
 ```
 
+Those prove RateGuard is *self-consistent*. They cannot prove it is *true* — every test inherits
+the same assumptions about what providers send. So we also run it against real providers:
+
+```bash
+export NVIDIA_NIM_API_KEY=... GROQ_API_KEY=... DEEPSEEK_API_KEY=...
+scripts/live-matrix.sh
+```
+
+**Live provider matrix — last run 2026-07-17:**
+
+| Provider | Model | Result |
+|---|---|---|
+| NVIDIA NIM | `meta/llama-3.1-8b-instruct` | ✅ pass |
+| Groq | `llama-3.3-70b-versatile` | ✅ pass |
+| DeepSeek | `deepseek-chat` | ✅ pass |
+
+Each asserts the whole chain against a live API: real usage extracted from real SSE, the budget
+**actually charged** the number the provider reported, a real budget **blocking** a real runaway,
+freeze halting live calls, and usage flowing into a verifiable evidence chain.
+
+Their real bytes are frozen into `conformance/sse_usage_vectors.json`, so every future run replays
+them offline — no key, no network. That is where the interesting cases live:
+
+- **Groq emits the same usage three times** per call (top-level `usage`, a nested `x_groq.usage`
+  with identical numbers, then top-level `usage` again). A summing extractor bills **150 tokens for
+  a 50-token call**. MAX-per-field is what makes it correct.
+- **DeepSeek** adds `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`; **NIM** sends a null
+  `audio_tokens`. Extraction must ignore what it doesn't understand rather than choke.
+
+**Known gap, stated plainly:** the denial-of-wallet path — a stream carrying *no* usage at all,
+where RateGuard must charge its reserved estimate rather than zero — is covered by conformance
+vectors and unit tests but **not live**. NVIDIA NIM, Groq and DeepSeek all emit usage even without
+`stream_options.include_usage`, so all three skip that test. OpenAI omits it and would close the
+gap. A green matrix above does not cover this.
+
 ## License
 
 MIT
