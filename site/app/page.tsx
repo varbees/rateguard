@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "RateGuard: AI Agents That Know Their Limits",
     description:
-      "Multi-language middleware that lets AI agents query their own rate limits before making API calls. No proxy, no latency, MIT license.",
+      "Multi-language middleware that lets AI agents query their own rate limits before making API calls. No proxy, no network hop, MIT license.",
     type: "website",
     siteName: "Antharmaya Labs",
     images: [{ url: "/og.png", width: 1280, height: 640, alt: "RateGuard: AI agents that know their limits. Go, Node.js, Python. MIT." }],

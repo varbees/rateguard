@@ -27,7 +27,9 @@ export default function IntroPage() {
       </P>
       <Callout kind="note" title="Not a proxy">
         RateGuard runs <strong>inside your application process</strong>. No gateway, no extra
-        service, no added latency, no new attack surface. Your API keys never leave your app.
+        service, no network hop, no new attack surface. Your API keys never leave your app.
+        Enforcement costs <strong>tens of microseconds</strong>, against the 1–30ms round trip a
+        gateway adds — not zero, and we publish the measurement rather than an adjective.
       </Callout>
 
       <DocH2 id="two-jobs">The two jobs it does</DocH2>

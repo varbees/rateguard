@@ -1,8 +1,14 @@
 # RateGuard
 
+[![CI](https://github.com/varbees/rateguard/actions/workflows/ci.yml/badge.svg)](https://github.com/varbees/rateguard/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/varbees/rateguard/packages/sdk-go.svg)](https://pkg.go.dev/github.com/varbees/rateguard/packages/sdk-go)
+[![npm](https://img.shields.io/npm/v/@varbees/rateguard-node)](https://www.npmjs.com/package/@varbees/rateguard-node)
+[![PyPI](https://img.shields.io/pypi/v/varbees-rateguard)](https://pypi.org/project/varbees-rateguard/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **Flight controls for AI agents. Runtime enforcement in Go, Node.js, and Python.**
 
-An agent holds your API key and no sense of when to stop. RateGuard enforces token budgets, kills runaway loops, and trips breakers on failing providers, all from inside your process. Go, Node, Python. No proxy, no gateway, no added latency.
+An agent holds your API key and no sense of when to stop. RateGuard enforces token budgets, kills runaway loops, and trips breakers on failing providers, all from inside your process. Go, Node, Python. No proxy, no gateway, no network hop — [tens of microseconds](#overhead), not the milliseconds a gateway costs.
 
 One unsupervised agent scanning a hobbyist network ran up a $6,531 cloud bill overnight. Two agents in a research pipeline passed work back and forth for eleven days before a billing alert caught it. The failure mode has a name now, [denial of wallet](https://rateguard.antharmaya.com/denial-of-wallet), with a sourced incident record.
 
