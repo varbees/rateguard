@@ -50,10 +50,19 @@ type OutboundOptions struct {
 	// Entries are tried in order when a provider fails (429/5xx/breaker open).
 	Chain *ProviderChain
 	// EstimatedTokens bounds the per-call hard-stop budget reservation.
-	// Zero falls back to Config.EstimatedTokensPerRequest, then to 4096 —
-	// reserving the entire remaining budget per call would serialize
-	// concurrent agents. Set negative for strict reserve-all semantics
-	// (guaranteed never to overshoot, one in-flight call per budget key).
+	//
+	// Zero (the default) falls back to Config.EstimatedTokensPerRequest, and
+	// if that is also unset, RateGuard MEASURES each request: the prompt's
+	// tokens plus the output ceiling the request declares (max_tokens /
+	// max_completion_tokens / maxOutputTokens), falling back to reserve-all
+	// when the body cannot be parsed. That keeps concurrency high without
+	// under-reserving long-context calls.
+	//
+	// Set a positive value to pin every reservation to a fixed size — only
+	// useful when you know your workload better than its own request bodies
+	// do (e.g. heavy image/audio input, whose tokens are not derivable from
+	// the request). Set negative for strict reserve-all semantics: never
+	// overshoots, one in-flight call per budget key.
 	EstimatedTokens int64
 	// CustomerHeader overrides the request header read for per-customer budget
 	// attribution (default X-RateGuard-Customer). Empty uses the default.
@@ -73,7 +82,6 @@ const (
 	outboundMaxBufferedRequestBytes = 10 << 20 // 10 MiB: beyond this, no fallback/model sniffing
 	sseHeadBufferBytes              = 16 << 10 // Anthropic puts input tokens in message_start
 	sseTailBufferBytes              = 64 << 10 // final chunks carry output/total usage
-	defaultOutboundEstimatedTokens  = 4096     // typical chat-call upper bound
 )
 
 // outboundCall is what provider detection learned about a request.
@@ -100,6 +108,10 @@ type genaiTransport struct {
 	sdk   *SDK
 	opts  OutboundOptions
 	cache *semanticCache
+	// deriveEstimate is set when the caller left EstimatedTokens unset: the
+	// budget reservation is then measured from each request's own body
+	// rather than assumed from a constant.
+	deriveEstimate bool
 
 	mu       sync.Mutex
 	breakers map[string]*circuitBreaker
@@ -121,9 +133,12 @@ func (s *SDK) Transport(next http.RoundTripper, opts ...OutboundOptions) http.Ro
 	if options.EstimatedTokens == 0 {
 		options.EstimatedTokens = s.cfg.EstimatedTokensPerRequest
 	}
-	if options.EstimatedTokens == 0 {
-		options.EstimatedTokens = defaultOutboundEstimatedTokens
-	}
+	// Unset (still zero) means "derive the reservation from each request's
+	// actual body" — see request_estimate.go. This used to resolve to a flat
+	// 4096 here: a constant chosen before any request existed, which
+	// under-reserved long-context calls ~24x and let concurrent callers
+	// overshoot the budget by that factor.
+	deriveEstimate := options.EstimatedTokens == 0
 	if options.EstimatedTokens < 0 {
 		options.EstimatedTokens = 0 // strict: reserve the entire remaining budget
 	}
@@ -134,11 +149,12 @@ func (s *SDK) Transport(next http.RoundTripper, opts ...OutboundOptions) http.Ro
 	}
 
 	return &genaiTransport{
-		next:     next,
-		sdk:      s,
-		opts:     options,
-		cache:    cache,
-		breakers: make(map[string]*circuitBreaker),
+		next:           next,
+		sdk:            s,
+		opts:           options,
+		cache:          cache,
+		deriveEstimate: deriveEstimate,
+		breakers:       make(map[string]*circuitBreaker),
 	}
 }
 
@@ -360,7 +376,15 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 	}
 	budgetSegments = append(budgetSegments, call.Provider, nonEmpty(call.Model, "default"), "outbound")
 	budgetKey := strings.Join(budgetSegments, ":")
-	reservation := s.tokens.reserveWithEstimate(budgetKey, s.Policy(), TokenBudgetMode(s.Policy().TokenBudgetMode), t.opts.EstimatedTokens)
+	// Measure the reservation from THIS request rather than a constant: a
+	// 100K-token context reserves ~100K, not a flat 4096 it would overshoot
+	// by ~24x under concurrency. Falls back to reserve-all (estimate 0) when
+	// the body is unparseable — the fail-safe direction.
+	estimate := t.opts.EstimatedTokens
+	if t.deriveEstimate {
+		estimate = estimateRequestTokens(body, nil)
+	}
+	reservation := s.tokens.reserveWithEstimate(budgetKey, s.Policy(), TokenBudgetMode(s.Policy().TokenBudgetMode), estimate)
 	if reservation.Applied && !reservation.Allowed && enforce {
 		s.metrics.tokenBudgetExhausted.Add(1)
 		s.enforceLog.record(EnforcementEvent{Type: "token_budget_exceeded", Customer: call.Customer, Provider: call.Provider, Model: nonEmpty(call.Model, "default"), Detail: reservation.Window})
