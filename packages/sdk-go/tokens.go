@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -230,10 +231,17 @@ func firstNumber(values tokenJSONPayload, names ...string) int64 {
 		var number json.Number
 		if err := json.Unmarshal(raw, &number); err == nil {
 			if n, err := number.Int64(); err == nil {
-				return n
+				return nonNegativeTokens(n)
 			}
-			if n, err := number.Float64(); err == nil {
-				return int64(n)
+			if f, err := number.Float64(); err == nil {
+				// int64(f) WRAPS for out-of-range floats: a hostile 9.2e18
+				// becomes MinInt64 (a huge NEGATIVE), which if committed would
+				// REFUND the budget. Guard the conversion; garbage counts as
+				// "no usage" so the caller commits its reserved estimate.
+				if f < 0 || f >= float64(math.MaxInt64) {
+					return 0
+				}
+				return int64(f)
 			}
 		}
 
@@ -241,11 +249,23 @@ func firstNumber(values tokenJSONPayload, names ...string) int64 {
 		if err := json.Unmarshal(raw, &value); err == nil {
 			n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 			if err == nil {
-				return n
+				return nonNegativeTokens(n)
 			}
 		}
 	}
 	return 0
+}
+
+// nonNegativeTokens clamps a parsed token count to zero. A token count is
+// non-negative by definition, so any negative is either a bug or a hostile
+// provider. Committing a negative would decrease recorded usage — an
+// attacker-controlled budget refund — so a negative counts as "no usage" and
+// the caller's fail-safe (commit the reserved estimate) takes over.
+func nonNegativeTokens(n int64) int64 {
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 func looksLikeJSON(body []byte) bool {

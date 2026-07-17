@@ -390,6 +390,38 @@ CATALOGUE: list[Mutation] = [
         models="off-by-one at the hourly cap: one token past every budget, forever",
         expect="token budget boundary suite",
     ),
+    # ── Negative-usage clamp: a shipped cross-language DoW fix ──
+    #
+    # A hostile provider reporting output_tokens=-1e6 would, uncламped, DECREASE
+    # recorded usage — an attacker-controlled budget refund. Found by the
+    # adversarial suite in all three SDKs; these lock the clamp.
+    Mutation(
+        id="go/negative-usage-not-clamped",
+        sdk="go",
+        path="packages/sdk-go/tokens.go",
+        find="func nonNegativeTokens(n int64) int64 {\n\tif n < 0 {\n\t\treturn 0\n\t}\n\treturn n\n}",
+        replace="func nonNegativeTokens(n int64) int64 {\n\treturn n\n}",
+        models="negative usage refunds the budget → agent spends past its cap forever",
+        expect="TestAdversarialNegativeUsageCannotRefundBudget",
+    ),
+    Mutation(
+        id="node/negative-usage-not-clamped",
+        sdk="node",
+        path="packages/sdk-node/src/core/utils.ts",
+        find="      return Math.max(0, value);",
+        replace="      return value;",
+        models="negative usage refunds the budget → agent spends past its cap forever",
+        expect="adversarial: never emits a negative token count",
+    ),
+    Mutation(
+        id="python/negative-usage-not-clamped",
+        sdk="python",
+        path="packages/sdk-python/rateguard/extractors/generic.py",
+        find="        if isinstance(value, int):\n            return max(0, value)",
+        replace="        if isinstance(value, int):\n            return value",
+        models="negative usage refunds the budget → agent spends past its cap forever",
+        expect="test_negative_usage_never_survives_extraction",
+    ),
     # ── CJK parity ──
     Mutation(
         id="node/tokenizer-cjk-undercount",

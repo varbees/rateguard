@@ -166,12 +166,19 @@ function firstNumber(source: JsonObject, keys: readonly string[]): number {
   for (const key of keys) {
     const value = source[key];
     if (typeof value === 'number' && Number.isFinite(value)) {
-      return value;
+      // Clamp to non-negative: a token count is non-negative by definition, so
+      // a hostile output_tokens=-1_000_000 must not survive — committing it
+      // would DECREASE recorded usage, an attacker-controlled budget refund
+      // that lets a runaway agent spend past its cap. A negative counts as "no
+      // usage" so the caller commits its reserved estimate. (An overflowed
+      // value becomes a huge positive in JS doubles, which over-charges — the
+      // safe direction — so only the sign needs guarding here.)
+      return Math.max(0, value);
     }
     if (typeof value === 'string') {
       const parsed = Number.parseInt(value, 10);
       if (!Number.isNaN(parsed)) {
-        return parsed;
+        return Math.max(0, parsed);
       }
     }
   }

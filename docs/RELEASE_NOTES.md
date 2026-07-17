@@ -1,14 +1,14 @@
 # Release Notes
 
-## v0.4.0 — 2026-07-17 — "Attribution, Kill Switch, and Proof"
+## v0.5.0 — 2026-07-17 — "Attribution, Kill Switch, and Proof"
 
-`v0.4.0` is the release that makes RateGuard usable by an operator under
+`v0.5.0` is the release that makes RateGuard usable by an operator under
 pressure: know whose spend it was, stop it without a redeploy, and hand
 someone a record afterward that holds up. It also closes a denial-of-wallet
 hole that made budgets fail open on the most common streaming setup.
 
 **Install note.** npm and PyPI were still serving `0.2.0` — `0.3.0` shipped to
-the Go proxy and the docs but never reached the other two registries. `0.4.0`
+the Go proxy and the docs but never reached the other two registries. `0.5.0`
 publishes all three together. If you installed from npm or PyPI before today,
 you did not have the v0.3.0 feature set the docs describe.
 

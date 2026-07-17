@@ -20,10 +20,19 @@ def _first_str(source: JsonObject, keys: list[str]) -> str | None:
 def _first_int(source: JsonObject, keys: list[str]) -> int:
     for key in keys:
         value = source.get(key)
+        # Clamp to non-negative: a token count is non-negative by definition, so
+        # a hostile provider reporting output_tokens=-1_000_000 must not survive
+        # — committing it would DECREASE recorded usage, an attacker-controlled
+        # budget refund that lets a runaway agent spend past its cap. A negative
+        # counts as "no usage" so the caller commits its reserved estimate.
+        # (Python ints are arbitrary-precision, so there is no overflow-wrap
+        # vector as in Go/Node; only the sign needs guarding.)
+        if isinstance(value, bool):
+            continue  # bool is an int subclass in Python; never a token count
         if isinstance(value, int):
-            return value
-        if isinstance(value, str) and value.isdigit():
-            return int(value)
+            return max(0, value)
+        if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+            return max(0, int(value.strip()))
     return 0
 
 
