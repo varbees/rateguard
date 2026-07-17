@@ -13,14 +13,16 @@ hermetic and offline by default:
     RATEGUARD_LIVE_MODEL=meta/llama-3.1-8b-instruct \\
     python3 -m pytest tests/live -v
 
-Verified against NVIDIA NIM (free tier) on 2026-07-17. Any OpenAI-compatible
-endpoint works, including a local Ollama:
+Verified 2026-07-17 against NVIDIA NIM, Groq, and DeepSeek free tiers. Any
+OpenAI-compatible endpoint works — `scripts/live-matrix.sh` runs this suite
+against each configured provider and prints a grid.
 
-    RATEGUARD_LIVE_BASE_URL=http://localhost:11434/v1 \\
-    RATEGUARD_LIVE_API_KEY=ollama \\
-    RATEGUARD_LIVE_MODEL=llama3.2-vision:11b
+The base URL must be a host RateGuard recognizes: budgets are keyed on the
+provider it derives from the host, so an unrecognized host would leave the
+suite asserting against a key nothing ever writes. `_live_provider()` enforces
+that rather than assuming.
 
-Cost: these send a handful of ~40-token completions. On a free tier that is
+Cost: a handful of ~40-token completions per provider. On a free tier that is
 free; on a paid key it is a fraction of a cent.
 """
 
@@ -33,6 +35,7 @@ import pytest
 
 from rateguard import (
     EvidenceChain,
+    detect_llm_call,
     KeySigner,
     RateGuard,
     SpendReceiptClaims,
@@ -56,9 +59,30 @@ pytestmark = pytest.mark.skipif(
 TIMEOUT = 60.0
 
 
-def _budget_key(provider: str = "nvidia") -> str:
+def _live_provider() -> str:
+    """The provider name RateGuard will derive from the configured base URL.
+
+    Must be derived, never assumed. This defaulted to the literal "nvidia",
+    which was invisible while NVIDIA NIM was the only provider ever run —
+    and reported "charged 0 tokens" against Groq and DeepSeek the moment the
+    matrix pointed elsewhere, because it read a budget key nothing had ever
+    written. The SDK keys budgets on the host; so must the test.
+    """
+    from urllib.parse import urlparse
+
+    host = urlparse(BASE_URL).hostname or ""
+    call = detect_llm_call(host, "/v1/chat/completions")
+    if call is None:
+        raise AssertionError(
+            f"RateGuard does not recognize {host} as an LLM host — the live suite "
+            f"would be asserting against a budget key that is never written."
+        )
+    return call.provider
+
+
+def _budget_key(provider: str | None = None) -> str:
     """The outbound budget key: {tenant}:{provider}:{model}:outbound."""
-    return f"global:{provider}:{MODEL}:outbound"
+    return f"global:{provider or _live_provider()}:{MODEL}:outbound"
 
 
 def _client(rg: RateGuard) -> "httpx.Client":
@@ -192,8 +216,14 @@ def test_live_streaming_without_include_usage_still_charges() -> None:
 
     if saw_usage:
         pytest.skip(
-            "this provider emits usage even without include_usage (NVIDIA NIM does), "
-            "so the unmeasured-stream path cannot be exercised here — use OpenAI or Ollama"
+            "this provider emits usage even without include_usage, so the "
+            "unmeasured-stream path cannot be exercised here. Verified 2026-07-17: "
+            "NVIDIA NIM, Groq and DeepSeek ALL emit it — every free-tier provider "
+            "available to us skips this test, so the denial-of-wallet path is "
+            "covered only by the `no_usage_anywhere` conformance vector and unit "
+            "tests, never live. OpenAI omits usage without include_usage and is the "
+            "provider that would close this gap; a paid key costs cents. "
+            "This gap is real — do not read a green matrix as covering it."
         )
 
     charged = _budget_used(rg, _budget_key())
