@@ -16,6 +16,7 @@ export * from './core/admin.js';
 export * from './core/guardrails.js';
 export * from './core/guardrail-log.js';
 export * from './core/tokenizer.js';
+export * from './core/request-estimate.js';
 export * from './core/genai.js';
 export * from './core/genai-span.js';
 export * from './core/enforcement-log.js';

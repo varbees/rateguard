@@ -18,6 +18,7 @@
 
 import { CircuitBreaker } from './circuit-breaker.js';
 import { extractTokenUsageFromText } from './utils.js';
+import { estimateRequestTokens } from './request-estimate.js';
 import { SemanticCache, isStreamingRequestBody, promptTextFromRequestBody, type SemanticCacheOptions } from './semantic-cache.js';
 import type { ProviderEntry } from './provider-chain.js';
 import type { RateGuardRuntime } from '../runtime.js';
@@ -50,9 +51,18 @@ export interface WrapFetchOptions {
   /** Header read for per-customer budget attribution (default x-rateguard-customer). */
   customerHeader?: string;
   /**
-   * Bounds the per-call hard-stop budget reservation. Defaults to 4096 —
-   * reserving the whole remaining budget per call would serialize
-   * concurrent agents. Negative = strict reserve-all semantics.
+   * Bounds the per-call hard-stop budget reservation.
+   *
+   * Unset (the default) MEASURES each request: the prompt's tokens plus the
+   * output ceiling the request declares (max_tokens / max_completion_tokens /
+   * maxOutputTokens). That keeps concurrency high without under-reserving
+   * long-context calls, which a flat default did by ~25x.
+   *
+   * Set a positive value to pin every reservation to a fixed size — useful only
+   * when you know your workload better than its own request bodies do (e.g.
+   * heavy image/audio input, whose tokens are not derivable from the request).
+   * Negative = strict reserve-all: never overshoots, one in-flight call per
+   * budget key.
    */
   estimatedTokens?: number;
   /** Skip the outbound per-provider request limiter. */
@@ -72,7 +82,6 @@ export interface WrapFetchOptions {
 const MAX_EXTRACT_BYTES = 1 << 20; // 1 MiB cap on JSON usage extraction
 const MAX_SSE_LINE_BYTES = 256 << 10;
 const MAX_SSE_CANDIDATES = 8;
-const DEFAULT_OUTBOUND_ESTIMATED_TOKENS = 4096; // typical chat-call upper bound
 
 // OpenAI-schema hosts (suffix matching on the path covers Groq's /openai/v1/,
 // Cohere's /compatibility/v1/, DashScope's /compatible-mode/v1/, DeepInfra's
@@ -230,7 +239,12 @@ function isProviderFailure(status: number): boolean {
 export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions = {}): typeof fetch {
   const baseFetch = options.fetch ?? globalThis.fetch;
   const mode = options.mode ?? 'enforce';
-  const rawEstimate = options.estimatedTokens ?? DEFAULT_OUTBOUND_ESTIMATED_TOKENS;
+  // Unset means "measure each request's own body" (request-estimate.ts). This
+  // used to resolve to a flat 4096 — a constant chosen before any request
+  // existed, which under-reserved long-context calls ~25x and let concurrent
+  // callers overshoot the budget by that factor.
+  const deriveEstimate = options.estimatedTokens === undefined;
+  const rawEstimate = options.estimatedTokens ?? 0;
   const estimatedTokens = rawEstimate < 0 ? 0 : rawEstimate; // negative = strict reserve-all
   const breakers = new Map<string, CircuitBreaker>();
   const cache = options.semanticCache ? new SemanticCache(options.semanticCache, runtime.config.clock) : undefined;
@@ -358,7 +372,11 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
 
     const customerSegment = call.customer ? `:customer=${call.customer}` : '';
     const budgetKey = `${runtime.config.tenantId}${customerSegment}:${call.provider}:${call.model || 'default'}:outbound`;
-    const reservation = runtime.tokenBudget.reserve(budgetKey, runtime.config.tokenBudget, estimatedTokens);
+    // Measure the reservation from THIS request rather than a constant: a
+    // 100K-token context reserves ~100K, not a flat 4096 it would overshoot
+    // by ~25x under concurrency.
+    const estimate = deriveEstimate ? estimateRequestTokens(body) : estimatedTokens;
+    const reservation = runtime.tokenBudget.reserve(budgetKey, runtime.config.tokenBudget, estimate);
     if (reservation.decision.applied && !reservation.decision.allowed && enforce) {
       runtime.enforcementLog.record({
         type: 'token_budget_exceeded',
