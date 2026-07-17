@@ -72,6 +72,17 @@ def _metadata_text() -> str:
             "Requires-Dist: redis>=5.0.0; extra == 'redis'",
             "Provides-Extra: attestation",
             "Requires-Dist: cryptography>=41.0.0; extra == 'attestation'",
+            # `dev` must be sufficient to run pytest from a clean checkout.
+            # fastapi/starlette/cryptography were missing and nobody noticed:
+            # dev boxes had them from elsewhere, so the suite passed locally
+            # and collapsed on a clean CI runner. A contributor following the
+            # README could not have run the tests.
+            #
+            # NOTE: this metadata is what pip actually installs — this backend
+            # does NOT read pyproject.toml's [project.optional-dependencies].
+            # The two must be kept in sync by hand, which is why
+            # tests/test_packaging.py asserts they match rather than trusting
+            # anyone to remember.
             "Provides-Extra: dev",
             "Requires-Dist: pytest; extra == 'dev'",
             "Requires-Dist: pytest-asyncio; extra == 'dev'",
@@ -81,6 +92,9 @@ def _metadata_text() -> str:
             "Requires-Dist: openai; extra == 'dev'",
             "Requires-Dist: anthropic; extra == 'dev'",
             "Requires-Dist: redis; extra == 'dev'",
+            "Requires-Dist: fastapi; extra == 'dev'",
+            "Requires-Dist: starlette; extra == 'dev'",
+            "Requires-Dist: cryptography; extra == 'dev'",
             "",
             _read_readme(),
         ]

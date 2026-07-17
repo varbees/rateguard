@@ -30,7 +30,23 @@ outbound = ["httpx>=0.24.0"]
 # lazily imports redis — same reasoning as "outbound".
 redis = ["redis>=5.0.0"]
 attestation = ["cryptography>=41.0.0"]
-dev = ["pytest", "pytest-asyncio", "httpx", "anyio", "mypy", "openai", "anthropic", "redis"]
+# Must be sufficient to run `pytest` from a clean checkout. fastapi was missing
+# and nobody noticed: dev boxes had it installed from elsewhere, so the suite
+# passed locally and collapsed on a clean CI runner with ModuleNotFoundError.
+# A contributor following the README could not have run the tests.
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+    "anyio",
+    "mypy",
+    "openai",
+    "anthropic",
+    "redis",
+    "fastapi",      # tests/test_asgi.py, test_wiring.py, test_conformance.py
+    "starlette",    # fastapi's ASGI base
+    "cryptography", # attestation / evidence-chain tests
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
