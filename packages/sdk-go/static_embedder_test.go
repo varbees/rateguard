@@ -3,10 +3,14 @@ package rateguard
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"math"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -152,6 +156,127 @@ func TestStaticEmbedderRejectsGarbage(t *testing.T) {
 	}
 	if _, err := ReadStaticEmbedder(bytes.NewReader([]byte("RGEMBED1\xff\xff\xff\xff"))); err == nil {
 		t.Fatal("expected error for absurd header length")
+	}
+}
+
+// ── Verified loading (supply-chain integrity) ──
+
+// writeMiniModel writes a mini .rgemb to a temp file and returns its path
+// and its true SHA-256 hex digest.
+func writeMiniModel(t *testing.T) (path, digest string) {
+	t.Helper()
+	vocab := []string{"[PAD]", "[UNK]", "hello", "world", "##ld", "wor", "cafe", "!"}
+	rows := [][]float32{{0, 0}, {9, 9}, {1, 0}, {0, 1}, {0.5, 0.5}, {2, 0}, {0, 2}, {1, 1}}
+	data := buildMiniRGEMB(t, vocab, 2, rows, true)
+	path = filepath.Join(t.TempDir(), "mini.rgemb")
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write model: %v", err)
+	}
+	sum := sha256.Sum256(data)
+	return path, hex.EncodeToString(sum[:])
+}
+
+func TestStaticEmbedderFileDigestMatchesContents(t *testing.T) {
+	path, want := writeMiniModel(t)
+	got, err := StaticEmbedderFileDigest(path)
+	if err != nil {
+		t.Fatalf("digest: %v", err)
+	}
+	if got != want {
+		t.Errorf("StaticEmbedderFileDigest = %s, want %s", got, want)
+	}
+	// The digest it reports must be the digest that unlocks the load —
+	// otherwise the documented "compute once, pin it" workflow is broken.
+	if _, err := LoadStaticEmbedderVerified(path, got); err != nil {
+		t.Errorf("load with self-reported digest: %v", err)
+	}
+}
+
+func TestStaticEmbedderVerifiedAcceptsMatchingDigest(t *testing.T) {
+	path, digest := writeMiniModel(t)
+	e, err := LoadStaticEmbedderVerified(path, digest)
+	if err != nil {
+		t.Fatalf("verified load: %v", err)
+	}
+	if e.Dim() != 2 {
+		t.Errorf("Dim() = %d, want 2", e.Dim())
+	}
+	// Pins are copied out of build logs and READMEs; case must not matter.
+	if _, err := LoadStaticEmbedderVerified(path, strings.ToUpper(digest)); err != nil {
+		t.Errorf("uppercase digest rejected: %v", err)
+	}
+	if _, err := LoadStaticEmbedderVerified(path, "  "+digest+"\n"); err != nil {
+		t.Errorf("padded digest rejected: %v", err)
+	}
+}
+
+func TestStaticEmbedderVerifiedRejectsTamperedFile(t *testing.T) {
+	path, digest := writeMiniModel(t)
+
+	// Flip one byte deep in the embedding matrix — a change that parses
+	// perfectly and silently returns different vectors. This is exactly the
+	// attack the digest exists to catch: a valid model with poisoned weights.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read model: %v", err)
+	}
+	data[len(data)-3] ^= 0xff
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write tampered model: %v", err)
+	}
+
+	// It must still be a loadable model — proving the digest, not the parser,
+	// is what rejects it.
+	if _, err := LoadStaticEmbedder(path); err != nil {
+		t.Fatalf("tampered model should still parse unverified: %v", err)
+	}
+	_, err = LoadStaticEmbedderVerified(path, digest)
+	if err == nil {
+		t.Fatal("expected digest mismatch for tampered file")
+	}
+	if !strings.Contains(err.Error(), "digest mismatch") {
+		t.Errorf("error = %v, want a digest mismatch", err)
+	}
+}
+
+func TestStaticEmbedderVerifiedRejectsMalformedPin(t *testing.T) {
+	path, digest := writeMiniModel(t)
+	for _, tc := range []struct{ name, pin string }{
+		{"empty", ""},
+		{"truncated", digest[:32]},
+		{"not hex", strings.Repeat("z", 64)},
+		{"too long", digest + "00"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := LoadStaticEmbedderVerified(path, tc.pin); err == nil {
+				t.Errorf("pin %q accepted, want rejection", tc.pin)
+			}
+		})
+	}
+}
+
+func TestStaticEmbedderVerifiedDoesNotParseBeforeVerifying(t *testing.T) {
+	// A file that is NOT a .rgemb at all, pinned to its own true digest.
+	// If verification runs first, the error must come from the parser
+	// ("not a .rgemb"), never from the digest — the digest matches.
+	// Conversely, pinned to a wrong digest, the error must be the digest,
+	// proving no parse was attempted on unverified bytes.
+	junk := []byte("this is not a model file at all")
+	path := filepath.Join(t.TempDir(), "junk.rgemb")
+	if err := os.WriteFile(path, junk, 0o600); err != nil {
+		t.Fatalf("write junk: %v", err)
+	}
+	sum := sha256.Sum256(junk)
+
+	_, err := LoadStaticEmbedderVerified(path, hex.EncodeToString(sum[:]))
+	if err == nil || !strings.Contains(err.Error(), "not a .rgemb") {
+		t.Errorf("matching digest should reach the parser, got %v", err)
+	}
+
+	wrong := strings.Repeat("ab", 32)
+	_, err = LoadStaticEmbedderVerified(path, wrong)
+	if err == nil || !strings.Contains(err.Error(), "digest mismatch") {
+		t.Errorf("wrong digest must fail on the digest, not the parser, got %v", err)
 	}
 }
 

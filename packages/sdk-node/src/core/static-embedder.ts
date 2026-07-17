@@ -19,12 +19,32 @@
  * semantic caching and SemanticLoopDetector.
  */
 
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import type { Embedder } from './semantic-cache.js';
 
 const RGEMB_MAGIC = 'RGEMBED1';
 const MAX_HEADER_BYTES = 1 << 20;
+const SHA256_BYTES = 32;
+
+/**
+ * Decode a pinned digest, rejecting anything that is not a full 32-byte hex
+ * string. A truncated or malformed pin is a configuration bug, and silently
+ * accepting one would weaken every load that uses it.
+ */
+function parseSha256Hex(s: string): Buffer {
+  const clean = s.trim().toLowerCase();
+  if (!/^[0-9a-f]*$/.test(clean)) {
+    throw new Error('rateguard: embed model digest is not valid hex');
+  }
+  if (clean.length !== SHA256_BYTES * 2) {
+    throw new Error(
+      `rateguard: embed model digest must be ${SHA256_BYTES * 2} hex characters (SHA-256), got ${clean.length}`,
+    );
+  }
+  return Buffer.from(clean, 'hex');
+}
 
 interface TokenizerSpec {
   lowercase: boolean;
@@ -152,9 +172,51 @@ export class StaticEmbedder implements Embedder {
     private readonly matrix: Float32Array,
   ) {}
 
-  /** Load a .rgemb model from a file path. */
+  /**
+   * Load a .rgemb model from a file path.
+   *
+   * The file is parsed as-is, with no integrity check. When the model does
+   * not ship with the code that loads it — a build step downloads it, an
+   * init container mounts it, an ops runbook copies it onto the box — use
+   * {@link loadVerified} and pin the digest instead.
+   */
   static load(path: string): StaticEmbedder {
     return StaticEmbedder.fromBuffer(readFileSync(path));
+  }
+
+  /**
+   * Load a .rgemb model from a file path only if its SHA-256 digest matches
+   * `expectedSha256` (hex, case-insensitive).
+   *
+   * The whole file is read and hashed before any of it is parsed: a file that
+   * fails the check never reaches the header parser, the vocab loop, or the
+   * matrix read. That ordering is the point of the method — it is what makes
+   * the digest a gate rather than a report.
+   *
+   * Pin the digest of the exact model you converted. {@link digestFile}
+   * computes it.
+   */
+  static loadVerified(path: string, expectedSha256: string): StaticEmbedder {
+    const want = parseSha256Hex(expectedSha256);
+    const data = readFileSync(path);
+    const got = createHash('sha256').update(data).digest();
+    if (!timingSafeEqual(got, want)) {
+      throw new Error(
+        `rateguard: embed model digest mismatch for ${path}: file is ${got.toString('hex')}, ` +
+          `pinned ${want.toString('hex')} (the file on disk is not the model you pinned; ` +
+          `re-download it or update the pin)`,
+      );
+    }
+    return StaticEmbedder.fromBuffer(data);
+  }
+
+  /**
+   * The SHA-256 digest of a .rgemb file as lowercase hex — the value to pass
+   * to {@link loadVerified}. Compute it once, at the point you obtain a model
+   * you trust, and commit the result.
+   */
+  static digestFile(path: string): string {
+    return createHash('sha256').update(readFileSync(path)).digest('hex');
   }
 
   /** Load a .rgemb model from an in-memory buffer. */

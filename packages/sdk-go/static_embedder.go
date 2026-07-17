@@ -1,8 +1,12 @@
 package rateguard
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -71,6 +75,11 @@ type StaticEmbedder struct {
 }
 
 // LoadStaticEmbedder loads a .rgemb model from a file path.
+//
+// The file is parsed as-is, with no integrity check. When the model does
+// not ship with the code that loads it — a build step downloads it, an
+// init container mounts it, an ops runbook copies it onto the box — use
+// LoadStaticEmbedderVerified and pin the digest instead.
 func LoadStaticEmbedder(path string) (*StaticEmbedder, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -78,6 +87,66 @@ func LoadStaticEmbedder(path string) (*StaticEmbedder, error) {
 	}
 	defer f.Close()
 	return ReadStaticEmbedder(f)
+}
+
+// LoadStaticEmbedderVerified loads a .rgemb model from a file path only if
+// its SHA-256 digest matches wantSHA256 (hex, case-insensitive).
+//
+// The whole file is read and hashed before any of it is parsed: a file that
+// fails the check never reaches the header parser, the vocab loop, or the
+// matrix read. That ordering is the point of the function — it is what makes
+// the digest a gate rather than a report. A streaming verify would parse
+// attacker-controlled bytes first and discover the mismatch afterward.
+//
+// Pin the digest of the exact model you converted. StaticEmbedderFileDigest
+// computes it.
+func LoadStaticEmbedderVerified(path, wantSHA256 string) (*StaticEmbedder, error) {
+	want, err := parseSHA256Hex(wantSHA256)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("rateguard: open embed model: %w", err)
+	}
+	sum := sha256.Sum256(data)
+	if subtle.ConstantTimeCompare(sum[:], want) != 1 {
+		return nil, fmt.Errorf(
+			"rateguard: embed model digest mismatch for %s: file is %s, pinned %s (the file on disk is not the model you pinned; re-download it or update the pin)",
+			path, hex.EncodeToString(sum[:]), hex.EncodeToString(want),
+		)
+	}
+	return ReadStaticEmbedder(bytes.NewReader(data))
+}
+
+// StaticEmbedderFileDigest returns the SHA-256 digest of a .rgemb file as
+// lowercase hex — the value to pass to LoadStaticEmbedderVerified. Compute
+// it once, at the point you obtain a model you trust, and commit the result.
+func StaticEmbedderFileDigest(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("rateguard: open embed model: %w", err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("rateguard: read embed model: %w", err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// parseSHA256Hex decodes a pinned digest, rejecting anything that is not a
+// full 32-byte hex string. A truncated or malformed pin is a configuration
+// bug, and silently accepting one would weaken every load that uses it.
+func parseSHA256Hex(s string) ([]byte, error) {
+	b, err := hex.DecodeString(strings.TrimSpace(strings.ToLower(s)))
+	if err != nil {
+		return nil, fmt.Errorf("rateguard: embed model digest is not valid hex: %w", err)
+	}
+	if len(b) != sha256.Size {
+		return nil, fmt.Errorf("rateguard: embed model digest must be %d hex characters (SHA-256), got %d", sha256.Size*2, len(s))
+	}
+	return b, nil
 }
 
 // ReadStaticEmbedder loads a .rgemb model from a reader.

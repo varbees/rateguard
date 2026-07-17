@@ -7,7 +7,9 @@
  * vectors): cross-language parity lives or dies on id-level agreement.
  */
 
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -177,5 +179,70 @@ describe.skipIf(!MODEL_PATH)('StaticEmbedder golden conformance', () => {
         ).toBeLessThanOrEqual(1e-4);
       }
     }
+  });
+});
+
+// ── Verified loading (supply-chain integrity) ──
+
+/** Writes a mini .rgemb to a temp file; returns its path and true digest. */
+function writeMiniModel(): { path: string; digest: string } {
+  const data = buildMiniRGEMB(
+    ['[PAD]', '[UNK]', 'hello', 'world', '##ld', 'wor', 'cafe', '!'],
+    2,
+    [[0, 0], [9, 9], [1, 0], [0, 1], [0.5, 0.5], [2, 0], [0, 2], [1, 1]],
+  );
+  const path = join(mkdtempSync(join(tmpdir(), 'rgemb-')), 'mini.rgemb');
+  writeFileSync(path, data);
+  return { path, digest: createHash('sha256').update(data).digest('hex') };
+}
+
+describe('StaticEmbedder verified loading', () => {
+  it('digestFile reports the digest that unlocks the load', () => {
+    const { path, digest } = writeMiniModel();
+    expect(StaticEmbedder.digestFile(path)).toBe(digest);
+    // The documented "compute once, pin it" workflow must round-trip.
+    expect(() => StaticEmbedder.loadVerified(path, StaticEmbedder.digestFile(path))).not.toThrow();
+  });
+
+  it('accepts a matching digest, regardless of case or padding', () => {
+    const { path, digest } = writeMiniModel();
+    expect(StaticEmbedder.loadVerified(path, digest).dim).toBe(2);
+    // Pins get copied out of build logs and READMEs.
+    expect(() => StaticEmbedder.loadVerified(path, digest.toUpperCase())).not.toThrow();
+    expect(() => StaticEmbedder.loadVerified(path, `  ${digest}\n`)).not.toThrow();
+  });
+
+  it('rejects a tampered file that still parses cleanly', () => {
+    const { path, digest } = writeMiniModel();
+    // Flip one byte deep in the embedding matrix: parses perfectly, silently
+    // returns different vectors. This is the attack the digest exists to catch.
+    const data = readFileSync(path);
+    data[data.length - 3] ^= 0xff;
+    writeFileSync(path, data);
+
+    // Still a loadable model — proving the digest, not the parser, rejects it.
+    expect(() => StaticEmbedder.load(path)).not.toThrow();
+    expect(() => StaticEmbedder.loadVerified(path, digest)).toThrow(/digest mismatch/);
+  });
+
+  it('rejects a malformed pin', () => {
+    const { path, digest } = writeMiniModel();
+    expect(() => StaticEmbedder.loadVerified(path, '')).toThrow(/SHA-256/);
+    expect(() => StaticEmbedder.loadVerified(path, digest.slice(0, 32))).toThrow(/SHA-256/);
+    expect(() => StaticEmbedder.loadVerified(path, 'z'.repeat(64))).toThrow(/not valid hex/);
+    expect(() => StaticEmbedder.loadVerified(path, `${digest}00`)).toThrow(/SHA-256/);
+  });
+
+  it('verifies before it parses', () => {
+    // Junk pinned to its own true digest must fail in the PARSER (digest
+    // matched); pinned to a wrong digest it must fail on the DIGEST — proving
+    // unverified bytes never reach the parser.
+    const junk = Buffer.from('this is not a model file at all');
+    const path = join(mkdtempSync(join(tmpdir(), 'rgemb-')), 'junk.rgemb');
+    writeFileSync(path, junk);
+    const trueDigest = createHash('sha256').update(junk).digest('hex');
+
+    expect(() => StaticEmbedder.loadVerified(path, trueDigest)).toThrow(/not a \.rgemb/);
+    expect(() => StaticEmbedder.loadVerified(path, 'ab'.repeat(32))).toThrow(/digest mismatch/);
   });
 });

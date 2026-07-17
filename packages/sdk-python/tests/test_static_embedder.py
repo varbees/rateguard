@@ -3,6 +3,7 @@ gated golden-conformance test against the real converted model."""
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
@@ -131,3 +132,67 @@ def test_golden_conformance() -> None:
         vec = e.embed_sync(case["text"])
         for j, (got, want) in enumerate(zip(vec, case["embedding"], strict=True)):
             assert abs(got - want) <= 1e-4, f"{case['text']!r} dim {j}: {got} vs {want}"
+
+
+# ── Verified loading (supply-chain integrity) ──
+
+
+def write_mini_model(tmp_path: Path) -> tuple[str, str]:
+    """Write a mini .rgemb to tmp_path; return its path and true digest."""
+    vocab = ["[PAD]", "[UNK]", "hello", "world", "##ld", "wor", "cafe", "!"]
+    rows = [[0, 0], [9, 9], [1, 0], [0, 1], [0.5, 0.5], [2, 0], [0, 2], [1, 1]]
+    data = build_mini_rgemb(vocab, 2, [[float(x) for x in r] for r in rows])
+    path = tmp_path / "mini.rgemb"
+    path.write_bytes(data)
+    return str(path), hashlib.sha256(data).hexdigest()
+
+
+def test_digest_file_reports_the_digest_that_unlocks_the_load(tmp_path: Path) -> None:
+    path, digest = write_mini_model(tmp_path)
+    assert StaticEmbedder.digest_file(path) == digest
+    # The documented "compute once, pin it" workflow must round-trip.
+    StaticEmbedder.load_verified(path, StaticEmbedder.digest_file(path))
+
+
+def test_verified_accepts_matching_digest(tmp_path: Path) -> None:
+    path, digest = write_mini_model(tmp_path)
+    assert StaticEmbedder.load_verified(path, digest).dim == 2
+    # Pins get copied out of build logs and READMEs.
+    StaticEmbedder.load_verified(path, digest.upper())
+    StaticEmbedder.load_verified(path, f"  {digest}\n")
+
+
+def test_verified_rejects_tampered_file(tmp_path: Path) -> None:
+    path, digest = write_mini_model(tmp_path)
+
+    # Flip one byte deep in the embedding matrix: parses perfectly, silently
+    # returns different vectors. This is the attack the digest exists to catch.
+    data = bytearray(Path(path).read_bytes())
+    data[-3] ^= 0xFF
+    Path(path).write_bytes(bytes(data))
+
+    # Still a loadable model — proving the digest, not the parser, rejects it.
+    StaticEmbedder.load(path)
+    with pytest.raises(ValueError, match="digest mismatch"):
+        StaticEmbedder.load_verified(path, digest)
+
+
+@pytest.mark.parametrize("pin", ["", "a" * 32, "z" * 64, "a" * 66])
+def test_verified_rejects_malformed_pin(tmp_path: Path, pin: str) -> None:
+    path, _ = write_mini_model(tmp_path)
+    with pytest.raises(ValueError):
+        StaticEmbedder.load_verified(path, pin)
+
+
+def test_verified_does_not_parse_before_verifying(tmp_path: Path) -> None:
+    # Junk pinned to its own true digest must fail in the PARSER (digest
+    # matched); pinned to a wrong digest it must fail on the DIGEST — proving
+    # unverified bytes never reach the parser.
+    junk = b"this is not a model file at all"
+    path = tmp_path / "junk.rgemb"
+    path.write_bytes(junk)
+
+    with pytest.raises(ValueError, match="not a .rgemb"):
+        StaticEmbedder.load_verified(str(path), hashlib.sha256(junk).hexdigest())
+    with pytest.raises(ValueError, match="digest mismatch"):
+        StaticEmbedder.load_verified(str(path), "ab" * 32)

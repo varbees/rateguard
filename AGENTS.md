@@ -51,6 +51,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Adaptive rate limiting (AIMD controller) | ✅ | ✅ | ✅ | `adaptive.go` |
 | Semantic response caching (pluggable Embedder) | ✅ | ✅ | ✅ | `semantic_cache.go` |
 | Static embedder (.rgemb loader, stdlib WordPiece+BertNormalizer, model2vec-conformant — model file is downloaded data, never bundled; `scripts/convert_model2vec.py` converts any potion-style model) | ✅ | ✅ | ✅ | `static_embedder.go` |
+| Verified model loading (pin a `.rgemb` by SHA-256; hash-and-compare runs BEFORE any parse, so a tampered file never reaches the parser; digest helper to compute the pin) | ✅ | ✅ | ✅ | `static_embedder.go` |
 | Semantic loop detection (paraphrase loops via local embeddings; cosine window, Check/Peek split, threshold 0.90 empirically calibrated — public primitive, NOT yet wired into middleware/outbound) | ✅ | ✅ | ✅ | `semantic_loop.go` |
 | Budget attestation (Ed25519 delegation chains) | ✅ | ✅ | ✅ | `budget_attestation.go` |
 | Spend receipts (Ed25519-signed proof of spend; integer-only signing payload — unix seconds + micro-USD; caller-fed, RateGuard holds no keys; optional attestation binding) | ✅ | ✅ | ✅ | `spend_receipt.go` |
@@ -90,16 +91,16 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (188 test funcs, all with -race)
+# Go tests (207 test funcs, all with -race)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (226 passing)
+# Node tests (257 passing)
 cd packages/sdk-node && bun run test
 
-# Python tests (237 passing)
+# Python tests (276 passing)
 cd packages/sdk-python && python3 -m pytest -q
 
-# Python strict typecheck (mypy --strict passes clean on all 44 source files)
+# Python strict typecheck (mypy --strict passes clean on all 51 source files)
 cd packages/sdk-python && RATEGUARD_STRICT_TYPES=1 python3 scripts/typecheck.py
 
 # Cross-language conformance (shared oracle, all 3 SDKs replay the same

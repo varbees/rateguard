@@ -20,6 +20,9 @@ directly into SemanticCacheOptions and SemanticLoopDetector.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import io
 import json
 import math
 import struct
@@ -29,6 +32,26 @@ from typing import BinaryIO
 
 RGEMB_MAGIC = b"RGEMBED1"
 _MAX_HEADER_BYTES = 1 << 20
+_SHA256_BYTES = 32
+
+
+def _parse_sha256_hex(s: str) -> bytes:
+    """Decode a pinned digest, rejecting anything not a full 32-byte hex string.
+
+    A truncated or malformed pin is a configuration bug, and silently accepting
+    one would weaken every load that uses it.
+    """
+    clean = s.strip().lower()
+    try:
+        raw = bytes.fromhex(clean)
+    except ValueError as exc:
+        raise ValueError(f"embed model digest is not valid hex: {exc}") from exc
+    if len(raw) != _SHA256_BYTES:
+        raise ValueError(
+            f"embed model digest must be {_SHA256_BYTES * 2} hex characters "
+            f"(SHA-256), got {len(clean)}"
+        )
+    return raw
 
 
 @dataclass(frozen=True)
@@ -103,9 +126,54 @@ class StaticEmbedder:
 
     @classmethod
     def load(cls, path: str) -> "StaticEmbedder":
-        """Load a .rgemb model from a file path."""
+        """Load a .rgemb model from a file path.
+
+        The file is parsed as-is, with no integrity check. When the model does
+        not ship with the code that loads it -- a build step downloads it, an
+        init container mounts it, an ops runbook copies it onto the box -- use
+        :meth:`load_verified` and pin the digest instead.
+        """
         with open(path, "rb") as f:
             return cls.read(f)
+
+    @classmethod
+    def load_verified(cls, path: str, expected_sha256: str) -> "StaticEmbedder":
+        """Load a .rgemb model only if its SHA-256 digest matches.
+
+        ``expected_sha256`` is hex, case-insensitive.
+
+        The whole file is read and hashed before any of it is parsed: a file
+        that fails the check never reaches the header parser, the vocab loop,
+        or the matrix read. That ordering is the point of the method -- it is
+        what makes the digest a gate rather than a report.
+
+        Pin the digest of the exact model you converted. :meth:`digest_file`
+        computes it.
+        """
+        want = _parse_sha256_hex(expected_sha256)
+        with open(path, "rb") as f:
+            data = f.read()
+        got = hashlib.sha256(data).digest()
+        if not hmac.compare_digest(got, want):
+            raise ValueError(
+                f"embed model digest mismatch for {path}: file is {got.hex()}, "
+                f"pinned {want.hex()} (the file on disk is not the model you "
+                f"pinned; re-download it or update the pin)"
+            )
+        return cls.read(io.BytesIO(data))
+
+    @staticmethod
+    def digest_file(path: str) -> str:
+        """The SHA-256 digest of a .rgemb file as lowercase hex.
+
+        This is the value to pass to :meth:`load_verified`. Compute it once, at
+        the point you obtain a model you trust, and commit the result.
+        """
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
 
     @classmethod
     def read(cls, f: BinaryIO) -> "StaticEmbedder":
