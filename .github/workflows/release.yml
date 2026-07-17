@@ -1,0 +1,171 @@
+name: Release
+
+# ── Why this exists ──
+#
+# Three releases were CUT and never PUBLISHED. v0.3.0 ("The Enforcement
+# Release") and v0.4.0 exist as commits and nothing else; npm and PyPI have
+# served 0.2.0 the entire time. v0.4.0's own commit message says it was cut to
+# fix exactly that gap — and then it fell into it too.
+#
+# docs/RELEASE_CHECKLIST.md was not missing. It has the publish steps. But they
+# are manual, interactive (`npm login`), credential-gated, and sit at the END of
+# a long checklist: steps 1-5 verify and get done, steps 6-9 publish and get
+# deferred. Three times. That is a design problem, not a discipline problem.
+#
+# So: pushing a tag publishes. "Cut" and "published" cannot diverge, because
+# they are the same action.
+#
+#   git tag -a v0.5.0 -m "v0.5.0" && git push origin v0.5.0
+#
+# Go needs nothing here — the module proxy picks up `packages/sdk-go/vX.Y.Z`
+# on push. Only npm and PyPI need a human, so only they are automated.
+#
+# ── One-time setup (Harsha) ──
+#
+#  npm  — create an automation token (npmjs.com → Access Tokens → Granular,
+#         read+write on @varbees/rateguard-node) and add it as the repo secret
+#         NPM_TOKEN.
+#  PyPI — configure a Trusted Publisher (pypi.org → varbees-rateguard →
+#         Publishing → Add a new publisher: GitHub, repo varbees/rateguard,
+#         workflow release.yml, environment pypi). NO TOKEN NEEDED — OIDC.
+#
+# After that, releasing is one tag push, forever.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and verify, but do not publish'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Never publish something the suite has not passed. A release that skips
+  # verification is how a silently-broken metering path reaches users.
+  verify:
+    name: Verify before publishing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: packages/sdk-go/go.sum
+      # The repo uses bun (bun.lock is committed, and the release checklist has
+      # always said `bun run test`). An earlier draft of this workflow used
+      # `npm ci`, which requires a package-lock.json that does not exist — it
+      # would have failed on its first run. npm is still used to PUBLISH, for
+      # provenance; bun installs and builds.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Go
+        working-directory: packages/sdk-go
+        run: go test -race ./...
+
+      - name: Node
+        working-directory: packages/sdk-node
+        run: bun install --frozen-lockfile && bun run build && bunx vitest run
+
+      - name: Python
+        working-directory: packages/sdk-python
+        run: pip install -e '.[dev]' && python -m pytest -q --ignore=tests/live && mypy --strict rateguard
+
+      - name: Cross-SDK parity
+        run: pip install -e packages/sdk-python && python3 scripts/parity_guard.py
+
+      - name: Docs tell the truth
+        run: python3 scripts/check_doc_samples.py
+
+      # The tag must match what the packages actually claim, or users install a
+      # version that does not exist in the changelog.
+      - name: Tag matches package versions
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          NODE=$(python3 -c "import json;print(json.load(open('packages/sdk-node/package.json'))['version'])")
+          PY=$(python3 -c "import tomllib;print(tomllib.load(open('packages/sdk-python/pyproject.toml','rb'))['project']['version'])")
+          PYV=$(grep -oP '__version__ = "\K[^"]+' packages/sdk-python/rateguard/__init__.py)
+          echo "tag=$TAG node=$NODE pyproject=$PY __version__=$PYV"
+          for v in "$NODE" "$PY" "$PYV"; do
+            if [ "$v" != "$TAG" ]; then
+              echo "::error::version mismatch — tag says $TAG, package says $v"
+              exit 1
+            fi
+          done
+
+  npm:
+    name: Publish to npm
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+      - working-directory: packages/sdk-node
+        run: bun install --frozen-lockfile && bun run build
+      - name: Publish
+        working-directory: packages/sdk-node
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  pypi:
+    name: Publish to PyPI
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write # Trusted Publishing — no token stored anywhere
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Build
+        working-directory: packages/sdk-python
+        run: pip install build && python -m build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/sdk-python/dist
+
+  # "Cut" is not "published" — that assumption is what left two releases
+  # stranded. Ask the registries, do not assume the upload worked.
+  confirm:
+    name: Confirm the registries actually serve it
+    needs: [npm, pypi]
+    if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for propagation
+        run: sleep 45
+      - name: npm and PyPI must both serve the tagged version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          NPM=$(curl -sf "https://registry.npmjs.org/@varbees/rateguard-node" | python3 -c "import json,sys;print(json.load(sys.stdin)['dist-tags']['latest'])")
+          PYPI=$(curl -sf "https://pypi.org/pypi/varbees-rateguard/json" | python3 -c "import json,sys;print(json.load(sys.stdin)['info']['version'])")
+          echo "tag=$TAG npm=$NPM pypi=$PYPI"
+          [ "$NPM" = "$TAG" ] || { echo "::error::npm serves $NPM, expected $TAG"; exit 1; }
+          [ "$PYPI" = "$TAG" ] || { echo "::error::PyPI serves $PYPI, expected $TAG"; exit 1; }
+          echo "✓ both registries serve $TAG"

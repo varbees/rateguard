@@ -44,14 +44,17 @@ jobs:
         working-directory: packages/sdk-node
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # The repo uses bun (bun.lock is committed, and the release checklist has
+      # always said `bun run test`). An earlier draft of this workflow used
+      # `npm ci`, which requires a package-lock.json that does not exist — it
+      # would have failed on its first run. npm is still used to PUBLISH, for
+      # provenance; bun installs and builds.
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: packages/sdk-node/package-lock.json
-      - run: npm ci
-      - run: npm run build
-      - run: npx vitest run
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bunx vitest run
 
   python:
     name: Python
@@ -103,17 +106,15 @@ jobs:
         with:
           go-version: '1.24'
           cache-dependency-path: packages/sdk-go/go.sum
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: packages/sdk-node/package-lock.json
+          bun-version: latest
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
       - name: Install Node deps
         working-directory: packages/sdk-node
-        run: npm ci
+        run: bun install --frozen-lockfile
       - name: Install Python SDK
         working-directory: packages/sdk-python
         run: pip install -e .
@@ -127,17 +128,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: packages/sdk-node/package-lock.json
+          bun-version: latest
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
       - name: Install Node deps
         working-directory: packages/sdk-node
-        run: npm ci
+        run: bun install --frozen-lockfile
       # The docs told users to write `tokenBudgetPerHour: 250_000`, which does
       # not exist: Python raised TypeError, and Node SILENTLY ignored it and
       # handed back the preset's 10,000. A spend-control product whose docs

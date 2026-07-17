@@ -1,5 +1,30 @@
 # Release Checklist
 
+> ## Releasing is now one command
+>
+> ```bash
+> git tag -a v0.5.0 -m "v0.5.0" && git push origin v0.5.0
+> ```
+>
+> `.github/workflows/release.yml` verifies, publishes npm + PyPI, and then
+> **asks the registries whether they actually serve it**. The Go proxy picks up
+> the `packages/sdk-go/vX.Y.Z` tag on its own (§6 below).
+>
+> **Why this changed.** v0.3.0 and v0.4.0 were cut and never published — npm and
+> PyPI served 0.2.0 the whole time, and v0.4.0's own commit message says it was
+> cut to close that exact gap before falling into it too. This checklist was not
+> missing; it had every publish step. But steps 1–5 verify and get done, while
+> steps 6–9 are manual, interactive (`npm login`), credential-gated, and last —
+> so they got deferred, three times. **"Cut" and "published" have to be the same
+> action, or they drift.** They are now.
+>
+> **One-time setup** (see the workflow header): add the `NPM_TOKEN` repo secret,
+> and configure PyPI Trusted Publishing (OIDC — no stored token).
+>
+> The manual steps below remain as the fallback for when CI is unavailable, and
+> as the record of what the automation does. **If you run them by hand, do §10
+> — confirming the registry — or you have not released anything.**
+
 Use this checklist for every RateGuard SDK release.
 
 ## 1. Preflight
@@ -168,7 +193,26 @@ Otherwise create the release in the GitHub UI:
 
 ## 12. Post-release
 
-- Update `docs/RELEASE_NOTES.md`.
+- Update `CHANGELOG.md` (the source of truth) and `docs/RELEASE_NOTES.md`.
 - Create a GitHub release for the pushed release tag.
 - Confirm registry pages render useful metadata and README content.
 - Keep PyPI/npm tokens scoped to the minimum project access needed.
+
+## 13. THE STEP THAT WAS ALWAYS SKIPPED — did it actually publish?
+
+Bumping a version and committing is **cutting** a release. It is not
+**publishing** one. That distinction stranded v0.3.0 and v0.4.0 for months
+while the site advertised features nobody could install.
+
+The release workflow does this automatically (`confirm` job). If you released
+by hand, do it yourself — and believe the registry, not the checklist:
+
+```bash
+TAG=0.5.0
+curl -s https://registry.npmjs.org/@varbees/rateguard-node | python3 -c "import json,sys;print('npm  ->', json.load(sys.stdin)['dist-tags']['latest'])"
+curl -s https://pypi.org/pypi/varbees-rateguard/json      | python3 -c "import json,sys;print('pypi ->', json.load(sys.stdin)['info']['version'])"
+curl -s https://proxy.golang.org/github.com/varbees/rateguard/packages/sdk-go/@v/list | sort -V | tail -1 | sed 's/^/go   -> /'
+```
+
+**All three must print `$TAG`.** If any prints an older version, the release did
+not happen, regardless of what the commit log says.
