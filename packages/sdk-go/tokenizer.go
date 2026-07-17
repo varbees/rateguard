@@ -77,9 +77,11 @@ func EstimateTokens(text string) int {
 	return cjk + (other+3)/4
 }
 
-// estimateWith estimates via a caller-supplied Tokenizer, falling back to the
-// default CJK-aware heuristic when nil.
-func estimateWith(t Tokenizer, text string) int {
+// EstimateWith estimates via a caller-supplied Tokenizer, falling back to the
+// default CJK-aware heuristic when nil. Exported for parity: Node and Python
+// both expose this, so a Go user writing the same "use my tokenizer, else the
+// default" logic had to reimplement the nil check by hand.
+func EstimateWith(t Tokenizer, text string) int {
 	if t != nil {
 		return t.EstimateTokens(text)
 	}

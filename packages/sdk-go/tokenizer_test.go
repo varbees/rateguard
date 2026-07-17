@@ -58,7 +58,7 @@ func TestTokenizerCustomOverride(t *testing.T) {
 	if v := guard.Check("hi"); v == nil || v.Code != "token_limit_exceeded" {
 		t.Fatalf("custom tokenizer should force a violation, got %v", v)
 	}
-	if got := estimateWith(nil, "hello world"); got != EstimateTokens("hello world") {
-		t.Fatalf("estimateWith(nil) should fall back to default, got %d", got)
+	if got := EstimateWith(nil, "hello world"); got != EstimateTokens("hello world") {
+		t.Fatalf("EstimateWith(nil) should fall back to default, got %d", got)
 	}
 }

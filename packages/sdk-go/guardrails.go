@@ -144,7 +144,7 @@ func NewTokenLimitGuardrail(maxTokens int) *TokenLimitGuardrail {
 }
 
 func (g *TokenLimitGuardrail) Check(content string) *GuardrailViolation {
-	estimatedTokens := estimateWith(g.Tokenizer, content)
+	estimatedTokens := EstimateWith(g.Tokenizer, content)
 	if estimatedTokens > g.MaxTokens {
 		return &GuardrailViolation{
 			Code:    "token_limit_exceeded",
