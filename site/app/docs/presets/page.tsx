@@ -54,16 +54,16 @@ export default function PresetsPage() {
             label: "Node.js",
             code: `const rg = new RateGuard({
   preset: 'streaming-llm',
-  requestsPerSecond: 300,
-  tokenBudgetPerHour: 750_000,
+  rateLimit: { requestsPerSecond: 300 },   // override preset RPS
+  tokenBudget: { hourLimit: 750_000 },     // override token budget
 });`,
           },
           {
             label: "Python",
             code: `rg = RateGuard(
     preset="streaming-llm",
-    requests_per_second=300,
-    token_budget_per_hour=750_000,
+    rate_limit=RateLimitOptions(requests_per_second=300),  # override preset RPS
+    token_budget=TokenBudgetOptions(hour_limit=750_000),   # override token budget
 )`,
           },
         ]}

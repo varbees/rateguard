@@ -35,20 +35,24 @@ export default function TokenBudgetsPage() {
             label: "Node.js",
             code: `const rg = new RateGuard({
   preset: 'llm-heavy',
-  tokenBudgetPerHour: 250_000,
-  tokenBudgetPerDay: 2_500_000,
-  tokenBudgetPerMonth: 250_000_000,
-  tokenBudgetMode: 'soft-stop',
+  tokenBudget: {
+    hourLimit: 250_000,
+    dayLimit: 2_500_000,
+    monthLimit: 250_000_000,
+    mode: 'soft-stop',
+  },
 });`,
           },
           {
             label: "Python",
             code: `rg = RateGuard(
     preset="llm-heavy",
-    token_budget_per_hour=250_000,
-    token_budget_per_day=2_500_000,
-    token_budget_per_month=250_000_000,
-    token_budget_mode="soft-stop",
+    token_budget=TokenBudgetOptions(
+        hour_limit=250_000,
+        day_limit=2_500_000,
+        month_limit=250_000_000,
+        mode="soft-stop",
+    ),
 )`,
           },
         ]}
