@@ -321,6 +321,66 @@ CATALOGUE: list[Mutation] = [
         models="in-flight reservations invisible → concurrent callers read a stale remainder and overshoot",
         expect="token budget reservation suite",
     ),
+    # ── Closing the Node catalogue gap ──
+    #
+    # Go had 11 mutations, Node 4 — and Node is where the SSE bug LIVED. The
+    # engine's own asymmetry warning existed because of exactly this. These six
+    # mirror Go's money-path mutations into Node so the two are comparable and
+    # the port is scrutinised as hard as the reference.
+    Mutation(
+        id="node/usage-merge-max-to-sum",
+        sdk="node",
+        path="packages/sdk-node/src/core/utils.ts",
+        find="  const outputTokens = Math.max(base.outputTokens, addition.outputTokens);",
+        replace="  const outputTokens = base.outputTokens + addition.outputTokens;",
+        models="Groq's triple-usage in Node: MAX→SUM → 3x overbill",
+        expect="conformance groq_live_capture_triple_usage",
+    ),
+    Mutation(
+        id="node/budget-boundary-off-by-one",
+        sdk="node",
+        path="packages/sdk-node/src/core/token-budget.ts",
+        find="      exceededWindow: hour >= options.hourLimit,",
+        replace="      exceededWindow: hour > options.hourLimit,",
+        models="off-by-one at the hourly cap: one token past every budget, forever",
+        expect="token budget boundary suite",
+    ),
+    Mutation(
+        id="node/unmeasurable-usage-charges-zero",
+        sdk="node",
+        path="packages/sdk-node/src/core/outbound.ts",
+        find="    } else if (reservedEstimate > 0) {",
+        replace="    } else if (false) {",
+        models="the DoW hole, Node side: no provider usage → charge 0 → runaway streams free",
+        expect="outbound streaming-without-usage suite",
+    ),
+    Mutation(
+        id="node/freeze-does-not-halt",
+        sdk="node",
+        path="packages/sdk-node/src/core/freeze.ts",
+        find="    return this.global || (!!customer && this.customers.has(customer));",
+        replace="    return false;",
+        models="the stop button does nothing — operator believes the bleeding stopped",
+        expect="freeze suite",
+    ),
+    Mutation(
+        id="node/breaker-never-opens",
+        sdk="node",
+        path="packages/sdk-node/src/core/circuit-breaker.ts",
+        find="        if (this.consecutiveHalfOpenSuccesses >= this.halfOpenSuccessesRequired) {",
+        replace="        if (false) {",
+        models="half-open never closes back → breaker stuck, provider never recovers in-process",
+        expect="circuit breaker recovery suite",
+    ),
+    Mutation(
+        id="node/rule5-checkloop-records-by-default",
+        sdk="node",
+        path="packages/sdk-node/src/core/mcp.ts",
+        find="    const record = typeof args.record === 'boolean' ? args.record : false;",
+        replace="    const record = typeof args.record === 'boolean' ? args.record : true;",
+        models="rule 5, Node: a passive check mutates state → self-inflicted loop reports",
+        expect="rule 5 / check_loop peek suite",
+    ),
     # ── CJK parity ──
     Mutation(
         id="node/tokenizer-cjk-undercount",
