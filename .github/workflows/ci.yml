@@ -1,0 +1,123 @@
+name: CI
+
+# The repo had ~790 tests and no CI at all — every run was manual, which is
+# how the SSE usage bug (e6eba43) stayed green and undetected. Tests nobody
+# runs automatically are tests that pass until they matter.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    name: Go
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/sdk-go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: packages/sdk-go/go.sum
+      - run: go build ./...
+      - run: go vet ./...
+      # -race is the point of this job, not a bonus: budget enforcement is a
+      # shared-counter problem, and shared counters are where races become money.
+      - run: go test -race ./...
+
+  node:
+    name: Node
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/sdk-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: packages/sdk-node/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npx vitest run
+
+  python:
+    name: Python
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/sdk-python
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 is the floor declared in pyproject; test the floor, not just
+        # whatever the dev box happens to run.
+        python-version: ['3.10', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e '.[dev]'
+      # tests/live needs real provider keys and is skipped by default; it is
+      # excluded here explicitly so a missing key can never look like a pass.
+      - run: python -m pytest -q --ignore=tests/live
+      - run: mypy --strict rateguard
+
+  zero-dependency:
+    name: Zero-dependency import
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      # The README and __init__.py both claim `import rateguard` needs nothing
+      # installed — the attestation/outbound/redis extras are lazily imported.
+      # That claim was never tested. A bare venv is the only honest test of it.
+      - name: Import with no dependencies at all
+        working-directory: packages/sdk-python
+        run: |
+          python -m venv /tmp/bare
+          /tmp/bare/bin/pip install --no-deps -e .
+          /tmp/bare/bin/python -c "import rateguard; print('bare import OK:', rateguard.__version__)"
+
+  parity:
+    name: Cross-SDK parity (rule 3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: packages/sdk-go/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: packages/sdk-node/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install Node deps
+        working-directory: packages/sdk-node
+        run: npm ci
+      - name: Install Python SDK
+        working-directory: packages/sdk-python
+        run: pip install -e .
+      # Names only. Behaviour parity is the conformance vectors' job — see the
+      # conformance suites in each language job above.
+      - name: Every manifest capability must resolve in all three SDKs
+        run: python3 scripts/parity_guard.py
