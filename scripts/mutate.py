@@ -246,6 +246,32 @@ CATALOGUE: list[Mutation] = [
         models="unparseable body ignores its own size → large unknown prompts under-reserved",
         expect="test_unknown_schema_is_bounded_by_size",
     ),
+    # ── Reservation accounting, Node and Python ──
+    #
+    # These mirror go/reservations-not-counted deliberately. The catalogue had
+    # 8 Go mutations to Node's 3 and Python's 4 — meaning the REFERENCE SDK was
+    # the best-defended one, while Node and Python (the two that silently
+    # metered zero for months) were the least. That is the exact bias that let
+    # the SSE bug through: we scrutinise the SDK we trust. Parity in the
+    # catalogue is the point of a cross-language product.
+    Mutation(
+        id="node/reservations-not-counted",
+        sdk="node",
+        path="packages/sdk-node/src/core/token-budget.ts",
+        find="    const records = activeRecords(state.records, state.reservations, now, maxWindow);",
+        replace="    const records = activeRecords(state.records, new Map(), now, maxWindow);",
+        models="in-flight reservations invisible → concurrent callers read a stale remainder and overshoot",
+        expect="token-budget concurrency/reservation suite",
+    ),
+    Mutation(
+        id="python/reservations-not-counted",
+        sdk="python",
+        path="packages/sdk-python/rateguard/core/token_budget.py",
+        find="        if not state.reservations:\n            return state.records",
+        replace="        if True:\n            return state.records",
+        models="in-flight reservations invisible → concurrent callers read a stale remainder and overshoot",
+        expect="token budget reservation suite",
+    ),
     # ── CJK parity ──
     Mutation(
         id="node/tokenizer-cjk-undercount",
