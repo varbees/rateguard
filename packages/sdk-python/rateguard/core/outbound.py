@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
 
 from .circuit_breaker import CircuitBreaker
+from .request_estimate import estimate_request_tokens
 from .semantic_cache import CachedResponse, SemanticCache, SemanticCacheOptions, is_streaming_request_body, prompt_text_from_request_body
 from .utils import extract_token_usage_from_text, format_retry_after_ms
 
@@ -40,7 +41,6 @@ if TYPE_CHECKING:
 _MAX_EXTRACT_BYTES = 1 << 20  # 1 MiB cap on JSON usage extraction
 _MAX_SSE_CANDIDATES = 8
 _MAX_SSE_LINE_BYTES = 256 << 10
-_DEFAULT_OUTBOUND_ESTIMATED_TOKENS = 4096  # typical chat-call upper bound
 _DEFAULT_OUTBOUND_CUSTOMER_HEADER = "x-rateguard-customer"
 
 # OpenAI-schema hosts (path-suffix matching covers Groq's /openai/v1/,
@@ -232,13 +232,15 @@ class _OutboundCore:
             or _DEFAULT_OUTBOUND_CUSTOMER_HEADER
         )
         # Zero falls back to the SDK-instance estimated_tokens_per_request
-        # config, then to a sane hardcoded default; reserving the whole
-        # remaining budget per call would serialize concurrent agents.
+        # config; if that is unset too, the reservation is MEASURED from each
+        # request's own body (request_estimate.py). It used to resolve to a
+        # flat 4096 here — a constant chosen before any request existed, which
+        # under-reserved long-context calls ~25x and let concurrent callers
+        # overshoot the budget by that factor.
         # Negative → strict reserve-all. Mirrors Go's outbound.go Transport().
         if estimated_tokens == 0:
             estimated_tokens = runtime.config.estimated_tokens_per_request
-        if estimated_tokens == 0:
-            estimated_tokens = _DEFAULT_OUTBOUND_ESTIMATED_TOKENS
+        self.derive_estimate = estimated_tokens == 0
         self.estimated_tokens = max(estimated_tokens, 0)
         self._breakers: dict[str, CircuitBreaker] = {}
 
@@ -259,9 +261,15 @@ class _OutboundCore:
         prefix = f"{tenant}:customer={call.customer}" if call.customer else tenant
         return f"{prefix}:{call.provider}:{model}:outbound"
 
-    def reserve(self, call: OutboundCall) -> Any:
+    def reserve(self, call: OutboundCall, body: bytes | None = None) -> Any:
+        # Measure the reservation from THIS request rather than a constant: a
+        # 100K-token context reserves ~100K, not a flat 4096 it would overshoot
+        # by ~25x under concurrency.
+        estimate = (
+            estimate_request_tokens(body) if self.derive_estimate else self.estimated_tokens
+        )
         return self.runtime.token_budget.reserve(
-            self.budget_key(call), self.runtime.config.token_budget, self.estimated_tokens
+            self.budget_key(call), self.runtime.config.token_budget, estimate
         )
 
     def finish(
@@ -515,7 +523,7 @@ def create_httpx_transport(
                     return synthesized(request, 429, "rate_limit_exceeded",
                                        f"rateguard: outbound rate limit for provider {call.provider}", retry_after_ms)
 
-                reservation = core.reserve(call)
+                reservation = core.reserve(call, body)
                 if reservation.decision.applied and not reservation.decision.allowed and core.enforce:
                     core.runtime.enforcement_log.record("token_budget_exceeded", customer=call.customer, provider=call.provider, model=call.model, detail=reservation.decision.window or "")
                     return synthesized(request, 429, "token_budget_exceeded",
@@ -781,7 +789,7 @@ def create_httpx_async_transport(
                     return synthesized(request, 429, "rate_limit_exceeded",
                                        f"rateguard: outbound rate limit for provider {call.provider}", retry_after_ms)
 
-                reservation = core.reserve(call)
+                reservation = core.reserve(call, body)
                 if reservation.decision.applied and not reservation.decision.allowed and core.enforce:
                     core.runtime.enforcement_log.record("token_budget_exceeded", customer=call.customer, provider=call.provider, model=call.model, detail=reservation.decision.window or "")
                     return synthesized(request, 429, "token_budget_exceeded",

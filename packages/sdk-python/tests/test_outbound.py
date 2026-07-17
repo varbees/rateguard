@@ -156,7 +156,14 @@ def test_outbound_streaming_without_usage_charges_estimate():
 
     key = f"{rg.runtime.config.tenant_id}:openai:gpt-4o:outbound"
     usage = rg.runtime.token_budget.usage(key, rg.runtime.config.token_budget)
-    assert usage["hour"] == 4096, "missing usage must charge the reserved estimate, not zero"
+    # Asserts the contract — "charge the reservation, never zero" — rather than
+    # a magic number. This used to assert exactly 4096, the old hardcoded
+    # estimate, which pinned an implementation constant instead of the
+    # behaviour: reservations are now measured per request, so a body carrying
+    # no recognizable prompt is bounded by its own size (its bytes + the output
+    # allowance) rather than assumed to be 4096.
+    assert usage["hour"] > 0, "missing usage must charge the reserved estimate, not zero"
+    assert usage["hour"] >= DEFAULT_OUTPUT_ALLOWANCE, "charge must cover the output allowance"
 
 
 def test_outbound_anthropic_split_usage_merges_max():
@@ -359,6 +366,7 @@ def test_wrap_httpx_client_facade():
 # ── Async transport (agent frameworks are async-first) ──
 
 from rateguard.core.outbound import create_httpx_async_transport
+from rateguard.core.request_estimate import DEFAULT_OUTPUT_ALLOWANCE
 
 
 def make_async_client(rg: RateGuard, handler, **kwargs) -> httpx.AsyncClient:

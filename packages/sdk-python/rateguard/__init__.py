@@ -77,6 +77,11 @@ from .core.provider_chain import (
     quality_provider_chain,
 )
 from .core.rate_limiter import RateLimiter
+from .core.request_estimate import (
+    DEFAULT_OUTPUT_ALLOWANCE,
+    MAX_ESTIMATE_BODY_BYTES,
+    estimate_request_tokens,
+)
 from .core.redis_limiter import (
     AsyncRedisLimiterClient,
     AsyncRedisPyClient,
@@ -239,6 +244,10 @@ __all__ = [
     "Tokenizer",
     "estimate_tokens",
     "estimate_with",
+    # Per-request budget estimation (measured, not a constant)
+    "estimate_request_tokens",
+    "DEFAULT_OUTPUT_ALLOWANCE",
+    "MAX_ESTIMATE_BODY_BYTES",
     # Guardrail violation tracking
     "GuardrailEvent",
     "GuardrailLog",
