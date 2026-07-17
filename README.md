@@ -255,8 +255,42 @@ cd packages/sdk-node && bun run test
 cd packages/sdk-python && python3 -m pytest -q
 ```
 
-Those prove RateGuard is *self-consistent*. They cannot prove it is *true* — every test inherits
-the same assumptions about what providers send. So we also run it against real providers:
+800+ tests. That number tells you almost nothing, so here are the two that do.
+
+### Would the tests notice if the code lied?
+
+```bash
+python3 scripts/mutate.py     # ~50s, all three SDKs
+```
+
+Coverage measures whether a line *ran*. It cannot measure whether a test would **notice the line
+being wrong** — and those are different questions. This repo learned that the expensive way: ~800
+green tests failed to notice that two SDKs metered **zero tokens** for the most common streaming
+shape in the ecosystem.
+
+So the number we publish is the **mutation score**: inject a defect into the money paths, run the
+suite, and see whether anything screams.
+
+| SDK | Mutation score |
+|---|---|
+| Go | **100%** (8/8) |
+| Node | **100%** (4/4) |
+| Python | **100%** (5/5) |
+
+Every mutation reproduces a defect this codebase **actually shipped** or deliberately rejected —
+MAX→SUM (Groq bills 3x), measured→constant (25x under-reserve), estimate→zero (the
+denial-of-wallet hole), CJK chars/4, rule 5's peek→record. A suite seeded with your own bug
+history asks the only question worth asking: *if we regressed to the bug we already had, would
+anyone notice?*
+
+**Read it honestly:** 100% here means "the 17 defects we know about, we detect." It does **not**
+mean bug-free. The catalogue is hand-picked and small by design — that is what makes a 100% gate
+defensible instead of a spray of equivalent mutants nobody triages.
+
+### Does it survive real providers?
+
+The suites above prove RateGuard is *self-consistent*. They cannot prove it is *true* — every test
+inherits the same assumptions about what providers send. So we also run it against real providers:
 
 ```bash
 export NVIDIA_NIM_API_KEY=... GROQ_API_KEY=... DEEPSEEK_API_KEY=...
