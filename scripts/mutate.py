@@ -381,6 +381,15 @@ CATALOGUE: list[Mutation] = [
         models="rule 5, Node: a passive check mutates state → self-inflicted loop reports",
         expect="rule 5 / check_loop peek suite",
     ),
+    Mutation(
+        id="python/budget-boundary-off-by-one",
+        sdk="python",
+        path="packages/sdk-python/rateguard/core/token_budget.py",
+        find='return {"window": "hour", "used": hour, "limit": options.hour_limit or 0, "exceeded": hour >= (options.hour_limit or 0)}',
+        replace='return {"window": "hour", "used": hour, "limit": options.hour_limit or 0, "exceeded": hour > (options.hour_limit or 0)}',
+        models="off-by-one at the hourly cap: one token past every budget, forever",
+        expect="token budget boundary suite",
+    ),
     # ── CJK parity ──
     Mutation(
         id="node/tokenizer-cjk-undercount",
