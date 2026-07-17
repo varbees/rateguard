@@ -1,5 +1,120 @@
 # Release Notes
 
+## v0.4.0 — 2026-07-17 — "Attribution, Kill Switch, and Proof"
+
+`v0.4.0` is the release that makes RateGuard usable by an operator under
+pressure: know whose spend it was, stop it without a redeploy, and hand
+someone a record afterward that holds up. It also closes a denial-of-wallet
+hole that made budgets fail open on the most common streaming setup.
+
+**Install note.** npm and PyPI were still serving `0.2.0` — `0.3.0` shipped to
+the Go proxy and the docs but never reached the other two registries. `0.4.0`
+publishes all three together. If you installed from npm or PyPI before today,
+you did not have the v0.3.0 feature set the docs describe.
+
+### Highlights
+
+- **Budgets no longer fail open on unmeasured streams.** `finish()` recorded
+  **zero** tokens whenever provider usage was unmeasurable — a stream without
+  `stream_options.include_usage` (the default), a body over the buffer cap, or
+  an unrecognized schema. A runaway agent streaming without `include_usage`
+  never tripped its budget: the budget silently failed open to unlimited spend
+  on the most common production pattern. It now commits the reserved estimate
+  instead of zero, counted separately as `rateguard_tokens_estimated_total` so
+  estimated spend is never mistaken for measured spend. Byte transparency
+  ruled out LiteLLM-style request injection; we take the passive path and
+  charge an estimate rather than nothing.
+- **Per-customer cost attribution.** `X-RateGuard-Customer` scopes budgets and
+  spend per customer, is stripped before the provider ever sees it, survives
+  fallback, and lands as a `rateguard.customer` OTel attribute.
+- **Runtime kill switch.** `Freeze("")` halts everything; `Freeze("<customer>")`
+  halts one. Frozen calls get a synthesized 403; observe mode is unaffected.
+  Driveable from the admin API (`POST /admin/freeze|unfreeze`,
+  `GET /admin/frozen`) so ops can stop the bleeding without a redeploy.
+- **Enforcement audit trail.** A bounded ring buffer records every frozen /
+  rate-limited / budget-exceeded block with timestamp, customer, provider,
+  model, and detail. Two pull-side read paths, no webhook: in-process
+  `enforcement_events()` and `GET /admin/events` (JSON, `?limit=N`,
+  `?format=csv` for finance).
+- **Evidence chain — tamper-evident spend history.** A signed receipt proves
+  one statement was not altered; it proves nothing about the *set*. An issuer
+  holding its own key could drop the expensive receipts, renumber the rest,
+  and re-sign a tidier history with every remaining receipt still verifying.
+  `EvidenceChain` links each entry to the hash of the one before it, so a
+  deletion, reorder, or edit breaks every subsequent hash, and the chain
+  yields one head standing for the whole history.
+- **External signers (KMS/HSM).** The new `Signer` interface routes the
+  signing payload to a key the process cannot read. A signer that advertises
+  one key and signs with another, or returns a wrong-length signature, is
+  rejected at issue time rather than months later in an auditor's hands.
+- **Evidence package export.** One auditor-facing artifact: entries, head,
+  issuer key, and totals that are recomputed on verify so the summary cannot
+  become a place to hide spend. Its caveats travel inside the file.
+- **Pin your embedding model by SHA-256.** `.rgemb` files are downloaded data,
+  so the bytes reaching the loader come from wherever the operator got them.
+  `LoadStaticEmbedderVerified` / `loadVerified` / `load_verified` hash the file
+  in full **before parsing any of it** — a file that fails the check never
+  reaches the header parser, the vocab loop, or the matrix read.
+- **CJK-aware token estimation.** The naive `chars/4` estimate undercounted CJK
+  by up to 75%, so a CJK prompt could slip past a token-sized limit — a
+  denial-of-wallet hole for non-English workloads. It also disagreed across
+  languages (Go counted bytes, Node UTF-16 units, Python code points: three
+  estimates for one string). Now ~1 token per CJK code point, ~4 chars/token
+  otherwise, iterated by code point, locked by conformance vectors. The
+  `Tokenizer` interface is the plug-in point for exact counts (tiktoken); the
+  default stays zero-dependency.
+- **User-owned custom pricing.** The pricing table used exact-match, so tabled
+  models priced at $0 on the dated IDs providers actually report
+  (`gpt-4o-2024-08-06`). Adds a `PricingProvider` interface, `StaticPricing`,
+  and dated-ID normalization. We deliberately did **not** auto-fetch a
+  community pricing JSON at startup — that reintroduces the network and
+  supply-chain dependency this SDK exists to avoid.
+- **CrewAI adapter (Python).** `wrap_completion` / `wrap_acompletion` meter from
+  the response, because litellm's client_session injection is
+  provider-inconsistent and metering the request would leave a silent gap.
+
+### What the evidence chain does and does not prove
+
+Read this before repeating any of it to a buyer.
+
+The chain makes **selective** edits detectable on its own. It does **not**, by
+itself, make a wholesale rewrite detectable: an issuer with its own key can
+rebuild the chain from entry zero and publish a new head. Two things close
+that, and an in-process SDK cannot supply either:
+
+1. **The signing key must live where the application cannot read it.** A log
+   signed by a key the audited process holds is not independently verifiable.
+   That is what `Signer` is for.
+2. **The head must be witnessed outside the application** — published,
+   timestamped, or written to append-only storage on a cadence. A head nobody
+   recorded is a head you can silently replace.
+
+With both, this produces audit **inputs** an assessor can work from. RateGuard
+ships components for an evidence trail. It does not make a deployment
+compliant, and it should never be sold as if it did. Costs throughout are
+pricing-table **estimates**, not provider invoices — reconcile against billing
+and expect drift.
+
+### Verification
+
+- Go 225 test funcs (all `-race`), `go vet` clean.
+- Node 276 passing, `tsc --noEmit` clean — the Node typecheck was failing on
+  pre-existing strict-index errors before this release and is now green. A
+  gate that is always red hides real regressions.
+- Python 296 passing, `mypy --strict` clean across 52 source files.
+- New shared oracle: `conformance/evidence_chain_vectors.json` pins every
+  `entry_hash` and the final `chain_head` against the Go reference, because a
+  hash-linked log is only verifiable across languages if all three hash
+  identical bytes. Joins the existing token-bucket, attestation-expiry,
+  spend-receipt, realtime-usage, static-embedding, and token-estimate vectors.
+
+### Upgrading
+
+No breaking API changes from `0.3.0`. Coming from `0.2.0` (npm/PyPI users:
+that is you), read the `v0.3.0` notes below as well.
+
+---
+
 ## v0.3.0 — 2026-07-10 — "The Enforcement Release"
 
 RateGuard `v0.3.0` extends enforcement to where agents actually run: voice
