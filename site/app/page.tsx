@@ -70,7 +70,7 @@ const features = [
   },
   {
     title: "One algorithm, three runtimes",
-    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 696 tests, including shared conformance suites that replay identical admission sequences across all three, hold them to real behavioral parity rather than just similar APIs.",
+    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 800+ tests, including shared conformance suites that replay identical admission sequences across all three, hold them to real behavioral parity rather than just similar APIs — and a live matrix runs the same suite against real provider APIs, because a passing suite only proves self-consistency.",
     micro: <MicroParity />,
   },
   {
