@@ -5,9 +5,9 @@ import { CodeTabs } from "../../../components/docs/CodeTabs";
 import { CodeBlock } from "../../../components/docs/CodeBlock";
 
 export const metadata: Metadata = {
-  title: "Spend receipts & FOCUS export",
+  title: "Spend receipts, evidence chain & FOCUS export",
   description:
-    "Ed25519-signed, offline-verifiable proof of what an agent actually spent — and FinOps FOCUS-aligned cost exports for the tooling your finance team already uses.",
+    "Ed25519-signed proof of what an agent actually spent, a hash-linked evidence chain that makes the record tamper-evident, KMS signing, and FinOps FOCUS-aligned cost exports.",
 };
 
 export default function SpendReceiptsPage() {
@@ -99,6 +99,159 @@ verify_spend_receipt(trusted_issuer_pub, receipt)  # raises on failure`,
         (tamper detection under the embedded key — not authenticity, since anyone can mint a
         keypair). Tampering with any claim, or the issue time, fails verification.
       </P>
+
+      <DocH2 id="evidence-chain">Evidence chain: proving the set, not just the statement</DocH2>
+      <P>
+        A signed receipt proves one statement was not altered. It proves nothing about the{" "}
+        <em>set</em> of statements. An issuer holding its own key can drop the expensive receipts,
+        renumber what is left, and re-sign a tidier history — and every remaining receipt still
+        verifies. A pile of valid receipts is not a record.
+      </P>
+      <P>
+        <code>EvidenceChain</code> links each entry to the hash of the entry before it. Remove,
+        reorder, or edit one and every subsequent hash fails to recompute. The chain yields a
+        single <strong>head</strong> that stands for the whole history.
+      </P>
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `chain := rateguard.NewEvidenceChain()
+entry, err := chain.Append(receipt) // refuses receipts that don't verify
+
+// The head stands for the entire history. Witness it externally.
+head := chain.Head()
+
+// Verify end to end: signatures, links, sequence, and the head you recorded.
+err = rateguard.VerifyEvidenceChain(trustedIssuerKey, chain.Entries(), witnessedHead)`,
+          },
+          {
+            label: "Node.js",
+            code: `const chain = new EvidenceChain();
+const entry = chain.append(receipt); // refuses receipts that don't verify
+
+// The head stands for the entire history. Witness it externally.
+const head = chain.head;
+
+// Verify end to end: signatures, links, sequence, and the head you recorded.
+verifyEvidenceChain(trustedIssuerKey, chain.entries(), witnessedHead);`,
+          },
+          {
+            label: "Python",
+            code: `chain = EvidenceChain()
+entry = chain.append(receipt)  # refuses receipts that don't verify
+
+# The head stands for the entire history. Witness it externally.
+head = chain.head
+
+# Verify end to end: signatures, links, sequence, and the head you recorded.
+verify_evidence_chain(trusted_issuer_key, chain.entries(), witnessed_head)`,
+          },
+        ]}
+      />
+
+      <DocH2 id="external-signer">Keep the key out of your process</DocH2>
+      <P>
+        A log signed by a key the audited application holds is not independently verifiable — the
+        application could have produced any history it liked. That is the bar record-keeping
+        regimes actually set, and it is not one an in-process SDK can clear on its own.
+      </P>
+      <P>
+        The <code>Signer</code> interface is the answer: implement it against your KMS or HSM and
+        RateGuard never sees key material. It ships the signing payload out and takes a signature
+        back. A signer that advertises one key but signs with another — a KMS pointed at the wrong
+        alias — is rejected at issue time, rather than months later in an auditor&apos;s hands.
+      </P>
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `// Implement Signer against your KMS; the key never enters the process.
+type KMSSigner struct{ /* ... */ }
+
+func (s KMSSigner) Public() ed25519.PublicKey          { /* published key */ }
+func (s KMSSigner) Sign(payload []byte) ([]byte, error) { /* KMS round trip */ }
+
+receipt, err := rateguard.IssueSpendReceiptWithSigner(kms, claims)
+
+// In-process key (dev, or where you've decided it's acceptable):
+signer, err := rateguard.KeySigner(privateKey)`,
+          },
+          {
+            label: "Node.js",
+            code: `// Implement Signer against your KMS; the key never enters the process.
+const kms: Signer = {
+  publicKey: () => publishedKey,
+  sign: (payload) => kmsRoundTrip(payload),
+};
+
+const receipt = issueSpendReceiptWithSigner(kms, claims);
+
+// In-process key (dev, or where you've decided it's acceptable):
+const signer = keySigner(privateKey);`,
+          },
+          {
+            label: "Python",
+            code: `# Implement Signer against your KMS; the key never enters the process.
+class KMSSigner:
+    def public_key(self) -> bytes: ...   # published key
+    def sign(self, payload: bytes) -> bytes: ...  # KMS round trip
+
+receipt = issue_spend_receipt_with_signer(KMSSigner(), claims)
+
+# In-process key (dev, or where you've decided it's acceptable):
+signer = KeySigner(private_key)`,
+          },
+        ]}
+      />
+
+      <DocH2 id="evidence-package">Evidence package</DocH2>
+      <P>
+        <code>ExportEvidence</code> produces the artifact you hand an assessor: the entries, the
+        head they produce, the issuer key to pin, and totals that are <em>recomputed</em> on verify
+        — so the summary can never become a place to hide spend. Its caveats travel inside the
+        file, because an evidence export that outlives its context gets read as proof of more than
+        it is.
+      </P>
+      <CodeTabs
+        tabs={[
+          {
+            label: "Go",
+            code: `pkg, err := chain.ExportEvidence()
+data, err := rateguard.MarshalEvidencePackage(pkg)
+
+// Re-verify a package that arrived from somewhere else.
+err = rateguard.VerifyEvidencePackage(trustedIssuerKey, pkg)`,
+          },
+          {
+            label: "Node.js",
+            code: `const pkg = chain.exportEvidence();
+const json = marshalEvidencePackage(pkg);
+
+// Re-verify a package that arrived from somewhere else.
+verifyEvidencePackage(trustedIssuerKey, pkg);`,
+          },
+          {
+            label: "Python",
+            code: `pkg = chain.export_evidence()
+json_text = pkg.to_json()
+
+# Re-verify a package that arrived from somewhere else.
+verify_evidence_package(trusted_issuer_key, pkg)`,
+          },
+        ]}
+      />
+      <Callout>
+        What this proves, exactly. The chain catches <strong>selective</strong> edits on its own. It
+        does not, by itself, catch a <strong>wholesale rewrite</strong>: an issuer with its own key
+        can rebuild the chain from entry zero and publish a new head. Closing that needs two things
+        RateGuard cannot supply from inside your process — a signing key the application cannot
+        read, and a head witnessed <em>outside</em> the application (published, timestamped, or
+        written to append-only storage on a cadence). With both, you have audit{" "}
+        <strong>inputs</strong> an assessor can work from. RateGuard ships components for an
+        evidence trail; it does not make a deployment compliant, and you should not tell anyone it
+        does.
+      </Callout>
 
       <DocH2 id="focus">FOCUS-aligned cost export</DocH2>
       <P>
