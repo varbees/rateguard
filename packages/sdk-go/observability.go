@@ -57,7 +57,17 @@ func newObservability(cfg Config) (*observability, error) {
 		sdkmetric.WithResource(resource),
 	)
 
+	// Sampling decides whether a span RECORDS. A recording span allocates its
+	// attribute set, dedupes it, and holds it for export. When nothing is
+	// exporting, all of that work is thrown away — measured at ~26µs and 10KB
+	// per request, which is most of RateGuard's overhead and all of it waste.
+	//
+	// So: record only when something is actually consuming the spans. With no
+	// exporter configured, NeverSample makes spans non-recording and the OTel
+	// machinery short-circuits. The tracer stays real, and the API contract is
+	// unchanged — a span is still returned, it just costs nothing.
 	var spanProcessor sdktrace.SpanProcessor
+	sampler := sdktrace.AlwaysSample()
 	switch {
 	case cfg.TraceSpanProcessor != nil:
 		spanProcessor = cfg.TraceSpanProcessor
@@ -72,12 +82,15 @@ func newObservability(cfg Config) (*observability, error) {
 		}
 		spanProcessor = sdktrace.NewBatchSpanProcessor(exporter)
 	default:
+		// Nothing is exporting: keep the processor for shape, never record.
 		spanProcessor = sdktrace.NewSimpleSpanProcessor(noopSpanExporter{})
+		sampler = sdktrace.NeverSample()
 	}
 
 	tracerProvider := sdktrace.NewTracerProvider(
 		sdktrace.WithResource(resource),
 		sdktrace.WithSpanProcessor(spanProcessor),
+		sdktrace.WithSampler(sampler),
 	)
 
 	meter := meterProvider.Meter(serviceName)
