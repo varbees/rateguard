@@ -75,7 +75,7 @@ const features = [
   },
   {
     title: "Nothing else to run",
-    desc: "No proxy, no sidecar, no extra service to keep alive. RateGuard runs inside your process: drop in the middleware and every call is governed.",
+    desc: "No proxy, no sidecar, no extra service to keep alive. RateGuard runs inside your process: drop in the middleware and every call is enforced — tens of microseconds, not a network hop.",
     micro: <MicroSingleNode />,
   },
   {

@@ -40,7 +40,7 @@ const incidents: Incident[] = [
     sourceLabel: "Hacker News discussion (June 2026, 1,467 points)",
     sourceHref: "https://news.ycombinator.com/item?id=48500012",
     sourceNote:
-      "Honest scope: the bill here was cloud spend, not LLM API spend. What an in-process enforcement layer governs is the ungoverned reasoning loop driving those decisions — halting the engine, not the invoice it already generated.",
+      "Honest scope: the bill here was cloud spend, not LLM API spend. What an in-process enforcement layer reaches is the unchecked reasoning loop driving those decisions — halting the engine, not the invoice it already generated.",
     stops:
       "A hard session budget plus loop detection halts the agent's decision loop long before hour 24 — the agent stops reasoning when its grant is exhausted, instead of stopping when a human wakes up.",
   },

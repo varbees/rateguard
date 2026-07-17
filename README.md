@@ -25,7 +25,12 @@ go run ./examples/runaway-demo    # from packages/sdk-go: a budget burns down, t
 
 Rate limiting was invented to protect servers from too many users. In the agent era the dangerous actor is your own software, spending real money at machine speed behind your own credentials. Observability explains the bill afterward. A gateway cap is coarse and sits at the perimeter. Enforcement has to live where the agent runs.
 
-**No proxy. No extra service. No latency overhead.** RateGuard runs inside your application process.
+**No proxy. No extra service. No network hop.** RateGuard runs inside your application process.
+
+Not "no overhead" — every line of code costs something, and a claim you cannot show a number for
+is not a claim. Here is the number: **~26µs and ~7KB per admission decision**, against the **1–30ms
+network round trip** a gateway hop adds. Three orders of magnitude, measured, reproducible —
+see [Overhead](#overhead).
 
 ## What it does
 
@@ -194,6 +199,47 @@ budget delegation you can verify with a signature, not a longer list of checkmar
 - [GenAI Observability](docs/GENAI_OBSERVABILITY.md) — OTel integration, model pricing, span attributes
 - [Runnable examples](packages/sdk-go/examples/) — `go run` demos, no API key needed: quickstart, semantic caching, adaptive rate limiting, budget attestation
 - Full docs site: [rateguard.antharmaya.com/docs](https://rateguard.antharmaya.com/docs)
+
+## Overhead
+
+Measured, not asserted. Reproduce with:
+
+```bash
+cd packages/sdk-go && go test -bench=Overhead -benchmem -run='^$' ./...
+```
+
+Go SDK, `linux/amd64`, Intel i5-9300H @ 2.40GHz (a laptop, 2026-07-17). **Ranges, not points** —
+across `-count=6` the admission decision swung 26–37µs on this machine. Anyone quoting one decimal
+place off hardware like this is quoting the run that flattered them.
+
+| Path | Time (range) | Allocated |
+|---|---|---|
+| Admission decision (inbound middleware) | **~26–37µs** | ~7 KB |
+| Admission, under parallel load | **~5–7µs** | ~7 KB |
+| Outbound call — unwrapped baseline (loopback) | ~190–220µs | ~6.7 KB |
+| Outbound call — wrapped | ~510–570µs | ~17 KB |
+| **→ RateGuard's share of an outbound call** | **~320–350µs** | ~+10 KB |
+| — of which, measuring the request estimate | ~80–100µs | skippable via `EstimatedTokens` |
+| Token estimation (`EstimateTokens`), 200 chars | **~1µs** | **0 B** (188 MB/s) |
+| Request estimation, 100K-char context | ~2.3ms | ~214 KB (44 MB/s) |
+
+**Read these honestly:**
+
+- **The comparison that matters is the hop we replace, not zero.** A gateway adds a network round
+  trip: 1–30ms. Admission costs tens of microseconds. That is 2–3 orders of magnitude, and it is
+  why the claim above is "no network hop" rather than "no overhead."
+- **Against the call it guards, it disappears.** An LLM request takes 500ms–30s. ~350µs on that is
+  **well under 0.1%**. Even the worst case here — 2.3ms to measure a 100K-token context — is ~0.01%
+  of the 5–30s call that context implies.
+- **Most of the admission cost is instrumentation, not enforcement**: OpenTelemetry metrics
+  recording, response-header writing, and the GC pressure they create. The limiter and budget
+  arithmetic are a small fraction. (Profiling this is what found `35384e9`, where the SDK was
+  recording spans nobody was exporting.)
+- **`EstimatedTokens` buys back ~80–100µs** by pinning the reservation instead of measuring it —
+  at the cost of the overshoot protection measuring provides. Measuring is the right default; the
+  escape hatch exists and is documented.
+- **This is one noisy laptop on loopback.** Yours will differ. The command is above — run it rather
+  than trusting the table.
 
 ## Verification
 
