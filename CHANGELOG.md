@@ -32,9 +32,14 @@ tags all three registries together.
 
 ### Added
 
-- **Every release is Sigstore-signed** — npm provenance, PyPI attestations, and
-  a cosign-signed CycloneDX SBOM on the GitHub Release, all keyless (Fulcio +
-  Rekor). See [SIGNING.md](SIGNING.md).
+- **Release signing wired (Sigstore keyless)** — npm provenance, PyPI PEP 740
+  attestations, and a cosign-signed CycloneDX SBOM on the GitHub Release, all
+  Fulcio + Rekor. See [SIGNING.md](SIGNING.md). Honest status for 0.5.1: Go and
+  PyPI shipped the security fix out-of-band (Go tag pushed directly, PyPI via
+  token) to get it to users fast; npm and the fully-automated signed flow land
+  once two account prerequisites are set — an npm **automation** token (the
+  granular token hits 2FA in CI) and a **PyPI Trusted Publisher**. The next
+  tag then produces the first end-to-end signed release.
 - Supply-chain scanning in CI (govulncheck / bun audit --prod / pip-audit),
   scoped to fail on shipped deps and report on dev tooling.
 - Adversarial input suites (hostile usage values, malformed SSE, null bytes) and
