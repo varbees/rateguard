@@ -8,6 +8,22 @@ versions may carry behaviour changes — they are called out explicitly below.
 
 ---
 
+## [0.5.2] — unreleased
+
+**The first end-to-end signed release.** No code changes from 0.5.1 — this exists
+to ship what 0.5.1 could not: npm provenance, PyPI PEP 740 attestations, and a
+cosign-signed SBOM on the GitHub Release, all Sigstore keyless (Fulcio + Rekor).
+0.5.1 shipped the security fix out-of-band and unsigned; 0.5.2 makes the
+verify commands in [SIGNING.md](SIGNING.md) actually resolve. Requires the npm
+automation token and PyPI Trusted Publisher to be configured (see the release
+workflow header); once they are, `git tag v0.5.2` runs the whole pipeline.
+
+### Changed
+
+- Documentation corrected to stop advertising signatures 0.5.1 did not carry.
+
+---
+
 ## [0.5.1] — 2026-07-18
 
 **Security patch. Live on npm, PyPI, and Go — do not use 0.5.0.** 0.5.0 was tagged
