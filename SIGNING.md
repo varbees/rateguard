@@ -1,9 +1,16 @@
 # Supply-chain integrity — how to verify a RateGuard release
 
+> **Status (2026-07-18):** the signing pipeline below is wired in CI but has not
+> yet run a full release. **0.5.1 was published out-of-band as a security patch
+> and is NOT signed** — the verify commands here will not find signatures for it.
+> The first end-to-end signed release ships on the next tag, once an npm
+> automation token and a PyPI Trusted Publisher are configured (see
+> `.github/workflows/release.yml`). This document describes the model those
+> releases follow; treat it as forward-looking until a signed tag exists.
+
 RateGuard ships cryptographic spend evidence. A tool that asks you to trust its
-signatures has no business shipping unsigned artifacts, so every release is
-signed — and this document shows you how to check, in commands you can run
-yourself.
+signatures has no business shipping unsigned artifacts, so releases are signed —
+and this document shows you how to check, in commands you can run yourself.
 
 Every mechanism below is [Sigstore](https://www.sigstore.dev) **keyless**: a
 short-lived certificate is issued by Fulcio, bound to the release workflow's

@@ -326,18 +326,14 @@ gap. A green matrix above does not cover this.
 
 ## Signed releases
 
-Every release is Sigstore-signed — npm provenance, PyPI attestations, and a cosign-signed SBOM on
-the GitHub Release, all keyless (Fulcio + Rekor, no held key). A tool that ships cryptographic
-spend evidence should ship signed artifacts, and verifying is one command:
+Release signing is wired through CI — Sigstore keyless (Fulcio + Rekor, no held key): npm
+provenance, PyPI PEP 740 attestations, and a cosign-signed SBOM on the GitHub Release. A tool that
+ships cryptographic spend evidence should ship signed artifacts.
 
-```bash
-npm audit signatures                    # npm provenance
-cosign verify-blob --bundle <sbom>.sigstore.json \
-  --certificate-identity-regexp 'https://github.com/varbees/rateguard/.github/workflows/release.yml@.*' \
-  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' <sbom>
-```
-
-Full trust model and why keyless matches RateGuard's own evidence thesis: [SIGNING.md](SIGNING.md).
+**Status:** 0.5.1 was published out-of-band as a security patch, so it does **not** carry these
+signatures yet — the first end-to-end signed release ships on the next tag once the automated
+pipeline's account prerequisites are in place. The model, the verify commands, and why keyless
+matches RateGuard's own evidence thesis: [SIGNING.md](SIGNING.md).
 
 ## License
 
