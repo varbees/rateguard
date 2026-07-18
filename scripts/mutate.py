@@ -390,6 +390,34 @@ CATALOGUE: list[Mutation] = [
         models="off-by-one at the hourly cap: one token past every budget, forever",
         expect="token budget boundary suite",
     ),
+    # ── Realtime voice sessions: the cost cap must actually fire ──
+    #
+    # Voice sessions are billed per-second and can run for minutes; the cost
+    # breach is the DoW guard for the realtime substrate. If it never trips, a
+    # runaway voice loop bills unbounded.
+    Mutation(
+        id="go/realtime-cost-breach-never-fires",
+        sdk="go",
+        path="packages/sdk-go/realtime_session.go",
+        find="\tcase l.MaxEstimatedCostMicroUSD > 0 && g.cost > l.MaxEstimatedCostMicroUSD:\n\t\treturn \"cost\"",
+        replace="\tcase false:\n\t\treturn \"cost\"",
+        models="realtime voice session never hits its cost cap → unbounded per-second billing",
+        expect="realtime session cost-limit suite",
+    ),
+    # ── Redis fail-open posture: a Redis blip must not silently uncap ──
+    #
+    # Outbound fails OPEN on a Redis error — deliberately, because budgets are
+    # in-memory and still cap spend. But the enforcement TRAIL must not claim a
+    # rate-limit happened when the limiter errored out.
+    Mutation(
+        id="go/redis-error-treated-as-allowed-limit",
+        sdk="go",
+        path="packages/sdk-go/outbound.go",
+        find="if err == nil && decision.Applied && !decision.Allowed && enforce {",
+        replace="if decision.Applied && !decision.Allowed && enforce {",
+        models="a Redis EVAL error is read as a real rate-limit decision → phantom 429s on outage",
+        expect="TestOutboundRateLimitFailsOpenWhenRedisIsDown",
+    ),
     # ── Negative-usage clamp: a shipped cross-language DoW fix ──
     #
     # A hostile provider reporting output_tokens=-1e6 would, uncламped, DECREASE
