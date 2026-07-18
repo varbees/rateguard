@@ -8,18 +8,16 @@ import { createHighlighter, type Highlighter } from "shiki";
 // reaches the browser — zero runtime cost, and the code is legible before a
 // single byte of JS loads.
 //
-// Why the GitHub-dark palette specifically: a docs reader is a developer
-// mid-task, and they read this exact palette every day on GitHub itself. Reusing
-// it means their mental model transfers with no learning curve — a keyword is the
-// colour they already expect a keyword to be. Colour maps to SEMANTIC WEIGHT, not
-// decoration: comments recede (muted grey, low contrast — deprioritised by the
-// eye), while the tokens that carry meaning (strings, keywords, function names,
-// numbers) stay distinct and high-clarity. That is pre-attentive parsing: the
-// eye resolves the shape of the code before it reads a word.
+// Why a minimal LIGHT theme (min-light): the docs are light and monochrome, so
+// the code must feel the same — calm, low-chroma, no warm/orange tokens that
+// would fight the ink palette. Colour still maps to SEMANTIC WEIGHT, not
+// decoration: comments recede (muted grey), while strings/keywords/functions
+// stay distinct enough to resolve the code's shape at a glance. Restraint over
+// a rainbow — the page's job is reading, not a light show.
 
 // Only the languages the docs actually use. Fine-grained keeps the build lean.
 const LANGS = ["go", "typescript", "javascript", "python", "bash", "json", "diff"] as const;
-const THEME = "github-dark-default";
+const THEME = "min-light";
 
 let highlighterPromise: Promise<Highlighter> | null = null;
 
@@ -74,8 +72,9 @@ export async function highlight(code: string, label: string | undefined): Promis
     lang,
     theme: THEME,
     colorReplacements: {
-      // Drop Shiki's panel background; the CodeTabs/CodeBlock container owns it.
-      "#0d1117": "transparent",
+      // Drop min-light's white panel; the CodeTabs/CodeBlock container owns the
+      // surface (a warm-neutral --code-bg), so tokens sit on one cohesive block.
+      "#ffffff": "transparent",
     },
   });
 }

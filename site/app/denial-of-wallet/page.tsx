@@ -120,15 +120,15 @@ child, child_key = attest(root, parent_key, BudgetGrant(max_tokens=50_000))`,
 
 export default function DenialOfWalletPage() {
   return (
-    <main className="min-h-screen bg-[var(--void)] text-[var(--fg)]">
+    <main className="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--void)]/80 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg)]/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-baseline gap-3">
             <Link href="/" className="font-display text-[15px] font-bold tracking-tight">
-              RateGuard<span className="text-[var(--amber)]">.</span>
+              RateGuard<span className="text-[var(--accent)]">.</span>
             </Link>
-            <Link href="/docs" className="text-sm font-medium hover:text-white transition-colors">
+            <Link href="/docs" className="text-sm font-medium hover:text-[var(--fg)] transition-colors">
               Docs
             </Link>
           </div>
@@ -162,7 +162,7 @@ export default function DenialOfWalletPage() {
         <div className="flex flex-col gap-8">
           {incidents.map((inc) => (
             <article key={inc.title} className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-7">
-              <div className="mb-1 text-sm font-medium text-[var(--amber)]">{inc.cost}</div>
+              <div className="mb-1 text-sm font-medium text-[var(--accent)]">{inc.cost}</div>
               <h2 className="font-display text-xl font-bold mb-3">{inc.title}</h2>
               <p className="text-[var(--muted)] leading-relaxed mb-4">{inc.story}</p>
               <p className="text-sm leading-relaxed mb-4">
@@ -176,7 +176,7 @@ export default function DenialOfWalletPage() {
               )}
               <a
                 href={inc.sourceHref}
-                className="text-sm text-[var(--amber)] hover:underline"
+                className="text-sm text-[var(--accent)] hover:underline"
                 rel="nofollow noopener"
               >
                 Source: {inc.sourceLabel} ↗
@@ -247,7 +247,7 @@ export default function DenialOfWalletPage() {
         <div className="flex flex-wrap justify-center gap-4">
           <a
             href="https://github.com/varbees/rateguard"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--bone)] text-black rounded-lg font-medium hover:bg-white transition-colors"
+            className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--fg)] text-[var(--bg)] rounded-lg font-medium hover:opacity-90 transition-colors"
           >
             Star on GitHub <span className="text-sm">↗</span>
           </a>

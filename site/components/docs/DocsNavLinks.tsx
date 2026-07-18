@@ -17,8 +17,8 @@ export function DocsNavLinks({ links }: { links: { href: string; title: string }
               aria-current={active ? "page" : undefined}
               className={`block rounded-md px-2.5 py-1.5 text-[13.5px] transition-colors ${
                 active
-                  ? "bg-[#f59e0b]/10 font-medium text-[#f59e0b]"
-                  : "text-[#a3a3a3] hover:bg-[#171717] hover:text-[#f5f5f5]"
+                  ? "bg-[var(--card)] font-semibold text-[var(--fg)]"
+                  : "text-[var(--muted)] hover:bg-[var(--card)] hover:text-[var(--fg)]"
               }`}
             >
               {l.title}

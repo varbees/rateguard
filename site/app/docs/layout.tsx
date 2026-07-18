@@ -46,15 +46,15 @@ function Sidebar() {
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--void)] text-[var(--fg)]">
+    <div className="docs-theme min-h-screen bg-[var(--bg)] text-[var(--body)]">
       {/* Top bar */}
-      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--void)]/90 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg)]/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-baseline gap-3">
-            <Link href="/" className="font-display text-[15px] font-bold tracking-tight">
-              RateGuard<span className="text-[var(--amber)]">.</span>
+            <Link href="/" className="font-display text-[15px] font-bold tracking-tight text-[var(--fg)]">
+              RateGuard<span className="text-[var(--accent)]">.</span>
             </Link>
-            <Link href="/docs" className="text-sm font-medium text-[var(--fg)] hover:text-white transition-colors">
+            <Link href="/docs" className="text-sm font-medium text-[var(--fg)] transition-colors hover:text-[var(--accent)]">
               Docs
             </Link>
           </div>

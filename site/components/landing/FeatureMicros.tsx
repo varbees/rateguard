@@ -6,9 +6,9 @@ import { motion } from "framer-motion";
 export function MicroHandshake() {
   return (
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-      <motion.circle cx="9" cy="18" r="3" fill="var(--violet)" animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.6, repeat: Infinity }} />
-      <motion.circle cx="27" cy="18" r="3" fill="var(--ice)" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.6, repeat: Infinity }} />
-      <motion.line x1="12" y1="18" x2="24" y2="18" stroke="var(--amber)" strokeWidth="1.5" strokeDasharray="2 2"
+      <motion.circle cx="9" cy="18" r="3" fill="var(--fg)" animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1.6, repeat: Infinity }} />
+      <motion.circle cx="27" cy="18" r="3" fill="var(--muted)" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ duration: 1.6, repeat: Infinity }} />
+      <motion.line x1="12" y1="18" x2="24" y2="18" stroke="var(--fg)" strokeWidth="1.5" strokeDasharray="2 2"
         animate={{ strokeDashoffset: [0, -8] }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} />
     </svg>
   );
@@ -21,7 +21,7 @@ export function MicroMeter() {
       <rect x="4" y="6" width="28" height="24" rx="3" stroke="var(--border)" />
       <motion.path
         d="M6 26 L12 18 L18 22 L24 10 L30 14"
-        stroke="var(--amber)"
+        stroke="var(--fg)"
         strokeWidth="2"
         fill="none"
         strokeLinecap="round"
@@ -40,7 +40,7 @@ export function MicroLoop() {
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
       <motion.path
         d="M10 12 a8 8 0 1 1 0 12"
-        stroke="var(--violet)"
+        stroke="var(--fg)"
         strokeWidth="2"
         fill="none"
         strokeLinecap="round"
@@ -48,7 +48,7 @@ export function MicroLoop() {
         transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
         style={{ originX: "10px", originY: "18px" }}
       />
-      <motion.circle cx="10" cy="18" r="2" fill="var(--ice)"
+      <motion.circle cx="10" cy="18" r="2" fill="var(--muted)"
         animate={{ scale: [1, 1.6, 1] }} transition={{ duration: 2, repeat: Infinity }} />
     </svg>
   );
@@ -56,7 +56,7 @@ export function MicroLoop() {
 
 // Three languages, one algorithm — dots pulse in lockstep, not in sequence.
 export function MicroParity() {
-  const colors = ["var(--ice)", "var(--amber)", "var(--violet)"];
+  const colors = ["var(--muted)", "var(--fg)", "var(--fg)"];
   return (
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
       {colors.map((c, i) => (
@@ -78,9 +78,9 @@ export function MicroParity() {
 export function MicroSingleNode() {
   return (
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-      <motion.rect x="12" y="12" width="12" height="12" rx="2" fill="var(--ink)" stroke="var(--amber)" strokeWidth="1.5"
+      <motion.rect x="12" y="12" width="12" height="12" rx="2" fill="var(--card)" stroke="var(--fg)" strokeWidth="1.5"
         animate={{ boxShadow: ["none"] }} />
-      <motion.rect x="12" y="12" width="12" height="12" rx="2" fill="none" stroke="var(--amber)" strokeWidth="1"
+      <motion.rect x="12" y="12" width="12" height="12" rx="2" fill="none" stroke="var(--fg)" strokeWidth="1"
         animate={{ scale: [1, 1.6], opacity: [0.6, 0] }} transition={{ duration: 1.8, repeat: Infinity }}
         style={{ originX: "18px", originY: "18px" }} />
     </svg>
@@ -94,14 +94,14 @@ export function MicroDashboard() {
       <path d="M8 24a10 10 0 0 1 20 0" stroke="var(--border)" strokeWidth="2" strokeLinecap="round" />
       <motion.path
         d="M8 24a10 10 0 0 1 20 0"
-        stroke="var(--ice)"
+        stroke="var(--muted)"
         strokeWidth="2"
         strokeLinecap="round"
         strokeDasharray="31.4"
         animate={{ strokeDashoffset: [31.4, 8, 20] }}
         transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
       />
-      <circle cx="18" cy="24" r="1.6" fill="var(--amber)" />
+      <circle cx="18" cy="24" r="1.6" fill="var(--fg)" />
     </svg>
   );
 }
@@ -110,14 +110,14 @@ export function MicroDashboard() {
 export function MicroFallback() {
   return (
     <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
-      <circle cx="7" cy="18" r="3" fill="var(--ice)" />
-      <motion.circle cx="18" cy="18" r="3" fill="var(--violet)"
+      <circle cx="7" cy="18" r="3" fill="var(--muted)" />
+      <motion.circle cx="18" cy="18" r="3" fill="var(--fg)"
         animate={{ opacity: [1, 0.25, 1] }} transition={{ duration: 2.4, repeat: Infinity }} />
-      <circle cx="29" cy="18" r="3" fill="var(--amber)" />
+      <circle cx="29" cy="18" r="3" fill="var(--fg)" />
       <line x1="10" y1="18" x2="15" y2="18" stroke="var(--border)" strokeWidth="1.5" />
       <motion.path
         d="M10 18 C 16 6, 22 6, 26 16"
-        stroke="var(--amber)"
+        stroke="var(--fg)"
         strokeWidth="1.5"
         fill="none"
         initial={{ pathLength: 0, opacity: 0 }}

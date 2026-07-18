@@ -48,10 +48,10 @@ export default function TokenBucket() {
   return (
     <div className="relative flex flex-col items-center gap-5">
       <div className="relative h-56 w-40">
-        {/* glass vessel */}
-        <div className="absolute inset-0 overflow-hidden rounded-b-3xl rounded-t-lg border border-[var(--ice)]/40 bg-[var(--ink)] shadow-[0_0_40px_-12px_var(--ice)]">
+        {/* vessel: ink liquid rising in a light glass, soft neutral depth */}
+        <div className="absolute inset-0 overflow-hidden rounded-b-3xl rounded-t-lg border border-[var(--border)] bg-[var(--card)] shadow-[0_10px_34px_-16px_rgba(0,0,0,0.25)]">
           <motion.div
-            className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[var(--amber)] to-[var(--amber)]/40"
+            className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[var(--fg)] to-[var(--fg)]/70"
             animate={{ height: `${fillPct}%` }}
             transition={{ type: "spring", stiffness: 120, damping: 20 }}
           />
@@ -59,13 +59,13 @@ export default function TokenBucket() {
           {Array.from({ length: BURST }).map((_, i) => (
             <div
               key={i}
-              className="absolute inset-x-2 border-t border-[var(--void)]/40"
+              className="absolute inset-x-2 border-t border-[var(--muted)]/20 mix-blend-difference"
               style={{ bottom: `${(i / BURST) * 100}%` }}
             />
           ))}
         </div>
 
-        {/* incoming pulses */}
+        {/* incoming pulses — admitted = ink, denied = the one danger red */}
         <AnimatePresence>
           {pulses.map((p) => (
             <motion.div
@@ -75,10 +75,7 @@ export default function TokenBucket() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.5, ease: "easeOut" }}
               className="absolute left-1/2 top-1/2 h-2 w-2 rounded-full"
-              style={{
-                background: p.allowed ? "var(--ice)" : "var(--violet)",
-                boxShadow: `0 0 10px ${p.allowed ? "var(--ice)" : "var(--violet)"}`,
-              }}
+              style={{ background: p.allowed ? "var(--fg)" : "#b91c1c" }}
             />
           ))}
         </AnimatePresence>

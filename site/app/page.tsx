@@ -87,18 +87,18 @@ const features = [
 
 export default function Page() {
   return (
-    <main className="min-h-screen bg-[var(--void)] text-[var(--fg)]">
+    <main className="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
       {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--void)]/80 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg)]/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-baseline gap-3">
             <Link href="/" className="font-display text-[15px] font-bold tracking-tight">
-              RateGuard<span className="text-[var(--amber)]">.</span>
+              RateGuard<span className="text-[var(--accent)]">.</span>
             </Link>
-            <Link href="/docs" className="text-sm font-medium hover:text-white transition-colors">
+            <Link href="/docs" className="text-sm font-medium hover:text-[var(--fg)] transition-colors">
               Docs
             </Link>
-            <Link href="/denial-of-wallet" className="text-sm font-medium hover:text-white transition-colors">
+            <Link href="/denial-of-wallet" className="text-sm font-medium hover:text-[var(--fg)] transition-colors">
               Denial of Wallet
             </Link>
           </div>
@@ -130,7 +130,7 @@ export default function Page() {
             your process. Go, Node, Python. No proxy.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
-            <a href="https://github.com/varbees/rateguard" className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--bone)] text-black rounded-lg font-medium hover:bg-white transition-colors">
+            <a href="https://github.com/varbees/rateguard" className="inline-flex items-center gap-2 px-5 py-3 bg-[var(--fg)] text-[var(--bg)] rounded-lg font-medium hover:opacity-90 transition-colors">
               View on GitHub <span className="text-sm">↗</span>
             </a>
             <Link href="/docs/quickstart" className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--border)] rounded-lg font-medium hover:border-[var(--muted)] transition-colors">
@@ -160,7 +160,7 @@ export default function Page() {
             One unsupervised agent scanning a hobbyist network ran up a $6,531 cloud bill overnight.
             Two agents in a research pipeline passed work back and forth for eleven days before a
             billing alert caught it. The failure mode has a name now,{" "}
-            <Link href="/denial-of-wallet" className="text-[var(--amber)] hover:underline">
+            <Link href="/denial-of-wallet" className="text-[var(--accent)] hover:underline">
               denial of wallet
             </Link>
             , with a sourced incident record. Observability explains the bill after it arrives. A
@@ -242,7 +242,7 @@ export default function Page() {
       {/* Enterprise — demand validation, not a built product */}
       <section className="mx-auto max-w-3xl px-6 pb-32">
         <Reveal className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
-          <p className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--amber)]">Enterprise</p>
+          <p className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--accent)]">Enterprise</p>
           <h2 className="font-display text-2xl font-bold mb-4">
             Signed records for the AI Act era
           </h2>
@@ -261,7 +261,7 @@ export default function Page() {
           </p>
           <a
             href="mailto:harshavar968@gmail.com?subject=RateGuard%20Enterprise%20%2F%20Compliance%20Evidence%20Pack"
-            className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--amber)] text-[var(--amber)] rounded-lg font-medium hover:bg-[var(--amber)] hover:text-black transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--accent)] text-[var(--accent)] rounded-lg font-medium hover:bg-[var(--accent)] hover:text-[var(--bg)] transition-colors"
           >
             Talk to us about early access
           </a>
@@ -276,7 +276,7 @@ export default function Page() {
             Built by a solo founder in India. Every feature claim is backed by a test that
             exercises it end to end.
           </p>
-          <a href="https://github.com/varbees/rateguard" className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--bone)] text-black rounded-lg font-medium hover:bg-white transition-colors">
+          <a href="https://github.com/varbees/rateguard" className="inline-flex items-center gap-2 px-6 py-3 bg-[var(--fg)] text-[var(--bg)] rounded-lg font-medium hover:opacity-90 transition-colors">
             Star on GitHub <span className="text-sm">↗</span>
           </a>
         </Reveal>

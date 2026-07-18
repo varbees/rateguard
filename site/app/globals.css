@@ -1,20 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  /* Named palette: a restrained dark developer surface — amber as the single accent */
-  --void: #050507;
-  --bone: #f5f5f5;
-  --amber: #f59e0b;
-  --violet: #7c6cff;
-  --ice: #38bdf8;
-  --ink: #131316;
-
-  --bg: var(--void);
-  --fg: var(--bone);
-  --muted: #8a8a92;
-  --accent: var(--amber);
-  --border: #232328;
-  --card: var(--ink);
+  /* ── Monochrome light system, site-wide ─────────────────────────────
+     Premium light-first, never terminal. One "accent" doing all the work,
+     and that accent is ink, not a hue — wayfinding via weight, underline, and
+     solid fills. Neutrals tinted a hair warm (not orange); never pure #000/#fff. */
+  --bg: #fbfbfa;        /* warm-neutral paper */
+  --fg: #1b1b19;        /* near-black ink — headings, links, accent */
+  --body: #3f3e3a;      /* body prose, softer than headings */
+  --muted: #6c6b64;     /* labels, nav, meta */
+  --border: #e7e6e1;    /* hairlines */
+  --card: #f4f3ef;      /* subtle raised panels: cards, callouts, table headers */
+  --code-bg: #f6f5f1;   /* code surface */
+  --accent: var(--fg);  /* monochrome: accent == ink */
 
   --font-display: "Space Grotesk", system-ui, sans-serif;
   --font-body: "IBM Plex Sans", system-ui, sans-serif;
@@ -27,13 +25,14 @@
 
 body {
   background: var(--bg);
-  color: var(--fg);
+  color: var(--body);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
 }
 
 h1, h2, h3, .font-display {
   font-family: var(--font-display);
+  color: var(--fg);
 }
 
 code, pre, .font-mono {
@@ -55,9 +54,9 @@ code, pre, .font-mono {
   display: block;
   width: fit-content;                  /* let the scroll container size to content */
 }
-/* Warm, low-contrast selection so highlighted tokens stay readable when copied. */
+/* Neutral, low-contrast selection — no brand hue. */
 .shiki-block ::selection {
-  background: rgba(245, 158, 11, 0.22); /* brand amber, dimmed */
+  background: rgba(120, 120, 120, 0.18);
 }
 
 @media (prefers-reduced-motion: reduce) {

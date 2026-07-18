@@ -16,9 +16,9 @@ export async function CodeBlock({
 }) {
   const html = await highlight(code, title);
   return (
-    <div className="group my-5 overflow-hidden rounded-lg border border-[#262626] bg-[#111]">
-      <div className="flex items-center justify-between border-b border-[#262626] px-4 py-2">
-        <span className="font-mono text-[11px] uppercase tracking-widest text-[#737373]">
+    <div className="group my-6 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--code-bg)]">
+      <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-2">
+        <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--muted)]">
           {title ?? "code"}
         </span>
         <CopyButton text={code} />

@@ -14,7 +14,7 @@ export function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 1600);
         });
       }}
-      className="rounded-md border border-[#333] px-2 py-1 text-[11px] font-medium text-[#a3a3a3] transition-colors hover:border-[#525252] hover:text-[#f5f5f5]"
+      className="rounded-md border border-[var(--border)] px-2 py-1 text-[11px] font-medium text-[var(--muted)] transition-colors hover:border-[var(--muted)] hover:text-[var(--fg)]"
     >
       {copied ? "Copied" : "Copy"}
     </button>

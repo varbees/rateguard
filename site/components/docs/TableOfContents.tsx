@@ -58,7 +58,7 @@ export function TableOfContents() {
               aria-current={activeId === h.id ? "true" : undefined}
               className={`-ml-px block border-l-2 py-0.5 pl-3 text-[13px] leading-snug transition-colors ${
                 activeId === h.id
-                  ? "border-[var(--amber)] font-medium text-[var(--amber)]"
+                  ? "border-[var(--fg)] font-medium text-[var(--fg)]"
                   : "border-transparent text-[var(--muted)] hover:text-[var(--fg)]"
               }`}
             >
