@@ -1,6 +1,6 @@
 """RateGuard Python middleware SDK."""
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 
 from .adapters.asgi import RateGuardMiddleware as ASGIRateGuardMiddleware
 from .adapters.decorators import rate_limited, token_budget

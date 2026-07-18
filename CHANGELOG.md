@@ -8,7 +8,44 @@ versions may carry behaviour changes — they are called out explicitly below.
 
 ---
 
-## [0.5.0] — unreleased
+## [0.5.1] — unreleased
+
+**Security patch. Publish this over 0.5.0 — do not use 0.5.0.** 0.5.0 was tagged
+and published to npm and PyPI from a commit that predated two security fixes
+below; Go never received 0.5.0 at all (the submodule tag was not pushed, so the
+proxy stayed on 0.3.0). 0.5.1 is cut from a commit that contains everything and
+tags all three registries together.
+
+### Fixed — security
+
+- **Negative provider usage refunded the budget (all three SDKs).** A hostile or
+  buggy provider reporting `output_tokens: -1000000` had that negative committed
+  against the budget, DECREASING recorded usage — an attacker-controlled refund
+  that let a runaway agent spend past its cap. Token counts are now clamped to
+  non-negative (garbage → "no usage" → the caller commits its reserved
+  estimate). Go additionally guards an int64 overflow that wrapped a huge value
+  to a negative. Pinned by adversarial suites and mutation tests in all three.
+- **Two Go dependency vulnerabilities patched.** `golang.org/x/net` v0.47.0 →
+  v0.53.0 (GO-2026-4918) and `go.opentelemetry.io/otel/sdk` v1.39.0 → v1.44.0
+  (GO-2026-4394); the toolchain pin moves to 1.25.x to pick up seven stdlib
+  fixes. govulncheck now runs in CI.
+
+### Added
+
+- **Every release is Sigstore-signed** — npm provenance, PyPI attestations, and
+  a cosign-signed CycloneDX SBOM on the GitHub Release, all keyless (Fulcio +
+  Rekor). See [SIGNING.md](SIGNING.md).
+- Supply-chain scanning in CI (govulncheck / bun audit --prod / pip-audit),
+  scoped to fail on shipped deps and report on dev tooling.
+- Adversarial input suites (hostile usage values, malformed SSE, null bytes) and
+  a named byte-transparency test covering large chunked streams.
+- Mutation catalogue extended to 33 (freeze, circuit breaker, realtime cost cap,
+  Redis fail-open, negative-usage clamp); 100% killed, balanced across SDKs.
+- [FRAMEWORK.md](FRAMEWORK.md) — how three SDKs are held to one behaviour.
+
+---
+
+## [0.5.0] — 2026-07-17 *(published stale; superseded by 0.5.1)*
 
 **The honesty release.** Two silently-wrong metering paths, a denial-of-wallet
 hole in the flagship feature, a false headline claim, and docs that

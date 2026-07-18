@@ -5,7 +5,7 @@ backend-path = ["."]
 
 [project]
 name = "varbees-rateguard"
-version = "0.5.0"
+version = "0.5.1"
 description = "Python middleware SDK for RateGuard"
 readme = "README.md"
 requires-python = ">=3.10"
