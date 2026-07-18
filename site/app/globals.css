@@ -40,6 +40,26 @@ code, pre, .font-mono {
   font-family: var(--font-mono);
 }
 
+/* Shiki output sits inside our own .shiki-block container, which owns the
+   padding, background, font size and line-height. Normalize Shiki's <pre> so it
+   inherits all of that instead of fighting it. */
+.shiki-block pre.shiki {
+  margin: 0;
+  padding: 0;
+  background: transparent !important; /* container owns the surface */
+  font: inherit;                       /* inherit mono font + 13px + leading */
+  white-space: pre;                    /* horizontal scroll, never reflow code */
+}
+.shiki-block pre.shiki code {
+  font: inherit;
+  display: block;
+  width: fit-content;                  /* let the scroll container size to content */
+}
+/* Warm, low-contrast selection so highlighted tokens stay readable when copied. */
+.shiki-block ::selection {
+  background: rgba(245, 158, 11, 0.22); /* brand amber, dimmed */
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.001ms !important;

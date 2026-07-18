@@ -19,7 +19,8 @@
     "motion-utils": "12.23.6",
     "next": "^15.4.9",
     "react": "^19.2.1",
-    "react-dom": "^19.2.1"
+    "react-dom": "^19.2.1",
+    "shiki": "^4.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.11",
