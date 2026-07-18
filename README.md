@@ -324,6 +324,21 @@ vectors and unit tests but **not live**. NVIDIA NIM, Groq and DeepSeek all emit 
 `stream_options.include_usage`, so all three skip that test. OpenAI omits it and would close the
 gap. A green matrix above does not cover this.
 
+## Signed releases
+
+Every release is Sigstore-signed — npm provenance, PyPI attestations, and a cosign-signed SBOM on
+the GitHub Release, all keyless (Fulcio + Rekor, no held key). A tool that ships cryptographic
+spend evidence should ship signed artifacts, and verifying is one command:
+
+```bash
+npm audit signatures                    # npm provenance
+cosign verify-blob --bundle <sbom>.sigstore.json \
+  --certificate-identity-regexp 'https://github.com/varbees/rateguard/.github/workflows/release.yml@.*' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' <sbom>
+```
+
+Full trust model and why keyless matches RateGuard's own evidence thesis: [SIGNING.md](SIGNING.md).
+
 ## License
 
 MIT

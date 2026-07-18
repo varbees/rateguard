@@ -149,6 +149,11 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/sdk-python/dist
+          # PEP 740 attestations — Sigstore-signed, recorded in Rekor. Default
+          # ON when id-token:write is present; made explicit because this is a
+          # trust guarantee, not an incidental. The same keyless Fulcio+Rekor
+          # model as npm --provenance and the cosign job below.
+          attestations: true
 
   # "Cut" is not "published" — that assumption is what left two releases
   # stranded. Ask the registries, do not assume the upload worked.
@@ -169,3 +174,58 @@ jobs:
           [ "$NPM" = "$TAG" ] || { echo "::error::npm serves $NPM, expected $TAG"; exit 1; }
           [ "$PYPI" = "$TAG" ] || { echo "::error::PyPI serves $PYPI, expected $TAG"; exit 1; }
           echo "✓ both registries serve $TAG"
+
+  # ── Signed GitHub Release (Sigstore keyless) ──
+  #
+  # Runs LAST, only after both registries are confirmed serving the version, so
+  # it can never endanger the actual package publish — a signing hiccup leaves
+  # the packages published and just skips the GitHub Release, which is re-runnable.
+  #
+  # npm --provenance and PyPI attestations already cover the PACKAGES with the
+  # same Fulcio+Rekor model, so cosign here does the non-redundant part: it signs
+  # the artifacts the registries don't — a whole-repo SBOM and the release notes —
+  # and attaches them with offline-verifiable bundles.
+  #
+  # This is also the project practicing what it preaches. RateGuard ships
+  # cryptographic spend evidence and its own docs say honest evidence needs an
+  # EXTERNAL key (not app-held) and an EXTERNAL witness (a transparency log).
+  # Sigstore keyless IS that pattern: Fulcio issues a short-lived cert bound to
+  # this workflow's OIDC identity (no stored key), and Rekor is the public
+  # witness. An evidence product that signed its releases with a raw key in a
+  # secret would be contradicting its own thesis.
+  sign-release:
+    name: Sign the GitHub Release (keyless)
+    needs: [confirm]
+    if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the release, upload assets
+      id-token: write   # keyless signing — ambient OIDC, no stored key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sigstore/cosign-installer@v3
+      - uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: rateguard-${{ github.ref_name }}-sbom.cyclonedx.json
+      - name: Sign the SBOM (Sigstore keyless → Rekor)
+        env:
+          SBOM: rateguard-${{ github.ref_name }}-sbom.cyclonedx.json
+        run: |
+          cosign sign-blob --yes --bundle "${SBOM}.sigstore.json" "$SBOM"
+          echo "signed $SBOM — bundle carries the cert, signature, and Rekor inclusion proof"
+      - name: Create the signed GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          NOTES=$(awk "/^## \[${TAG#v}\]/{f=1;next} /^## \[/{f=0} f" CHANGELOG.md)
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --notes "${NOTES:-See CHANGELOG.md}" \
+            "rateguard-${TAG}-sbom.cyclonedx.json" \
+            "rateguard-${TAG}-sbom.cyclonedx.json.sigstore.json"
+          echo "::notice::verify with — cosign verify-blob --bundle rateguard-${TAG}-sbom.cyclonedx.json.sigstore.json \\"
+          echo "  --certificate-identity-regexp 'https://github.com/varbees/rateguard/.github/workflows/release.yml@.*' \\"
+          echo "  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' rateguard-${TAG}-sbom.cyclonedx.json"
