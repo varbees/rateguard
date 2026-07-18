@@ -8,9 +8,9 @@ versions may carry behaviour changes — they are called out explicitly below.
 
 ---
 
-## [0.5.1] — unreleased
+## [0.5.1] — 2026-07-18
 
-**Security patch. Publish this over 0.5.0 — do not use 0.5.0.** 0.5.0 was tagged
+**Security patch. Live on npm, PyPI, and Go — do not use 0.5.0.** 0.5.0 was tagged
 and published to npm and PyPI from a commit that predated two security fixes
 below; Go never received 0.5.0 at all (the submodule tag was not pushed, so the
 proxy stayed on 0.3.0). 0.5.1 is cut from a commit that contains everything and
