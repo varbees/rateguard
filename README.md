@@ -12,6 +12,10 @@ An agent holds your API key and no sense of when to stop. RateGuard enforces tok
 
 One unsupervised agent scanning a hobbyist network ran up a $6,531 cloud bill overnight. Two agents in a research pipeline passed work back and forth for eleven days before a billing alert caught it. The failure mode has a name now, [denial of wallet](https://rateguard.antharmaya.com/denial-of-wallet), with a sourced incident record.
 
+![RateGuard halting a runaway agent at its token budget](site/public/demo/runaway.svg)
+
+*A runaway agent, halted at its budget — in-process, before the spend. Deterministic, no API key: `go run ./examples/runaway-demo`.*
+
 ```go
 // One line. Every OpenAI/Anthropic/Google call is now budgeted, metered, and breaker-protected.
 client := rg.WrapClient(&http.Client{})
