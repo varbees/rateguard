@@ -46,6 +46,33 @@ permissions:
   contents: read
 
 jobs:
+  # Go modules resolve off a SUBMODULE tag (packages/sdk-go/vX.Y.Z), not the
+  # repo-wide vX.Y.Z. That tag was pushed by hand — and forgotten for 0.5.0, so
+  # the proxy stayed on 0.3.0 while npm and PyPI moved to 0.5.0. Automate it:
+  # a repo-wide vX.Y.Z tag now mints the matching Go submodule tag, so the three
+  # registries can never drift on version again.
+  go-tag:
+    name: Publish Go (mint the submodule tag)
+    needs: verify
+    if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag packages/sdk-go/<version> at this commit
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          GOTAG="packages/sdk-go/${TAG}"
+          if git ls-remote --tags origin "refs/tags/${GOTAG}" | grep -q .; then
+            echo "::notice::${GOTAG} already exists — nothing to do"
+            exit 0
+          fi
+          git tag -a "$GOTAG" -m "$GOTAG" "${GITHUB_SHA}"
+          git push origin "$GOTAG"
+          echo "pushed $GOTAG — the Go proxy will serve it on first fetch"
+
   # Never publish something the suite has not passed. A release that skips
   # verification is how a silently-broken metering path reaches users.
   verify:
@@ -159,13 +186,16 @@ jobs:
   # stranded. Ask the registries, do not assume the upload worked.
   confirm:
     name: Confirm the registries actually serve it
-    needs: [npm, pypi]
+    needs: [npm, pypi, go-tag]
     if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
       - name: Wait for propagation
         run: sleep 45
-      - name: npm and PyPI must both serve the tagged version
+      - name: All three registries must serve the tagged version
         run: |
           TAG="${GITHUB_REF_NAME#v}"
           NPM=$(curl -sf "https://registry.npmjs.org/@varbees/rateguard-node" | python3 -c "import json,sys;print(json.load(sys.stdin)['dist-tags']['latest'])")
@@ -173,7 +203,12 @@ jobs:
           echo "tag=$TAG npm=$NPM pypi=$PYPI"
           [ "$NPM" = "$TAG" ] || { echo "::error::npm serves $NPM, expected $TAG"; exit 1; }
           [ "$PYPI" = "$TAG" ] || { echo "::error::PyPI serves $PYPI, expected $TAG"; exit 1; }
-          echo "✓ both registries serve $TAG"
+          # Go: the proxy only lists a version once fetched, so fetch it — this
+          # both populates the proxy and confirms it resolves. This is the check
+          # that would have caught Go lagging at 0.3.0 while the others moved.
+          GOPROXY=proxy.golang.org go list -m "github.com/varbees/rateguard/packages/sdk-go@${GITHUB_REF_NAME}" \
+            || { echo "::error::Go proxy cannot resolve ${GITHUB_REF_NAME}"; exit 1; }
+          echo "✓ all three registries serve $TAG"
 
   # ── Signed GitHub Release (Sigstore keyless) ──
   #
