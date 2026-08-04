@@ -1,4 +1,5 @@
 import { Space_Grotesk, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import LenisProvider from "@/components/landing/scroll/LenisProvider";
 import "./globals.css";
 
 const display = Space_Grotesk({
@@ -25,7 +26,9 @@ const mono = IBM_Plex_Mono({
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <LenisProvider>{children}</LenisProvider>
+      </body>
     </html>
   );
 }

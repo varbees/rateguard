@@ -3,18 +3,15 @@ import Link from "next/link";
 import { CodeTabs } from "@/components/docs/CodeTabs";
 import Reveal from "@/components/landing/Reveal";
 import LogoStrip from "@/components/landing/LogoStrip";
-import TokenBucket from "@/components/landing/TokenBucket";
 import StatCounter from "@/components/landing/StatCounter";
 import FeatureCard from "@/components/landing/FeatureCard";
-import {
-  MicroHandshake,
-  MicroMeter,
-  MicroLoop,
-  MicroParity,
-  MicroSingleNode,
-  MicroFallback,
-  MicroDashboard,
-} from "@/components/landing/FeatureMicros";
+import { MicroDashboard } from "@/components/landing/FeatureMicros";
+import PinnedScene from "@/components/landing/scroll/PinnedScene";
+import ParallaxDrift from "@/components/landing/scroll/ParallaxDrift";
+import IncidentScene from "@/components/landing/scenes/IncidentScene";
+import TokenBucketScene from "@/components/landing/scenes/TokenBucketScene";
+import GuardMontage from "@/components/landing/scenes/GuardMontage";
+import AttestationScene from "@/components/landing/scenes/AttestationScene";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rateguard.antharmaya.com"),
@@ -52,39 +49,6 @@ const codeTabs = [
   { label: "Python", code: `rg = RateGuard(preset="standard")\napp.add_middleware(rg.asgi_middleware)` },
 ];
 
-const features = [
-  {
-    title: "Ask before you call",
-    desc: "Seven MCP tools let Claude Code, Cursor, or any MCP client check its own limit, or mint a cryptographic sub-budget, before making a request. The agent asks permission instead of hitting a 429.",
-    micro: <MicroHandshake />,
-  },
-  {
-    title: "Real spend, not estimates",
-    desc: "The outbound wrapper rides your HTTP client and meters every OpenAI, Anthropic, or Google call as it happens: budgeted, traced, priced.",
-    micro: <MicroMeter />,
-  },
-  {
-    title: "Loops get caught, not billed",
-    desc: "Every request is fingerprinted with SHA-256 over a bounded LRU cache. A runaway agent repeating itself gets halted before it burns through your budget.",
-    micro: <MicroLoop />,
-  },
-  {
-    title: "One algorithm, three runtimes",
-    desc: "Go, Node.js, and Python share the same token bucket math and the same presets. 800+ tests, including shared conformance suites that replay identical admission sequences across all three, hold them to real behavioral parity rather than just similar APIs — and a live matrix runs the same suite against real provider APIs, because a passing suite only proves self-consistency.",
-    micro: <MicroParity />,
-  },
-  {
-    title: "Nothing else to run",
-    desc: "No proxy, no sidecar, no extra service to keep alive. RateGuard runs inside your process: drop in the middleware and every call is enforced — tens of microseconds, not a network hop.",
-    micro: <MicroSingleNode />,
-  },
-  {
-    title: "Failure reroutes, it doesn't cascade",
-    desc: "Circuit breakers open on a failing provider and the chain moves to the next one automatically. Your application never sees the outage.",
-    micro: <MicroFallback />,
-  },
-];
-
 export default function Page() {
   return (
     <main className="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
@@ -113,7 +77,7 @@ export default function Page() {
         </div>
       </header>
 
-      {/* Hero */}
+      {/* Act 0 — Cold open */}
       <section className="relative px-6 pt-28 pb-24">
         <div className="relative mx-auto max-w-3xl text-center">
           <p className="mb-5 text-sm uppercase tracking-[0.2em] text-[var(--muted)]">
@@ -140,7 +104,6 @@ export default function Page() {
         </div>
       </section>
 
-      {/* Ecosystem */}
       <section className="px-6 pb-24">
         <Reveal>
           <p className="mb-6 text-center text-xs uppercase tracking-[0.2em] text-[var(--muted)]">
@@ -150,8 +113,8 @@ export default function Page() {
         </Reveal>
       </section>
 
-      {/* The problem */}
-      <section className="relative px-6 py-32">
+      {/* Act 1 — The incident */}
+      <section className="relative px-6 py-24">
         <Reveal className="mx-auto max-w-2xl text-center">
           <h2 className="font-display text-3xl sm:text-4xl font-bold mb-5">
             An agent will call an API as many times as it thinks it needs to.
@@ -169,52 +132,89 @@ export default function Page() {
           </p>
         </Reveal>
       </section>
+      <PinnedScene heightVh={130}>
+        <IncidentScene />
+      </PinnedScene>
 
-      <section className="px-6 pt-8 pb-32">
-        <Reveal className="mx-auto max-w-2xl text-center mb-14">
+      {/* Act 2 — The mechanism */}
+      <section className="px-6 pt-32 pb-8">
+        <Reveal className="mx-auto max-w-2xl text-center">
           <h2 className="font-display text-3xl sm:text-4xl font-bold mb-5">
             One bucket. Real math. No black box.
           </h2>
           <p className="text-[var(--muted)] leading-relaxed">
             This is the formula the limiter actually runs, not a mockup. Tokens refill
-            continuously, requests consume them one at a time, and the bucket never lies about
-            what it has left.
+            continuously, requests consume them one at a time, and when the bucket runs dry the
+            next request queues instead of vanishing.
           </p>
         </Reveal>
-        <Reveal delay={0.1} className="flex justify-center">
-          <TokenBucket />
-        </Reveal>
       </section>
+      <PinnedScene heightVh={160}>
+        <TokenBucketScene />
+      </PinnedScene>
 
-      {/* Features */}
-      <section className="mx-auto max-w-5xl px-6 pb-32">
+      {/* Act 3 — The guard sequence */}
+      <section className="px-6 pt-32 pb-8">
         <Reveal>
-          <h2 className="font-display text-2xl font-bold mb-10 text-center">What makes it different</h2>
+          <h2 className="font-display text-2xl font-bold text-center">What makes it different</h2>
         </Reveal>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {features.map((f, i) => (
-            <Reveal key={f.title} delay={i * 0.06}>
-              <FeatureCard {...f} />
-            </Reveal>
-          ))}
-        </div>
+      </section>
+      <PinnedScene heightVh={320}>
+        <GuardMontage />
+      </PinnedScene>
+
+      {/* Act 4 — The proof, resolving out of Act 3 */}
+      <section className="mx-auto max-w-2xl px-6 pt-20 pb-32">
+        <Reveal className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-center font-mono text-sm text-[var(--muted)]">
+          <StatCounter value={696} label="Tests" />
+          <StatCounter value={28} label="Providers" />
+          <StatCounter value={3} label="Languages" />
+          <div className="text-center">
+            <div className="font-display text-2xl font-bold text-[var(--fg)]">MIT</div>
+            <div className="mt-1 text-sm text-[var(--muted)]">License</div>
+          </div>
+        </Reveal>
       </section>
 
-      {/* Code */}
-      <section className="mx-auto max-w-3xl px-6 pb-32">
+      {/* Act 5 — The signature */}
+      <section className="px-6 pt-8 pb-8">
+        <Reveal className="mx-auto max-w-2xl text-center">
+          <h2 className="font-display text-3xl sm:text-4xl font-bold mb-5">
+            A budget an agent can&apos;t quietly widen.
+          </h2>
+          <p className="text-[var(--muted)] leading-relaxed">
+            An agent can hand a sub-agent an{" "}
+            <Link href="/docs/budget-attestation" className="text-[var(--accent)] hover:underline">
+              Ed25519-signed delegation
+            </Link>{" "}
+            that only narrows the parent&apos;s budget, never widens it, no shared secret, verifiable
+            end to end. What actually got spent comes back as a{" "}
+            <Link href="/docs/spend-receipts" className="text-[var(--accent)] hover:underline">
+              signed, offline-verifiable receipt
+            </Link>
+            , hash-linked into a tamper-evident chain. Grant, spend, proof, closed.
+          </p>
+        </Reveal>
+      </section>
+      <PinnedScene heightVh={140}>
+        <AttestationScene />
+      </PinnedScene>
+
+      {/* Act 6 — Ship it */}
+      <section className="mx-auto max-w-3xl px-6 pt-20 pb-32">
         <Reveal>
           <h2 className="font-display text-2xl font-bold mb-6 text-center">One line to ship</h2>
           <CodeTabs tabs={codeTabs} />
         </Reveal>
       </section>
 
-      {/* Operate */}
+      {/* Act 7 — Operate */}
       <section className="mx-auto max-w-5xl px-6 pb-32">
         <Reveal>
           <h2 className="font-display text-2xl font-bold mb-10 text-center">See it, don&apos;t just ship it</h2>
         </Reveal>
         <div className="flex justify-center">
-          <Reveal>
+          <ParallaxDrift range={16}>
             <Link href="/docs/dashboard">
               <FeatureCard
                 title="Dashboard: a control center for a running instance"
@@ -222,24 +222,11 @@ export default function Page() {
                 micro={<MicroDashboard />}
               />
             </Link>
-          </Reveal>
+          </ParallaxDrift>
         </div>
       </section>
 
-      {/* Stats */}
-      <section className="mx-auto max-w-3xl px-6 pb-32">
-        <Reveal className="grid grid-cols-2 sm:grid-cols-4 gap-8 rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
-          <StatCounter value={696} label="Tests" />
-          <StatCounter value={28} label="Providers" />
-          <StatCounter value={3} label="Languages" />
-          <div className="text-center">
-            <div className="font-display text-2xl font-bold">MIT</div>
-            <div className="mt-1 text-sm text-[var(--muted)]">License</div>
-          </div>
-        </Reveal>
-      </section>
-
-      {/* Enterprise — demand validation, not a built product */}
+      {/* Act 8 — Close */}
       <section className="mx-auto max-w-3xl px-6 pb-32">
         <Reveal className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-8">
           <p className="mb-3 text-xs uppercase tracking-[0.2em] text-[var(--accent)]">Enterprise</p>
@@ -268,7 +255,6 @@ export default function Page() {
         </Reveal>
       </section>
 
-      {/* CTA */}
       <section className="mx-auto max-w-2xl px-6 pb-32 text-center">
         <Reveal>
           <h2 className="font-display text-2xl sm:text-3xl font-bold mb-4">Open source. Free forever.</h2>
