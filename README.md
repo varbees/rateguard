@@ -10,7 +10,7 @@
 
 An agent holds your API key and no sense of when to stop. RateGuard enforces token budgets, kills runaway loops, and trips breakers on failing providers, all from inside your process. Go, Node, Python. No proxy, no gateway, no network hop — [tens of microseconds](#overhead), not the milliseconds a gateway costs.
 
-One unsupervised agent scanning a hobbyist network ran up a $6,531 cloud bill overnight. Two agents in a research pipeline passed work back and forth for eleven days before a billing alert caught it. The failure mode has a name now, [denial of wallet](https://rateguard.antharmaya.com/denial-of-wallet), with a sourced incident record.
+One unsupervised agent scanning a hobbyist network ran up a $6,531 cloud bill overnight. Two agents in a research pipeline passed work back and forth for eleven days before a billing alert caught it. The failure mode has a name now, [denial of wallet](https://antharmaya.com/tools/rateguard/denial-of-wallet), with a sourced incident record.
 
 ![RateGuard halting a runaway agent at its token budget](site/public/demo/runaway.svg)
 
@@ -203,12 +203,12 @@ budget delegation you can verify with a signature, not a longer list of checkmar
 
 - [Framework Integrations](INTEGRATIONS.md) — LangGraph, OpenAI Agents SDK, Vercel AI SDK, Pydantic AI, one line each
 - [Architecture](ARCHITECTURE.md) — how RateGuard works, positioning vs Datadog/Kong/Cloudflare
-- [Dashboard & admin API](https://rateguard.antharmaya.com/docs/dashboard) — self-hosted control center, `docker compose up` demo, admin API security posture
+- [Dashboard & admin API](https://antharmaya.com/tools/rateguard/docs/dashboard) — self-hosted control center, `docker compose up` demo, admin API security posture
 - [Release Notes](docs/RELEASE_NOTES.md)
 - [API Reference](docs/API_REFERENCE.md) — all presets, config options, middleware adapters
 - [GenAI Observability](docs/GENAI_OBSERVABILITY.md) — OTel integration, model pricing, span attributes
 - [Runnable examples](packages/sdk-go/examples/) — `go run` demos, no API key needed: quickstart, semantic caching, adaptive rate limiting, budget attestation
-- Full docs site: [rateguard.antharmaya.com/docs](https://rateguard.antharmaya.com/docs)
+- Full docs site: [antharmaya.com/tools/rateguard/docs](https://antharmaya.com/tools/rateguard/docs)
 
 ## Overhead
 

@@ -72,7 +72,7 @@ export default function ConfigurationPage() {
         <a href="https://github.com/varbees/rateguard/blob/main/config.schema.json">
           config.schema.json
         </a>
-        , and <a href="/llms.txt">llms.txt</a> carries these docs in a format AI readers ingest
+        , and <a href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/llms.txt`}>llms.txt</a> carries these docs in a format AI readers ingest
         directly.
       </P>
       <DocsPager slug="configuration" />

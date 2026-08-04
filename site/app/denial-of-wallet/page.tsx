@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CodeTabs } from "@/components/docs/CodeTabs";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://rateguard.antharmaya.com"),
+  metadataBase: new URL("https://antharmaya.com/tools/rateguard/"),
   title: "Denial of Wallet: documented AI agent runaway-cost incidents, and the config that stops each one",
   description:
     "A sourced library of real AI agent budget-overrun incidents (the $6,531 DN42 loop, the reported $47K two-agent ping-pong, a 63-incident academic catalog), each mapped to the in-process enforcement that stops it.",

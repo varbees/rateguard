@@ -14,7 +14,7 @@ import GuardMontage from "@/components/landing/scenes/GuardMontage";
 import AttestationScene from "@/components/landing/scenes/AttestationScene";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://rateguard.antharmaya.com"),
+  metadataBase: new URL("https://antharmaya.com/tools/rateguard/"),
   title: "RateGuard: Flight Controls for AI Agents | Runtime Enforcement & Rate Limiting",
   description:
     "Agent runtime enforcement in Go, Node, and Python: token budgets, rate limits, circuit breakers, loop detection, and cryptographic budget delegation, inside your process, no proxy. Open source (MIT).",

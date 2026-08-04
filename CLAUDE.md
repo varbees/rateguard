@@ -1,7 +1,7 @@
 # CLAUDE.md — RateGuard
 
 MIT-licensed in-process AI middleware SDK. Go/Node/Python. Landing at
-rateguard.antharmaya.com. Ready for HN launch.
+antharmaya.com/tools/rateguard. Ready for HN launch.
 
 Published at **v0.5.1** across all three ecosystems (verified 2026-07-31):
 

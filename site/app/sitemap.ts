@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { docHref, flatPages } from "../lib/docs-nav";
 
-const BASE_URL = "https://rateguard.antharmaya.com";
+const BASE_URL = "https://antharmaya.com/tools/rateguard";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const docs = flatPages.map((page) => ({

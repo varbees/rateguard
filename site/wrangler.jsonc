@@ -11,7 +11,11 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  // Mounted on a path under the main zone. Cloudflare matches the most specific
+  // route first, so this wins over the labs worker's antharmaya.com/*. The old
+  // hostname stays alive as a zone-level Redirect Rule — it is published in the
+  // npm, PyPI and GitHub READMEs, which cannot be edited retroactively.
   "routes": [
-    { "pattern": "rateguard.antharmaya.com", "custom_domain": true }
+    { "pattern": "antharmaya.com/tools/rateguard*", "zone_name": "antharmaya.com" }
   ]
 }
