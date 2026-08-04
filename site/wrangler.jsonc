@@ -16,6 +16,9 @@
   // hostname stays alive as a zone-level Redirect Rule — it is published in the
   // npm, PyPI and GitHub READMEs, which cannot be edited retroactively.
   "routes": [
-    { "pattern": "antharmaya.com/tools/rateguard*", "zone_name": "antharmaya.com" }
+    { "pattern": "antharmaya.com/tools/rateguard*", "zone_name": "antharmaya.com" },
+    // Kept so published README links still reach this worker, which redirects
+    // them. Removing it would 404 them instead of forwarding.
+    { "pattern": "rateguard.antharmaya.com", "custom_domain": true }
   ]
 }
