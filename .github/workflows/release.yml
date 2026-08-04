@@ -53,7 +53,12 @@ jobs:
   # registries can never drift on version again.
   go-tag:
     name: Publish Go (mint the submodule tag)
-    needs: verify
+    # Gated like npm. This ran in parallel on the 0.5.2 attempt, so when PyPI
+    # failed the Go submodule tag was already minted — and proxy.golang.org
+    # caches a version permanently, so deleting the tag does not take it back.
+    # Go went to 0.5.2 alone while npm and PyPI stayed on 0.5.1. Same code, but
+    # exactly the drift the parity rule exists to prevent.
+    needs: [verify, pypi]
     if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
     runs-on: ubuntu-latest
     permissions:
