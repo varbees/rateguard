@@ -137,7 +137,17 @@ jobs:
 
   npm:
     name: Publish to npm
-    needs: verify
+    # Gated behind pypi, not parallel with it. These two used to run at the
+    # same time, so the likeliest failure — PyPI Trusted Publishing not being
+    # configured, which no dry run can exercise because the publish job is
+    # skipped — would fail PyPI while npm published anyway. That leaves 0.5.2
+    # on npm against 0.5.1 on PyPI, violating the parity rule in AGENTS.md,
+    # and PyPI can never unpublish a version, only yank it.
+    #
+    # Serialising costs about a minute and makes the bad outcome "nothing
+    # published" instead of "half published". The recoverable ordering is this
+    # one: if PyPI succeeds and npm fails, npm is simply re-run.
+    needs: [verify, pypi]
     if: startsWith(github.ref, 'refs/tags/') && !inputs.dry_run
     runs-on: ubuntu-latest
     permissions:
