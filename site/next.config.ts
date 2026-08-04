@@ -26,11 +26,21 @@ const nextConfig: NextConfig = {
    * ships, rolls back and is verifiable with the code that owns those URLs.
    */
   async redirects() {
+    // Absolute destination, not a path. A relative destination leaves the
+    // browser on the old hostname, which still matches `has`, which redirects
+    // again — an infinite loop. A single-hop status check reports 308 and looks
+    // fine; only following the chain catches it.
+    const has = [{ type: 'host' as const, value: 'rateguard.antharmaya.com' }];
+    const target = 'https://antharmaya.com/tools/rateguard';
     return [
+      // `:path+` requires at least one segment. The `*` form silently fails to
+      // substitute on a bare `/`, emitting a literal ":path*" in the Location
+      // header, so the root is handled separately.
+      { source: '/', has, destination: target, permanent: true, basePath: false },
       {
-        source: '/:path*',
-        has: [{ type: 'host', value: 'rateguard.antharmaya.com' }],
-        destination: `${basePath}/:path*`,
+        source: '/:path+',
+        has,
+        destination: `${target}/:path+`,
         permanent: true,
         basePath: false,
       },
