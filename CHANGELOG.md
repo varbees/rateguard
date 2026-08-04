@@ -8,7 +8,7 @@ versions may carry behaviour changes — they are called out explicitly below.
 
 ---
 
-## [0.5.2] — unreleased
+## [0.5.2] — 2026-08-04
 
 **The first end-to-end signed release.** No code changes from 0.5.1 — this exists
 to ship what 0.5.1 could not: npm provenance, PyPI PEP 740 attestations, and a
