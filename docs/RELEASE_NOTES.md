@@ -447,7 +447,7 @@ or async for Python).
 Go 126 (+8 from Store/conformance) · Node 52 (+6) · Python 54 (+6) — 232 total.
 
 ### Also this session
-- `_cofounder/rateguard-competitive-intel-2026-07-04.md`: the "Store
+- `_cofounder/rateguard/rateguard-competitive-intel-2026-07-04.md`: the "Store
   abstraction" gap identified there is closed (see status update at top of
   that file).
 - Landing page rebuilt (`site/app/page.tsx`): scroll-driven narrative,
