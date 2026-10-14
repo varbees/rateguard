@@ -1,5 +1,5 @@
 # Build from the repo root: docker build -f packages/sdk-go/examples/dashboard-demo/Dockerfile packages/sdk-go
-FROM golang:1.24-bookworm AS builder
+FROM golang:1.26-bookworm AS builder
 WORKDIR /src
 COPY . .
 RUN CGO_ENABLED=0 go build -o /dashboard-demo ./examples/dashboard-demo
