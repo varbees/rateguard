@@ -22,9 +22,9 @@ name: Release
 #
 # ── One-time setup (Harsha) ──
 #
-#  npm  — create an automation token (npmjs.com → Access Tokens → Granular,
-#         read+write on @varbees/rateguard-node) and add it as the repo secret
-#         NPM_TOKEN.
+#  npm  — add a Trusted Publisher (npmjs.com → @varbees/rateguard-node →
+#         Settings → Trusted Publisher → GitHub Actions: owner varbees, repo
+#         rateguard, workflow release.yml). NO TOKEN NEEDED — OIDC.
 #  PyPI — configure a Trusted Publisher (pypi.org → varbees-rateguard →
 #         Publishing → Add a new publisher: GitHub, repo varbees/rateguard,
 #         workflow release.yml, environment pypi). NO TOKEN NEEDED — OIDC.
@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.x'
           cache-dependency-path: packages/sdk-go/go.sum
       # The repo uses bun (bun.lock is committed, and the release checklist has
       # always said `bun run test`). An earlier draft of this workflow used
@@ -122,6 +122,16 @@ jobs:
 
       - name: Docs tell the truth
         run: python3 scripts/check_doc_samples.py
+
+      - name: Price table is generated, in sync and current
+        run: python3 scripts/gen_pricing.py --check
+
+      # A tag must not publish while CI's supply-chain gate is red. Until 0.5.3
+      # this check lived only in CI, so 0.5.2's Go module shipped with 8
+      # called vulnerabilities in its dependencies.
+      - name: Go — govulncheck
+        working-directory: packages/sdk-go
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
       # The tag must match what the packages actually claim, or users install a
       # version that does not exist in the changelog.
@@ -163,17 +173,22 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      # npm Trusted Publishing (OIDC): no token is stored anywhere, so none can
+      # expire or leak. Needs npm CLI 11.5.1+ on Node 22.14+, and a trusted
+      # publisher configured once on npmjs.com (@varbees/rateguard-node →
+      # Settings → Trusted Publisher → GitHub Actions: varbees / rateguard /
+      # release.yml). Replaced the NPM_TOKEN secret in 0.5.3: granular write
+      # tokens expire, and an expired token fails a release silently.
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+      - run: npm install -g npm@latest && npm --version
       - working-directory: packages/sdk-node
         run: bun install --frozen-lockfile && bun run build
       - name: Publish
         working-directory: packages/sdk-node
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   pypi:
     name: Publish to PyPI
@@ -211,7 +226,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25.x'
+          go-version: '1.26.x'
       - name: Wait for propagation
         run: sleep 45
       - name: All three registries must serve the tagged version
