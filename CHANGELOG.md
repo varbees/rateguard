@@ -8,6 +8,49 @@ versions may carry behaviour changes — they are called out explicitly below.
 
 ---
 
+## [0.5.3] — unreleased
+
+**Correct prices, clean dependencies.** 0.5.2 reached only the Go module proxy:
+its PyPI job failed (no trusted publisher) and npm was gated behind it. npm and
+PyPI therefore go from 0.5.1 to 0.5.3.
+
+### Fixed
+
+- **The built-in price table priced every current Claude, GPT and Gemini model
+  at $0**, and three rows were wrong (gpt-4.1-mini at a quarter of its rate,
+  gemini-2.5-flash input at a quarter, claude-haiku-3.5 under an ID no API
+  returns). Costs are estimates and never drive enforcement, but they flow into
+  signed spend receipts, the evidence chain's totals and FOCUS exports, so a
+  call on claude-opus-5-5 was recorded as costing nothing. The table now has
+  65 rows from Anthropic, OpenAI, Google and DeepSeek, each read off the
+  vendor's page on 2026-10-14.
+- **Long-context rates.** Where a vendor charges more for a long prompt
+  (Claude Haiku 5.5 above 100,000 tokens, GPT-5.4/5.5/5.6/6 above 272K, Gemini
+  2.5 Pro and 3.1 Pro above 200k), the higher rate applies to the whole request
+  once the prompt is past the line, as the vendors bill it. A price supplied
+  through your own PricingProvider is still applied as given.
+- Go: 8 called vulnerabilities in dependencies (golang.org/x/net, x/text,
+  google.golang.org/grpc, the OpenTelemetry OTLP exporter and SDK), found by
+  govulncheck, fixed by upgrading. govulncheck now also gates the release job.
+
+### Changed
+
+- **One price table for three SDKs.** `conformance/pricing.json` is the source;
+  `scripts/gen_pricing.py` generates the Go, Node and Python tables from it, and
+  every SDK replays it in a conformance test. CI fails if a generated table
+  drifts, if a vendor's announced price-change date passes, or if the table goes
+  90 days without being re-read.
+- `PricedModels()` added to Go, matching Node's `pricedModels()` and Python's
+  `priced_models()`. Keys are normalised model IDs.
+- Llama via Groq is no longer tabled: Groq publishes no on-demand price for it.
+  Supply one through a PricingProvider if you need it.
+- **Go now requires Go 1.26** (the upgraded gRPC and OpenTelemetry modules do).
+  Go 1.25 is out of support; with `GOTOOLCHAIN=auto` (the default) the right
+  toolchain is fetched automatically.
+- npm releases use Trusted Publishing (OIDC) instead of a stored token.
+
+---
+
 ## [0.5.2] — 2026-08-04
 
 **The first end-to-end signed release.** No code changes from 0.5.1 — this exists
