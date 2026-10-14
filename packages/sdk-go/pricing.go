@@ -2,6 +2,7 @@ package rateguard
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -76,14 +77,57 @@ func normalizeModelID(model string) string {
 }
 
 // builtinPriceFor looks up the shipped starter table, normalized.
+// builtinPrice is one row of the generated table (pricing_table_gen.go, from
+// conformance/pricing.json). LongAboveTokens > 0 means the vendor charges the
+// Long rates on the whole request once its prompt is longer than that.
+type builtinPrice struct {
+	PromptUSDPer1K         float64
+	CompletionUSDPer1K     float64
+	LongAboveTokens        int64
+	LongPromptUSDPer1K     float64
+	LongCompletionUSDPer1K float64
+}
+
+func lookupBuiltin(model string) (builtinPrice, bool) {
+	if p, ok := builtinPricing[model]; ok {
+		return p, true
+	}
+	p, ok := builtinPricing[normalizeModelID(model)]
+	return p, ok
+}
+
+// builtinPriceFor returns the base (short-prompt) rate for a model.
 func builtinPriceFor(model string) (ModelPrice, bool) {
-	if p, ok := modelPricing2026[model]; ok {
-		return ModelPrice{PromptUSDPer1K: p.PromptUSD, CompletionUSDPer1K: p.CompletionUSD}, true
+	p, ok := lookupBuiltin(model)
+	if !ok {
+		return ModelPrice{}, false
 	}
-	if p, ok := modelPricing2026[normalizeModelID(model)]; ok {
-		return ModelPrice{PromptUSDPer1K: p.PromptUSD, CompletionUSDPer1K: p.CompletionUSD}, true
+	return ModelPrice{PromptUSDPer1K: p.PromptUSDPer1K, CompletionUSDPer1K: p.CompletionUSDPer1K}, true
+}
+
+// builtinPriceForPrompt returns the rate a request with promptTokens of input
+// is billed at: the long-context rate when the prompt is past the vendor's
+// threshold, the base rate otherwise.
+func builtinPriceForPrompt(model string, promptTokens int64) (ModelPrice, bool) {
+	p, ok := lookupBuiltin(model)
+	if !ok {
+		return ModelPrice{}, false
 	}
-	return ModelPrice{}, false
+	if p.LongAboveTokens > 0 && promptTokens > p.LongAboveTokens {
+		return ModelPrice{PromptUSDPer1K: p.LongPromptUSDPer1K, CompletionUSDPer1K: p.LongCompletionUSDPer1K}, true
+	}
+	return ModelPrice{PromptUSDPer1K: p.PromptUSDPer1K, CompletionUSDPer1K: p.CompletionUSDPer1K}, true
+}
+
+// PricedModels lists the model keys the built-in table can price, sorted.
+// Keys are normalised IDs; a dated snapshot of any of them also prices.
+func PricedModels() []string {
+	out := make([]string, 0, len(builtinPricing))
+	for k := range builtinPricing {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // estimateCostWith prices a call: caller's PricingProvider first, then the
@@ -95,7 +139,7 @@ func estimateCostWith(pricing PricingProvider, model string, promptTokens, compl
 		price, ok = pricing.PriceFor(model)
 	}
 	if !ok {
-		price, ok = builtinPriceFor(model)
+		price, ok = builtinPriceForPrompt(model, promptTokens)
 	}
 	if !ok {
 		return 0

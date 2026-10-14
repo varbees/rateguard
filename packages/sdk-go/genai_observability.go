@@ -432,34 +432,6 @@ func (g *GenAISpan) End(final GenAICall, err error) {
 	}
 }
 
-// ── Model pricing lookup (2026 market rates, approximate USD per 1K tokens) ──
-
-type modelPricing struct {
-	PromptUSD     float64
-	CompletionUSD float64
-}
-
-var modelPricing2026 = map[string]modelPricing{
-	// OpenAI
-	"gpt-4o":       {PromptUSD: 0.0025, CompletionUSD: 0.010},
-	"gpt-4o-mini":  {PromptUSD: 0.00015, CompletionUSD: 0.0006},
-	"gpt-4.1":      {PromptUSD: 0.002, CompletionUSD: 0.008},
-	"gpt-4.1-mini": {PromptUSD: 0.0001, CompletionUSD: 0.0004},
-	"o3":           {PromptUSD: 0.002, CompletionUSD: 0.008},
-	"o4-mini":      {PromptUSD: 0.0011, CompletionUSD: 0.0044},
-	// Anthropic
-	"claude-opus-4-5":  {PromptUSD: 0.005, CompletionUSD: 0.025},
-	"claude-sonnet-4":  {PromptUSD: 0.003, CompletionUSD: 0.015},
-	"claude-haiku-3.5": {PromptUSD: 0.0008, CompletionUSD: 0.004},
-	// Google
-	"gemini-2.5-pro":   {PromptUSD: 0.00125, CompletionUSD: 0.010},
-	"gemini-2.5-flash": {PromptUSD: 0.000075, CompletionUSD: 0.0003},
-	// Open source / hosted
-	"llama-3.3-70b": {PromptUSD: 0.00059, CompletionUSD: 0.00079},
-	"deepseek-v3":   {PromptUSD: 0.00027, CompletionUSD: 0.0011},
-	"deepseek-r1":   {PromptUSD: 0.00055, CompletionUSD: 0.00219},
-}
-
 // EstimateCost calculates approximate USD cost for an LLM call from the
 // built-in starter table. Model IDs are normalized, so a provider-reported
 // dated snapshot ("gpt-4o-2024-08-06") matches its base entry. Unknown models

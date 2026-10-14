@@ -52,6 +52,7 @@
     "pii_guardrail",
     "policy_preset",
     "preset_policy",
+    "priced_models",
     "pricing_provider",
     "prompt_injection_guardrail",
     "provider_chain",

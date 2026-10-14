@@ -2,12 +2,16 @@
  * GenAI OpenTelemetry observability — matching Go SDK implementation.
  *
  * Emits gen_ai.* spans for every LLM call passing through RateGuard.
- * Token counting, cost estimation (14 models priced, verified), streaming chunk telemetry,
+ * Token counting, cost estimation (built-in table generated from conformance/pricing.json,
+ * every row dated and sourced), streaming chunk telemetry,
  * budget exhaustion + rate limit hit counters.
  *
  * OpenTelemetry GenAI semantic conventions v1.29.0 (2026)
  * https://github.com/open-telemetry/semantic-conventions/blob/main/docs/gen-ai
  */
+
+import { BUILTIN_PRICING, BUILTIN_PRICING_REVIEWED, type BuiltinPrice } from './pricing-table.js';
+export { BUILTIN_PRICING_REVIEWED };
 
 export interface GenAICall {
   model: string;              // e.g. "gpt-4o", "claude-opus-4-5"
@@ -33,28 +37,9 @@ export interface GenAICall {
   circuitBreakerState: string;
 }
 
-// ── Model pricing (2026 market rates, USD per 1K tokens) ──
-
-const MODEL_PRICING_2026: Record<string, { prompt: number; completion: number }> = {
-  // OpenAI
-  'gpt-4o':              { prompt: 0.0025,  completion: 0.010 },
-  'gpt-4o-mini':         { prompt: 0.00015, completion: 0.0006 },
-  'gpt-4.1':             { prompt: 0.002,   completion: 0.008 },
-  'gpt-4.1-mini':        { prompt: 0.0001,  completion: 0.0004 },
-  'o3':                  { prompt: 0.002,   completion: 0.008 },
-  'o4-mini':             { prompt: 0.0011,  completion: 0.0044 },
-  // Anthropic
-  'claude-opus-4-5':     { prompt: 0.005,   completion: 0.025 },
-  'claude-sonnet-4':     { prompt: 0.003,   completion: 0.015 },
-  'claude-haiku-3.5':    { prompt: 0.0008,  completion: 0.004 },
-  // Google
-  'gemini-2.5-pro':      { prompt: 0.00125, completion: 0.010 },
-  'gemini-2.5-flash':    { prompt: 0.000075,completion: 0.0003 },
-  // Open source / hosted
-  'llama-3.3-70b':       { prompt: 0.00059, completion: 0.00079 },
-  'deepseek-v3':         { prompt: 0.00027, completion: 0.0011 },
-  'deepseek-r1':         { prompt: 0.00055, completion: 0.00219 },
-};
+// ── Model pricing ──
+// The built-in table is generated from conformance/pricing.json by
+// scripts/gen_pricing.py, identically for all three SDKs. Do not hand-edit it.
 
 /** USD cost per 1,000 tokens for one model, prompt (input) and completion (output). */
 export interface ModelPrice {
@@ -109,9 +94,22 @@ export function normalizeModelId(model: string): string {
   }
 }
 
-function builtinPriceFor(model: string): ModelPrice | undefined {
-  const p = MODEL_PRICING_2026[model] ?? MODEL_PRICING_2026[normalizeModelId(model)];
-  return p ? { promptUSDPer1K: p.prompt, completionUSDPer1K: p.completion } : undefined;
+function lookupBuiltin(model: string): BuiltinPrice | undefined {
+  return BUILTIN_PRICING[model] ?? BUILTIN_PRICING[normalizeModelId(model)];
+}
+
+/**
+ * The rate a request with `promptTokens` of input is billed at: the vendor's
+ * long-context rate when the prompt is past its threshold (applied to the whole
+ * request, as the vendors bill it), the base rate otherwise.
+ */
+function builtinPriceFor(model: string, promptTokens = 0): ModelPrice | undefined {
+  const p = lookupBuiltin(model);
+  if (!p) return undefined;
+  if (p.longAboveTokens > 0 && promptTokens > p.longAboveTokens) {
+    return { promptUSDPer1K: p.longPromptUSDPer1K, completionUSDPer1K: p.longCompletionUSDPer1K };
+  }
+  return { promptUSDPer1K: p.promptUSDPer1K, completionUSDPer1K: p.completionUSDPer1K };
 }
 
 /**
@@ -124,7 +122,7 @@ export function estimateCostWith(
   promptTokens: number,
   completionTokens: number,
 ): number {
-  const price = pricing?.priceFor(model) ?? builtinPriceFor(model);
+  const price = pricing?.priceFor(model) ?? builtinPriceFor(model, promptTokens);
   if (!price) return 0;
   return (promptTokens / 1000) * price.promptUSDPer1K + (completionTokens / 1000) * price.completionUSDPer1K;
 }
@@ -140,7 +138,7 @@ export function estimateCost(model: string, promptTokens: number, completionToke
 
 /** Return all priced model names. */
 export function pricedModels(): string[] {
-  return Object.keys(MODEL_PRICING_2026);
+  return Object.keys(BUILTIN_PRICING).sort();
 }
 
 // ── OpenTelemetry attribute builders ──

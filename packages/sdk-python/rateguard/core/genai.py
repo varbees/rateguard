@@ -2,7 +2,8 @@
 GenAI OpenTelemetry observability — matching Go SDK implementation.
 
 Emits gen_ai.* spans for every LLM call passing through RateGuard.
-Token counting, cost estimation (14 models priced, verified), streaming chunk telemetry.
+Token counting, cost estimation (built-in table generated from conformance/pricing.json,
+every row dated and sourced), streaming chunk telemetry.
 
 OpenTelemetry GenAI semantic conventions v1.29.0 (2026)
 """
@@ -10,8 +11,9 @@ OpenTelemetry GenAI semantic conventions v1.29.0 (2026)
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal, Protocol
+from .pricing_table import BUILTIN_PRICING, BUILTIN_PRICING_REVIEWED  # noqa: F401  (re-exported)
 
 if TYPE_CHECKING:
     from ..runtime import RateGuardRuntime
@@ -39,28 +41,9 @@ class GenAICall:
     circuit_breaker_state: str = "closed"
 
 
-# ── Model pricing (2026 market rates, USD per 1K tokens) ──
-
-_MODEL_PRICING_2026: dict[str, dict[str, float]] = {
-    # OpenAI
-    "gpt-4o":              {"prompt": 0.0025,  "completion": 0.010},
-    "gpt-4o-mini":         {"prompt": 0.00015, "completion": 0.0006},
-    "gpt-4.1":             {"prompt": 0.002,   "completion": 0.008},
-    "gpt-4.1-mini":        {"prompt": 0.0001,  "completion": 0.0004},
-    "o3":                  {"prompt": 0.002,   "completion": 0.008},
-    "o4-mini":             {"prompt": 0.0011,  "completion": 0.0044},
-    # Anthropic
-    "claude-opus-4-5":     {"prompt": 0.005,   "completion": 0.025},
-    "claude-sonnet-4":     {"prompt": 0.003,   "completion": 0.015},
-    "claude-haiku-3.5":    {"prompt": 0.0008,  "completion": 0.004},
-    # Google
-    "gemini-2.5-pro":      {"prompt": 0.00125, "completion": 0.010},
-    "gemini-2.5-flash":    {"prompt": 0.000075,"completion": 0.0003},
-    # Open source / hosted
-    "llama-3.3-70b":       {"prompt": 0.00059, "completion": 0.00079},
-    "deepseek-v3":         {"prompt": 0.00027, "completion": 0.0011},
-    "deepseek-r1":         {"prompt": 0.00055, "completion": 0.00219},
-}
+# ── Model pricing ──
+# The built-in table is generated from conformance/pricing.json by
+# scripts/gen_pricing.py, identically for all three SDKs. Do not hand-edit it.
 
 
 @dataclass(slots=True)
@@ -121,11 +104,17 @@ def normalize_model_id(model: str) -> str:
             return m
 
 
-def _builtin_price_for(model: str) -> ModelPrice | None:
-    p = _MODEL_PRICING_2026.get(model) or _MODEL_PRICING_2026.get(normalize_model_id(model))
+def _builtin_price_for(model: str, prompt_tokens: int = 0) -> ModelPrice | None:
+    """The rate a request with ``prompt_tokens`` of input is billed at: the
+    vendor's long-context rate when the prompt is past its threshold (applied
+    to the whole request, as the vendors bill it), the base rate otherwise."""
+    p = BUILTIN_PRICING.get(model) or BUILTIN_PRICING.get(normalize_model_id(model))
     if p is None:
         return None
-    return ModelPrice(p["prompt"], p["completion"])
+    prompt, completion, long_above, long_prompt, long_completion = p
+    if long_above > 0 and prompt_tokens > long_above:
+        return ModelPrice(long_prompt, long_completion)
+    return ModelPrice(prompt, completion)
 
 
 def estimate_cost_with(
@@ -140,7 +129,7 @@ def estimate_cost_with(
     if pricing is not None:
         price = pricing.price_for(model)
     if price is None:
-        price = _builtin_price_for(model)
+        price = _builtin_price_for(model, prompt_tokens)
     if price is None:
         return 0.0
     return (prompt_tokens / 1000) * price.prompt_usd_per_1k + (completion_tokens / 1000) * price.completion_usd_per_1k
@@ -155,7 +144,7 @@ def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> flo
 
 def priced_models() -> list[str]:
     """Return all priced model names."""
-    return list(_MODEL_PRICING_2026.keys())
+    return sorted(BUILTIN_PRICING)
 
 
 # ── OpenTelemetry attribute builders ──
