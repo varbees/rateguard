@@ -59,7 +59,7 @@ Every limiter also implements Peek — a non-consuming pre-flight query.
 - Token budgets (hour/day/month, hard-stop or soft-stop); estimate-based reservations (all SDKs — Go EstimatedTokensPerRequest, Node/Python estimated_tokens) keep concurrency high under hard-stop
 - Circuit breakers (closed → open → half-open)
 - GenAI OTel per semconv: span name "{operation} {model}", gen_ai.usage.input_tokens/output_tokens, low-cardinality error.type; public API rg.StartGenAICall → span.End with auto cost estimation, TTFT/TPOT — all 3 SDKs
-- 14-model pricing table, verified against provider pricing pages
+- Built-in price table: 65 models from Anthropic, OpenAI, Google and DeepSeek, one file (conformance/pricing.json) generated into all three SDKs; every row links the vendor page and the date it was read, and CI fails when the table goes stale
 - Content guardrails: PII, prompt injection (5 vectors), token/length limits; wired into middleware (422) in all 3 SDKs
 - Prometheus /metrics endpoint (stdlib only): live counters — requests, rate limit hits, budget exhaustion, breaker trips, tokens consumed, loop stats
 - IETF RateLimit-* response headers (draft-ietf-httpapi-ratelimit-headers), all 3 SDKs

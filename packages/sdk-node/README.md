@@ -77,4 +77,4 @@ const client = new OpenAI({ fetch: rg.wrapFetch() });
 
 ## Status
 
-This package is the Node middleware counterpart to the Go and Python SDKs — full feature parity as of v0.2.0, see the [root README](https://github.com/varbees/rateguard#readme) for the complete capability table.
+This package is the Node middleware counterpart to the Go and Python SDKs — kept in parity with them by a shared conformance suite, see the [root README](https://github.com/varbees/rateguard#readme) for the complete capability table.

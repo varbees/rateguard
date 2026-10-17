@@ -132,4 +132,4 @@ aclient = AsyncOpenAI(http_client=rg.wrap_httpx_async_client())
 
 - Go SDK: `packages/sdk-go`
 - Node SDK: `packages/sdk-node`
-- Full feature parity as of v0.2.0 — see the [root README](https://github.com/varbees/rateguard#readme) for the complete capability table.
+- Kept in parity with the Go and Node SDKs by a shared conformance suite — see the [root README](https://github.com/varbees/rateguard#readme) for the complete capability table.

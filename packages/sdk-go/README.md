@@ -8,7 +8,8 @@ Standalone mode is the default:
 - no Redis is required for the default preset
 - no external service is required for local enforcement
 - request events can be delivered to an HTTP endpoint when configured
-- if your app already uses chi, this is the only new RateGuard dependency
+- direct dependencies: OpenTelemetry (tracing and metrics), go-redis (used only when
+  you configure a Redis store) and golang.org/x/text; requires Go 1.26 or newer
 
 ## Install
 
