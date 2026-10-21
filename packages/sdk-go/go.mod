@@ -2,6 +2,8 @@ module github.com/varbees/rateguard/packages/sdk-go
 
 go 1.26.0
 
+retract v0.5.2 // published to the Go proxy alone, with dependencies that have called vulnerabilities; use v0.5.3
+
 require (
 	github.com/redis/go-redis/v9 v9.17.0
 	go.opentelemetry.io/otel v1.47.0
