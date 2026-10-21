@@ -49,26 +49,21 @@ Cost is estimated automatically from the pricing table when not provided. TTFT a
 
 ## Model pricing
 
-A starter table prices ~14 common models (USD per 1K tokens); dated snapshots resolve to their base entry via model-ID normalization. Supply a `PricingProvider`/`StaticPricing` map to price custom, fine-tuned, or unlisted models with no fetched file or network. Costs are approximate display estimates (never enforcement, never invoice truth); re-check provider pricing pages before publishing a release.
+The built-in table (65 rows: Anthropic, OpenAI, Google, DeepSeek) is generated from
+`conformance/pricing.json`, where every row cites the vendor page and the day it was read.
+Dated snapshots resolve to their base entry via model-ID normalization. Supply a
+`PricingProvider`/`StaticPricing` map to price custom, fine-tuned, or unlisted models with no
+fetched file or network. Costs are approximate estimates (never enforcement, never invoice
+truth). Unknown models return `$0.00` — costs are never fabricated.
 
-| Model | Prompt ($/1K) | Completion ($/1K) |
-|---|---|---|
-| GPT-4o | $0.0025 | $0.010 |
-| GPT-4o Mini | $0.00015 | $0.0006 |
-| GPT-4.1 | $0.002 | $0.008 |
-| GPT-4.1 Mini | $0.0001 | $0.0004 |
-| o3 | $0.002 | $0.008 |
-| o4-mini | $0.0011 | $0.0044 |
-| Claude Opus 4.5 | $0.005 | $0.025 |
-| Claude Sonnet 4 | $0.003 | $0.015 |
-| Claude Haiku 3.5 | $0.0008 | $0.004 |
-| Gemini 2.5 Pro | $0.00125 | $0.010 |
-| Gemini 2.5 Flash | $0.000075 | $0.0003 |
-| Llama 3.3 70B | $0.00059 | $0.00079 |
-| DeepSeek V3 | $0.00027 | $0.0011 |
-| DeepSeek R1 | $0.00055 | $0.00219 |
-
-Full list in `genai_observability.go` / `genai.ts` / `genai.py`. Unknown models return `$0.00` — we never fabricate costs.
+**Prompt caching.** Usage carries the cached part of the prompt separately: `InputTokens` is the
+whole prompt (Anthropic's three counters summed; OpenAI/DeepSeek/Gemini as reported) and
+`CacheReadTokens`, `CacheWriteTokens`, `CacheWriteLongTTLTokens` are subsets of it.
+`EstimateUsageCost` / `estimateUsageCost` / `estimate_usage_cost` price each part at its own rate
+(cache hit, 5m/30m write, 1h/12h write) and pick a long-context tier on the whole prompt.
+`EstimateCost(model, prompt, completion)` prices every prompt token at the input rate. Spans
+carry `gen_ai.usage.cache_read.input_tokens` and `gen_ai.usage.cache_creation.input_tokens` when
+non-zero. Gemini context-cache storage (per token-hour) is not modelled.
 
 ## Setup
 
@@ -97,6 +92,11 @@ from rateguard.core.genai import estimate_cost, genai_span_attributes
 
 cost = estimate_cost("claude-opus-4-5", 5000, 2000)
 # $0.075 (5000/1000 * $0.005 + 2000/1000 * $0.025)
+
+from rateguard import TokenUsage, estimate_usage_cost
+# 5,000-token prompt, 4,000 of it read from cache ($0.0005/1K on Opus 4.5)
+cost = estimate_usage_cost("claude-opus-4-5", TokenUsage(input_tokens=5000, output_tokens=2000, cache_read_tokens=4000))
+# $0.057 (1000/1000 * $0.005 + 4000/1000 * $0.0005 + 2000/1000 * $0.025)
 ```
 
 ## Streaming support

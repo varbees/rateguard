@@ -23,18 +23,80 @@ PyPI therefore go from 0.5.1 to 0.5.3.
   signed spend receipts, the evidence chain's totals and FOCUS exports, so a
   call on claude-opus-5-5 was recorded as costing nothing. The table now has
   65 rows from Anthropic, OpenAI, Google and DeepSeek, each read off the
-  vendor's page on 2026-10-14.
+  vendor's page (2026-10-14, re-read with cache rates on 2026-10-21).
 - **Long-context rates.** Where a vendor charges more for a long prompt
   (Claude Haiku 5.5 above 100,000 tokens, GPT-5.4/5.5/5.6/6 above 272K, Gemini
   2.5 Pro and 3.1 Pro above 200k), the higher rate applies to the whole request
   once the prompt is past the line, as the vendors bill it. A price supplied
   through your own PricingProvider is still applied as given.
+- **Prompt-cache tokens were mis-read and mis-priced.** Anthropic (and
+  Bedrock Converse) report uncached input, cache reads and cache writes as three
+  separate counters; RateGuard took the uncached one as the whole prompt. Cache
+  reads and writes priced at $0, and the long-context threshold was compared
+  against the wrong number. OpenAI, DeepSeek and Gemini cached tokens priced at
+  the full input rate. Measured on the 0.5.2 code against the new conformance
+  vectors:
+
+  | call | 0.5.2 estimate | 0.5.3 estimate |
+  |---|---|---|
+  | claude-sonnet-5-5: 50 uncached + 100,000 cache read + 2,000 cache write, 500 out | $0.005100 | $0.020100 |
+  | claude-haiku-5-5 stream: 50 uncached + 100,000 cache read, 300 out (over the 100k tier) | $0.000155 | $0.005775 |
+  | gpt-4o: 2,006 prompt of which 1,920 cached, 300 out | $0.008015 | $0.005615 |
+  | gemini-2.5-pro: 250,000 prompt of which 200,000 cached, 1,000 out | $0.640000 | $0.190000 |
+
+  Usage now carries `CacheReadTokens`, `CacheWriteTokens` and
+  `CacheWriteLongTTLTokens` (Node `cacheReadTokens`…, Python
+  `cache_read_tokens`…), parsed from every shape: Anthropic
+  `cache_read_input_tokens`/`cache_creation_input_tokens`/`cache_creation.ephemeral_1h_input_tokens`,
+  Bedrock `cacheReadInputTokens`/`cacheWriteInputTokens`/`cacheDetails`,
+  OpenAI `prompt_tokens_details`/`input_tokens_details` `cached_tokens`,
+  `cache_write_tokens` and `cache_write_tokens_details.ttl_12h_tokens`,
+  DeepSeek `prompt_cache_hit_tokens`, Gemini `cachedContentTokenCount`.
+  Streams merge them with MAX per field like the other counters (Anthropic
+  sends them in `message_start`, OpenAI in the final chunk).
+  `conformance/usage_cache_vectors.json` holds all three SDKs to the same usage
+  and cost for 14 bodies and streams.
+- OpenAI Responses streams: Go now reads usage from `response.completed`
+  (`response.usage`). Before, a Responses stream reported no usage in Go and
+  the reserved estimate was committed instead. Node and Python already found it.
 - Go: 8 called vulnerabilities in dependencies (golang.org/x/net, x/text,
   google.golang.org/grpc, the OpenTelemetry OTLP exporter and SDK), found by
   govulncheck, fixed by upgrading. govulncheck now also gates the release job.
 
 ### Changed
 
+- **Behaviour change — token budgets count the whole prompt for Anthropic and
+  Bedrock.** `InputTokens` now means the whole prompt as the vendor bills it
+  (Anthropic: uncached + cache reads + cache writes; OpenAI/DeepSeek/Gemini:
+  unchanged, they already reported it), with the cache counts as subsets of it.
+  This is the meaning OTel gives `gen_ai.usage.input_tokens`. Budgets commit
+  `TotalTokens`, so an Anthropic call that reads 100,000 cached tokens now
+  spends about 100,000 tokens of budget where 0.5.2 counted only the uncached
+  remainder. Budgets are documented as limits on token consumption, and the
+  reservation taken before each call already counted the whole prompt; OpenAI
+  calls, LiteLLM-routed calls and Anthropic calls now count the same tokens.
+  Anthropic's own rate limits exclude cache reads on most models. If your
+  budget was sized against that, raise it.
+- **Cache-aware cost.** `EstimateUsageCost(model, usage)` (Node
+  `estimateUsageCost`, Python `estimate_usage_cost`) prices cache reads, cache
+  writes and long-TTL writes at their own rates, picking the long-context tier
+  on the whole prompt. The outbound wrapper's GenAI spans use it and emit
+  `gen_ai.usage.cache_read.input_tokens` / `gen_ai.usage.cache_creation.input_tokens`.
+  `EstimateCost(model, prompt, completion)` is unchanged (every prompt token at
+  the input rate). If you build spend receipts or FOCUS rows yourself, feed
+  them `EstimateUsageCost`; the receipt format and its signed bytes are
+  unchanged.
+- `ModelPrice` gains optional `CacheReadUSDPer1K`, `CacheWriteUSDPer1K` and
+  `CacheWriteLongTTLUSDPer1K`. Unset (zero), cache tokens bill at
+  `PromptUSDPer1K` and long-TTL writes at the cache-write rate, so existing
+  PricingProviders keep working.
+- `conformance/pricing.json` rows gain `cacheRead`, `cacheWrite` and
+  `cacheWriteLongTTL` (and the same inside `longContext`), read off the vendor
+  pages on 2026-10-21: Anthropic 5m/1h writes and cache hits per model, OpenAI
+  cached input plus GPT-5.6+ 30m/12h writes, DeepSeek cache-hit (peak), Gemini
+  context-cache price (storage per token-hour is not modelled).
+- Go: `go.mod` retracts v0.5.2, so `go get @latest` skips it once v0.5.3 is
+  tagged.
 - **One price table for three SDKs.** `conformance/pricing.json` is the source;
   `scripts/gen_pricing.py` generates the Go, Node and Python tables from it, and
   every SDK replays it in a conformance test. CI fails if a generated table

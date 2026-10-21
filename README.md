@@ -319,8 +319,9 @@ them offline — no key, no network. That is where the interesting cases live:
 - **Groq emits the same usage three times** per call (top-level `usage`, a nested `x_groq.usage`
   with identical numbers, then top-level `usage` again). A summing extractor bills **150 tokens for
   a 50-token call**. MAX-per-field is what makes it correct.
-- **DeepSeek** adds `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`; **NIM** sends a null
-  `audio_tokens`. Extraction must ignore what it doesn't understand rather than choke.
+- **DeepSeek** adds `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` (read as the cached
+  share of the prompt, priced at the cache-hit rate); **NIM** sends a null `audio_tokens`.
+  Extraction must ignore what it doesn't understand rather than choke.
 
 **Known gap, stated plainly:** the denial-of-wallet path — a stream carrying *no* usage at all,
 where RateGuard must charge its reserved estimate rather than zero — is covered by conformance
