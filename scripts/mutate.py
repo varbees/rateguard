@@ -469,6 +469,85 @@ CATALOGUE: list[Mutation] = [
         models="chars/4 on CJK → 4x under-count",
         expect="test_conformance token estimate vectors",
     ),
+    # ── The cache-token bug (fixed in 0.5.3) ──
+    #
+    # Anthropic's input_tokens excludes cache reads and writes. Taking it as
+    # the whole prompt priced a 100k-token cached prompt as 50 tokens — $0 for
+    # the cached part in signed receipts — and picked the short-prompt tier for
+    # a prompt over the long-context threshold. OpenAI's cached tokens priced
+    # at the full input rate. conformance/usage_cache_vectors.json pins both.
+    Mutation(
+        id="go/anthropic-input-excludes-cache",
+        sdk="go",
+        path="packages/sdk-go/tokens.go",
+        find="\t\tu.InputTokens = saturatingAdd(saturatingAdd(u.InputTokens, read), write)",
+        replace="\t\tu.InputTokens = saturatingAdd(u.InputTokens, 0)",
+        models="pre-0.5.3: Anthropic input_tokens taken as the whole prompt → cached tokens priced at $0",
+        expect="TestConformanceUsageCache (anthropic_*)",
+    ),
+    Mutation(
+        id="go/cache-read-at-input-rate",
+        sdk="go",
+        path="packages/sdk-go/pricing.go",
+        find="\treadRate := orRate(price.CacheReadUSDPer1K, price.PromptUSDPer1K)",
+        replace="\treadRate := price.PromptUSDPer1K",
+        models="pre-0.5.3: OpenAI cached tokens priced at the full input rate (2-20x over)",
+        expect="TestConformanceUsageCache (openai_chat_json_cached_tokens)",
+    ),
+    Mutation(
+        id="go/long-tier-on-uncached-input",
+        sdk="go",
+        path="packages/sdk-go/pricing.go",
+        find="\t\tprice, ok = builtinPriceForPrompt(model, usage.InputTokens)",
+        replace="\t\tprice, ok = builtinPriceForPrompt(model, usage.InputTokens-usage.CacheReadTokens-usage.CacheWriteTokens)",
+        models="long-context threshold compared against uncached input: a 100k cached Haiku 5.5 prompt billed at short rates",
+        expect="TestConformanceUsageCache (anthropic_sse_cache_in_message_start_crosses_long_tier)",
+    ),
+    Mutation(
+        id="go/cache-merge-last-wins",
+        sdk="go",
+        path="packages/sdk-go/sse_usage.go",
+        find="\t\tmerged.CacheReadTokens = max(merged.CacheReadTokens, usage.CacheReadTokens)",
+        replace="\t\tmerged.CacheReadTokens = usage.CacheReadTokens",
+        models="rule 12: message_delta without cache fields resets message_start's cache reads to 0",
+        expect="TestConformanceUsageCache (anthropic_sse_cache_in_message_start_crosses_long_tier)",
+    ),
+    Mutation(
+        id="node/anthropic-input-excludes-cache",
+        sdk="node",
+        path="packages/sdk-node/src/core/utils.ts",
+        find="    inputTokens += read + write;",
+        replace="    inputTokens += 0;",
+        models="pre-0.5.3: Anthropic input_tokens taken as the whole prompt → cached tokens priced at $0",
+        expect="conformance prompt-cache usage and cost",
+    ),
+    Mutation(
+        id="node/cache-read-at-input-rate",
+        sdk="node",
+        path="packages/sdk-node/src/core/genai.ts",
+        find="  const readRate = orRate(price.cacheReadUSDPer1K, price.promptUSDPer1K);",
+        replace="  const readRate = price.promptUSDPer1K;",
+        models="pre-0.5.3: OpenAI cached tokens priced at the full input rate",
+        expect="conformance prompt-cache usage and cost",
+    ),
+    Mutation(
+        id="python/anthropic-input-excludes-cache",
+        sdk="python",
+        path="packages/sdk-python/rateguard/extractors/generic.py",
+        find="        input_tokens += read + write",
+        replace="        input_tokens += 0",
+        models="pre-0.5.3: Anthropic input_tokens taken as the whole prompt → cached tokens priced at $0",
+        expect="test_conformance_usage_cache",
+    ),
+    Mutation(
+        id="python/cache-read-at-input-rate",
+        sdk="python",
+        path="packages/sdk-python/rateguard/core/genai.py",
+        find="    read_rate = _or_rate(price.cache_read_usd_per_1k, price.prompt_usd_per_1k)",
+        replace="    read_rate = price.prompt_usd_per_1k",
+        models="pre-0.5.3: OpenAI cached tokens priced at the full input rate",
+        expect="test_conformance_usage_cache",
+    ),
 ]
 
 
