@@ -8,9 +8,21 @@ import (
 
 // ModelPrice is the USD cost per 1,000 tokens for one model, split into the
 // prompt (input) and completion (output) rates.
+//
+// The cache rates are optional. Zero means "not set": cache reads and cache
+// writes then bill at PromptUSDPer1K, and long-TTL writes at the cache-write
+// rate. Set them when your provider discounts cache hits or surcharges cache
+// writes (see conformance/pricing.json for the built-in values).
 type ModelPrice struct {
 	PromptUSDPer1K     float64
 	CompletionUSDPer1K float64
+	// CacheReadUSDPer1K prices TokenUsage.CacheReadTokens.
+	CacheReadUSDPer1K float64
+	// CacheWriteUSDPer1K prices default-TTL cache writes (Anthropic 5m, OpenAI 30m).
+	CacheWriteUSDPer1K float64
+	// CacheWriteLongTTLUSDPer1K prices TokenUsage.CacheWriteLongTTLTokens
+	// (Anthropic 1h, OpenAI 12h).
+	CacheWriteLongTTLUSDPer1K float64
 }
 
 // PricingProvider resolves a per-1K-token price for a model name. Return
@@ -81,11 +93,17 @@ func normalizeModelID(model string) string {
 // conformance/pricing.json). LongAboveTokens > 0 means the vendor charges the
 // Long rates on the whole request once its prompt is longer than that.
 type builtinPrice struct {
-	PromptUSDPer1K         float64
-	CompletionUSDPer1K     float64
-	LongAboveTokens        int64
-	LongPromptUSDPer1K     float64
-	LongCompletionUSDPer1K float64
+	PromptUSDPer1K                float64
+	CompletionUSDPer1K            float64
+	CacheReadUSDPer1K             float64
+	CacheWriteUSDPer1K            float64
+	CacheWriteLongTTLUSDPer1K     float64
+	LongAboveTokens               int64
+	LongPromptUSDPer1K            float64
+	LongCompletionUSDPer1K        float64
+	LongCacheReadUSDPer1K         float64
+	LongCacheWriteUSDPer1K        float64
+	LongCacheWriteLongTTLUSDPer1K float64
 }
 
 func lookupBuiltin(model string) (builtinPrice, bool) {
@@ -102,7 +120,15 @@ func builtinPriceFor(model string) (ModelPrice, bool) {
 	if !ok {
 		return ModelPrice{}, false
 	}
-	return ModelPrice{PromptUSDPer1K: p.PromptUSDPer1K, CompletionUSDPer1K: p.CompletionUSDPer1K}, true
+	return p.base(), true
+}
+
+func (p builtinPrice) base() ModelPrice {
+	return ModelPrice{
+		PromptUSDPer1K: p.PromptUSDPer1K, CompletionUSDPer1K: p.CompletionUSDPer1K,
+		CacheReadUSDPer1K: p.CacheReadUSDPer1K, CacheWriteUSDPer1K: p.CacheWriteUSDPer1K,
+		CacheWriteLongTTLUSDPer1K: p.CacheWriteLongTTLUSDPer1K,
+	}
 }
 
 // builtinPriceForPrompt returns the rate a request with promptTokens of input
@@ -114,9 +140,13 @@ func builtinPriceForPrompt(model string, promptTokens int64) (ModelPrice, bool) 
 		return ModelPrice{}, false
 	}
 	if p.LongAboveTokens > 0 && promptTokens > p.LongAboveTokens {
-		return ModelPrice{PromptUSDPer1K: p.LongPromptUSDPer1K, CompletionUSDPer1K: p.LongCompletionUSDPer1K}, true
+		return ModelPrice{
+			PromptUSDPer1K: p.LongPromptUSDPer1K, CompletionUSDPer1K: p.LongCompletionUSDPer1K,
+			CacheReadUSDPer1K: p.LongCacheReadUSDPer1K, CacheWriteUSDPer1K: p.LongCacheWriteUSDPer1K,
+			CacheWriteLongTTLUSDPer1K: p.LongCacheWriteLongTTLUSDPer1K,
+		}, true
 	}
-	return ModelPrice{PromptUSDPer1K: p.PromptUSDPer1K, CompletionUSDPer1K: p.CompletionUSDPer1K}, true
+	return p.base(), true
 }
 
 // PricedModels lists the model keys the built-in table can price, sorted.
@@ -130,19 +160,61 @@ func PricedModels() []string {
 	return out
 }
 
-// estimateCostWith prices a call: caller's PricingProvider first, then the
-// built-in starter table (normalized), then zero. Never fabricates a cost.
+// estimateCostWith prices a call with no cache breakdown: every prompt token
+// at the input rate. Kept for the (model, prompt, completion) API.
 func estimateCostWith(pricing PricingProvider, model string, promptTokens, completionTokens int64) float64 {
+	return estimateUsageCostWith(pricing, model, TokenUsage{InputTokens: promptTokens, OutputTokens: completionTokens})
+}
+
+// EstimateUsageCost prices a normalised TokenUsage (as the extractors return
+// it) from the built-in table, cache reads and writes at their own rates:
+//
+//	fresh = InputTokens - CacheReadTokens - CacheWriteTokens
+//	cost  = fresh*input + CacheReadTokens*cacheRead
+//	      + (CacheWriteTokens-CacheWriteLongTTLTokens)*cacheWrite
+//	      + CacheWriteLongTTLTokens*cacheWriteLongTTL + OutputTokens*output
+//
+// The long-context tier is chosen on InputTokens, the whole prompt, which is
+// how Anthropic, OpenAI and Google decide it (cache reads and writes count
+// toward the prompt length). Unknown models price at zero.
+func EstimateUsageCost(model string, usage TokenUsage) float64 {
+	return estimateUsageCostWith(nil, model, usage)
+}
+
+// estimateUsageCostWith: caller's PricingProvider first, then the built-in
+// table (normalized), then zero. Never fabricates a cost.
+func estimateUsageCostWith(pricing PricingProvider, model string, usage TokenUsage) float64 {
 	var price ModelPrice
 	var ok bool
 	if pricing != nil {
 		price, ok = pricing.PriceFor(model)
 	}
 	if !ok {
-		price, ok = builtinPriceForPrompt(model, promptTokens)
+		price, ok = builtinPriceForPrompt(model, usage.InputTokens)
 	}
 	if !ok {
 		return 0
 	}
-	return float64(promptTokens)/1000*price.PromptUSDPer1K + float64(completionTokens)/1000*price.CompletionUSDPer1K
+	read := max(usage.CacheReadTokens, 0)
+	write := max(usage.CacheWriteTokens, 0)
+	writeLong := min(max(usage.CacheWriteLongTTLTokens, 0), write)
+	fresh := max(usage.InputTokens-read-write, 0)
+
+	readRate := orRate(price.CacheReadUSDPer1K, price.PromptUSDPer1K)
+	writeRate := orRate(price.CacheWriteUSDPer1K, price.PromptUSDPer1K)
+	writeLongRate := orRate(price.CacheWriteLongTTLUSDPer1K, writeRate)
+
+	return float64(fresh)/1000*price.PromptUSDPer1K +
+		float64(read)/1000*readRate +
+		float64(write-writeLong)/1000*writeRate +
+		float64(writeLong)/1000*writeLongRate +
+		float64(usage.OutputTokens)/1000*price.CompletionUSDPer1K
+}
+
+// orRate returns rate, or fallback when rate is unset (zero or negative).
+func orRate(rate, fallback float64) float64 {
+	if rate > 0 {
+		return rate
+	}
+	return fallback
 }

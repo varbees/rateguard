@@ -13,7 +13,7 @@
  */
 
 import type { Clock } from '../types.js';
-import { estimateCostWith, genaiSpanAttributes, genaiSpanEndAttributes, type GenAICall, type PricingProvider } from './genai.js';
+import { estimateUsageCostWith, genaiSpanAttributes, genaiSpanEndAttributes, type GenAICall, type PricingProvider } from './genai.js';
 
 /** Observes GenAI span lifecycle events — bring your own exporter. */
 export interface GenAIObserver {
@@ -88,12 +88,23 @@ export class GenAISpan {
     if (typeof final.promptTokens === 'number' && final.promptTokens > 0) call.promptTokens = final.promptTokens;
     if (typeof final.completionTokens === 'number' && final.completionTokens > 0) call.completionTokens = final.completionTokens;
     if (typeof final.totalTokens === 'number' && final.totalTokens > 0) call.totalTokens = final.totalTokens;
+    if (typeof final.cacheReadTokens === 'number' && final.cacheReadTokens > 0) call.cacheReadTokens = final.cacheReadTokens;
+    if (typeof final.cacheWriteTokens === 'number' && final.cacheWriteTokens > 0) call.cacheWriteTokens = final.cacheWriteTokens;
+    if (typeof final.cacheWriteLongTTLTokens === 'number' && final.cacheWriteLongTTLTokens > 0) {
+      call.cacheWriteLongTTLTokens = final.cacheWriteLongTTLTokens;
+    }
     if (call.totalTokens === 0) {
       call.totalTokens = call.promptTokens + call.completionTokens;
     }
     if (typeof final.estimatedCostUSD === 'number' && final.estimatedCostUSD > 0) call.estimatedCostUSD = final.estimatedCostUSD;
     if (call.estimatedCostUSD === 0) {
-      call.estimatedCostUSD = estimateCostWith(this.pricing, call.model, call.promptTokens, call.completionTokens);
+      call.estimatedCostUSD = estimateUsageCostWith(this.pricing, call.model, {
+        inputTokens: call.promptTokens,
+        outputTokens: call.completionTokens,
+        cacheReadTokens: call.cacheReadTokens,
+        cacheWriteTokens: call.cacheWriteTokens,
+        cacheWriteLongTTLTokens: call.cacheWriteLongTTLTokens,
+      });
     }
     if (final.responseId) call.responseId = final.responseId;
     if (final.conversationId) call.conversationId = final.conversationId;

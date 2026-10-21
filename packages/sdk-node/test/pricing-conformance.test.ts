@@ -1,17 +1,28 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { estimateCost, estimateCostWith, pricedModels, StaticPricing } from '../src/core/genai.js';
+import { estimateCost, estimateCostWith, estimateUsageCost, estimateUsageCostWith, pricedModels, StaticPricing } from '../src/core/genai.js';
 
 // conformance/pricing.json is the single source of the built-in price table;
 // all three SDKs replay it. A row that prices differently in any SDK, or a
 // current model that prices at $0, fails here.
-interface Row {
-  id: string;
+interface Tier {
   input: number;
   output: number;
-  longContext?: { aboveTokens: number; input: number; output: number };
+  cacheRead?: number;
+  cacheWrite?: number;
+  cacheWriteLongTTL?: number;
 }
+interface Row extends Tier {
+  id: string;
+  longContext?: Tier & { aboveTokens: number };
+}
+
+/** Input, cache-read, write and long-TTL write with the documented fallbacks. */
+const cacheRates = (t: Tier): [number, number, number, number] => {
+  const write = t.cacheWrite ?? t.input;
+  return [t.input, t.cacheRead ?? t.input, write, t.cacheWriteLongTTL ?? write];
+};
 const rows: Row[] = JSON.parse(
   readFileSync(fileURLToPath(new URL('../../../conformance/pricing.json', import.meta.url)), 'utf8'),
 ).models;
@@ -33,6 +44,32 @@ describe('conformance: pricing.json', () => {
       close(estimateCost(r.id, at + 1, 1000), ((at + 1) * r.longContext.input + 1000 * r.longContext.output) / 1e6);
     });
   }
+
+  for (const r of rows) {
+    it(`${r.id} cache rates as the vendor page says`, () => {
+      // 1,000 fresh + 2,000 read + 3,000 written (1,000 of them at the long TTL).
+      let [inp, read, write, writeLong] = cacheRates(r);
+      const base = { inputTokens: 6000, outputTokens: 0, cacheReadTokens: 2000, cacheWriteTokens: 3000, cacheWriteLongTTLTokens: 1000 };
+      close(estimateUsageCost(r.id, base), (1000 * inp + 2000 * read + 2000 * write + 1000 * writeLong) / 1e6);
+      if (!r.longContext) return;
+      // The tier is chosen on the whole prompt, cached parts included.
+      const at = r.longContext.aboveTokens;
+      [inp, read, write, writeLong] = cacheRates(r.longContext);
+      close(
+        estimateUsageCost(r.id, { ...base, inputTokens: at + 1 }),
+        ((at + 1 - 5000) * inp + 2000 * read + 2000 * write + 1000 * writeLong) / 1e6,
+      );
+    });
+  }
+
+  it("a caller's price without cache rates bills cache tokens at the input rate", () => {
+    const usage = { inputTokens: 3000, outputTokens: 0, cacheReadTokens: 1000, cacheWriteTokens: 1000, cacheWriteLongTTLTokens: 500 };
+    close(estimateUsageCostWith(new StaticPricing({ m: { promptUSDPer1K: 1, completionUSDPer1K: 2 } }), 'm', usage), 3);
+    const cached = new StaticPricing({
+      m: { promptUSDPer1K: 1, completionUSDPer1K: 2, cacheReadUSDPer1K: 0.1, cacheWriteUSDPer1K: 1.25, cacheWriteLongTTLUSDPer1K: 2 },
+    });
+    close(estimateUsageCostWith(cached, 'm', usage), 1 + 0.1 + 0.625 + 1);
+  });
 
   it('the models people actually run are never priced at $0', () => {
     for (const id of [

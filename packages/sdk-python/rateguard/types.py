@@ -206,11 +206,27 @@ class ResponseSnapshot:
 
 @dataclass(slots=True)
 class TokenUsage:
+    """Provider-derived token usage.
+
+    ``input_tokens`` is the whole prompt as the vendor bills it, normalised
+    across providers: Anthropic and Bedrock report uncached input, cache reads
+    and cache writes as three non-overlapping counters and ``input_tokens`` is
+    their sum; OpenAI, DeepSeek and Gemini already report the whole prompt. The
+    cache fields are subsets of ``input_tokens``, never additions to it (the
+    meaning OTel gives gen_ai.usage.input_tokens). Same contract as Go."""
+
     provider: str | None = None
     model: str | None = None
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
+    # Part of input_tokens served from the provider's prompt cache.
+    cache_read_tokens: int = 0
+    # Part of input_tokens written to the cache, across every TTL.
+    cache_write_tokens: int = 0
+    # Part of cache_write_tokens written with the longer, dearer TTL
+    # (Anthropic/Bedrock 1h, OpenAI 12h).
+    cache_write_long_ttl_tokens: int = 0
 
 
 @dataclass(slots=True)

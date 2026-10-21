@@ -10,15 +10,39 @@ import (
 // conformance/pricing.json is the single source of the built-in price table;
 // all three SDKs replay it. A row that prices differently in any SDK, or a
 // current model that prices at $0, fails here.
+type pricingTier struct {
+	Input             float64  `json:"input"`
+	Output            float64  `json:"output"`
+	CacheRead         *float64 `json:"cacheRead"`
+	CacheWrite        *float64 `json:"cacheWrite"`
+	CacheWriteLongTTL *float64 `json:"cacheWriteLongTTL"`
+}
+
+// cacheRates returns input, cache-read, write and long-TTL write with the
+// documented fallbacks: no cacheRead/cacheWrite → input rate, no
+// cacheWriteLongTTL → cacheWrite.
+func (t pricingTier) cacheRates() (in, read, write, writeLong float64) {
+	in, read, write = t.Input, t.Input, t.Input
+	if t.CacheRead != nil {
+		read = *t.CacheRead
+	}
+	if t.CacheWrite != nil {
+		write = *t.CacheWrite
+	}
+	writeLong = write
+	if t.CacheWriteLongTTL != nil {
+		writeLong = *t.CacheWriteLongTTL
+	}
+	return in, read, write, writeLong
+}
+
 type pricingRow struct {
-	ID          string  `json:"id"`
-	Input       float64 `json:"input"`
-	Output      float64 `json:"output"`
-	ExactOnly   bool    `json:"exactOnly"`
+	pricingTier
+	ID          string `json:"id"`
+	ExactOnly   bool   `json:"exactOnly"`
 	LongContext *struct {
-		AboveTokens int64   `json:"aboveTokens"`
-		Input       float64 `json:"input"`
-		Output      float64 `json:"output"`
+		pricingTier
+		AboveTokens int64 `json:"aboveTokens"`
 	} `json:"longContext"`
 }
 
@@ -96,5 +120,42 @@ func TestConformancePricingProviderPriceIsFlat(t *testing.T) {
 	p := StaticPricing{"claude-haiku-5-5": {PromptUSDPer1K: 1, CompletionUSDPer1K: 1}}
 	if got := estimateCostWith(p, "claude-haiku-5-5", 200000, 0); !approx(got, 200) {
 		t.Errorf("caller price not applied flat: %v", got)
+	}
+}
+
+func TestConformancePricingCacheRates(t *testing.T) {
+	for _, r := range loadPricingRows(t) {
+		// 1,000 fresh + 2,000 read + 3,000 written (1,000 of them at the long TTL).
+		in, read, write, writeLong := r.cacheRates()
+		u := TokenUsage{InputTokens: 6000, CacheReadTokens: 2000, CacheWriteTokens: 3000, CacheWriteLongTTLTokens: 1000}
+		want := (1000*in + 2000*read + 2000*write + 1000*writeLong) / 1e6
+		if got := EstimateUsageCost(r.ID, u); !approx(got, want) {
+			t.Errorf("%s: cache cost = %v, want %v", r.ID, got, want)
+		}
+		if r.LongContext == nil {
+			continue
+		}
+		// The tier is chosen on the whole prompt, cached parts included.
+		at := r.LongContext.AboveTokens
+		in, read, write, writeLong = r.LongContext.cacheRates()
+		u.InputTokens = at + 1
+		want = (float64(at+1-5000)*in + 2000*read + 2000*write + 1000*writeLong) / 1e6
+		if got := EstimateUsageCost(r.ID, u); !approx(got, want) {
+			t.Errorf("%s long tier: cache cost = %v, want %v", r.ID, got, want)
+		}
+	}
+}
+
+func TestConformancePricingProviderCacheRates(t *testing.T) {
+	u := TokenUsage{InputTokens: 3000, CacheReadTokens: 1000, CacheWriteTokens: 1000, CacheWriteLongTTLTokens: 500}
+	// A caller's ModelPrice without cache rates (every pre-0.5.3 literal)
+	// bills cache tokens at the input rate.
+	plain := StaticPricing{"m": {PromptUSDPer1K: 1, CompletionUSDPer1K: 2}}
+	if got := estimateUsageCostWith(plain, "m", u); !approx(got, 3) {
+		t.Errorf("plain caller price: %v, want 3", got)
+	}
+	cached := StaticPricing{"m": {PromptUSDPer1K: 1, CompletionUSDPer1K: 2, CacheReadUSDPer1K: 0.1, CacheWriteUSDPer1K: 1.25, CacheWriteLongTTLUSDPer1K: 2}}
+	if got, want := estimateUsageCostWith(cached, "m", u), 1+0.1+0.625+1.0; !approx(got, want) {
+		t.Errorf("caller cache rates: %v, want %v", got, want)
 	}
 }

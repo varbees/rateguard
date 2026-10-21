@@ -18,6 +18,7 @@
     "embedder",
     "enforcement_event",
     "estimate_cost",
+    "estimate_usage_cost",
     "estimate_request_tokens",
     "estimate_tokens",
     "estimate_with",

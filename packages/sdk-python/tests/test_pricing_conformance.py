@@ -56,3 +56,44 @@ def test_exact_only_snapshot_keeps_its_own_price() -> None:
 def test_callers_price_is_flat() -> None:
     p = StaticPricing({"claude-haiku-5-5": ModelPrice(1.0, 1.0)})
     assert estimate_cost_with(p, "claude-haiku-5-5", 200_000, 0) == pytest.approx(200.0)
+
+
+def _cache_rates(tier: dict) -> tuple[float, float, float, float]:
+    """Input, cache-read, write and long-TTL write for a tier, with the
+    documented fallbacks: no cacheRead/cacheWrite → input rate, no
+    cacheWriteLongTTL → cacheWrite."""
+    write = tier.get("cacheWrite", tier["input"])
+    return tier["input"], tier.get("cacheRead", tier["input"]), write, tier.get("cacheWriteLongTTL", write)
+
+
+@pytest.mark.parametrize("row", ROWS, ids=[r["id"] for r in ROWS])
+def test_row_cache_rates_as_the_vendor_page_says(row: dict) -> None:
+    from rateguard import estimate_usage_cost
+    from rateguard.types import TokenUsage
+
+    # 1,000 fresh + 2,000 read + 3,000 written (1,000 of them at the long TTL).
+    inp, read, write, write_long = _cache_rates(row)
+    usage = TokenUsage(input_tokens=6000, cache_read_tokens=2000, cache_write_tokens=3000, cache_write_long_ttl_tokens=1000)
+    want = (1000 * inp + 2000 * read + 2000 * write + 1000 * write_long) / 1e6
+    assert estimate_usage_cost(row["id"], usage) == pytest.approx(want, abs=1e-12)
+    lc = row.get("longContext")
+    if not lc:
+        return
+    # The tier is chosen on the whole prompt, cached parts included.
+    at = lc["aboveTokens"]
+    inp, read, write, write_long = _cache_rates(lc)
+    usage = TokenUsage(input_tokens=at + 1, cache_read_tokens=2000, cache_write_tokens=3000, cache_write_long_ttl_tokens=1000)
+    want = ((at + 1 - 5000) * inp + 2000 * read + 2000 * write + 1000 * write_long) / 1e6
+    assert estimate_usage_cost(row["id"], usage) == pytest.approx(want, abs=1e-12)
+
+
+def test_caller_price_without_cache_rates_bills_cache_at_input() -> None:
+    from rateguard import estimate_usage_cost_with
+    from rateguard.types import TokenUsage
+
+    usage = TokenUsage(input_tokens=3000, cache_read_tokens=1000, cache_write_tokens=1000, cache_write_long_ttl_tokens=500)
+    plain = StaticPricing({"my-model": ModelPrice(1.0, 2.0)})
+    assert estimate_usage_cost_with(plain, "my-model", usage) == pytest.approx(3.0, abs=1e-12)
+    cached = StaticPricing({"my-model": ModelPrice(1.0, 2.0, cache_read_usd_per_1k=0.1, cache_write_usd_per_1k=1.25,
+                                                  cache_write_long_ttl_usd_per_1k=2.0)})
+    assert estimate_usage_cost_with(cached, "my-model", usage) == pytest.approx(1.0 + 0.1 + 0.625 + 1.0, abs=1e-12)

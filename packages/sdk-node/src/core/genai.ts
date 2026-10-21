@@ -17,9 +17,14 @@ export interface GenAICall {
   model: string;              // e.g. "gpt-4o", "claude-opus-4-5"
   provider: string;           // e.g. "openai", "anthropic", "google"
   operation: 'chat' | 'text_completion' | 'embedding';
+  /** The whole prompt, cached parts included (OTel gen_ai.usage.input_tokens). */
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  /** Prompt-cache breakdown, subsets of promptTokens (see TokenUsage). */
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  cacheWriteLongTTLTokens?: number;
   streaming: boolean;
   streamChunks: number;
   /** TTFT — time to first token/chunk (ms) */
@@ -41,10 +46,29 @@ export interface GenAICall {
 // The built-in table is generated from conformance/pricing.json by
 // scripts/gen_pricing.py, identically for all three SDKs. Do not hand-edit it.
 
-/** USD cost per 1,000 tokens for one model, prompt (input) and completion (output). */
+/**
+ * USD cost per 1,000 tokens for one model, prompt (input) and completion
+ * (output). The cache rates are optional: unset (or 0) means cache reads and
+ * writes bill at promptUSDPer1K and long-TTL writes at the cache-write rate.
+ */
 export interface ModelPrice {
   promptUSDPer1K: number;
   completionUSDPer1K: number;
+  /** Prices TokenUsage.cacheReadTokens. */
+  cacheReadUSDPer1K?: number;
+  /** Default-TTL cache writes (Anthropic 5m, OpenAI 30m). */
+  cacheWriteUSDPer1K?: number;
+  /** Long-TTL cache writes (Anthropic 1h, OpenAI 12h). */
+  cacheWriteLongTTLUSDPer1K?: number;
+}
+
+/** Token counts the cost estimate reads: a TokenUsage, or any object with these fields. */
+export interface UsageForCost {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens?: number | undefined;
+  cacheWriteTokens?: number | undefined;
+  cacheWriteLongTTLTokens?: number | undefined;
 }
 
 /**
@@ -107,9 +131,21 @@ function builtinPriceFor(model: string, promptTokens = 0): ModelPrice | undefine
   const p = lookupBuiltin(model);
   if (!p) return undefined;
   if (p.longAboveTokens > 0 && promptTokens > p.longAboveTokens) {
-    return { promptUSDPer1K: p.longPromptUSDPer1K, completionUSDPer1K: p.longCompletionUSDPer1K };
+    return {
+      promptUSDPer1K: p.longPromptUSDPer1K,
+      completionUSDPer1K: p.longCompletionUSDPer1K,
+      cacheReadUSDPer1K: p.longCacheReadUSDPer1K,
+      cacheWriteUSDPer1K: p.longCacheWriteUSDPer1K,
+      cacheWriteLongTTLUSDPer1K: p.longCacheWriteLongTTLUSDPer1K,
+    };
   }
-  return { promptUSDPer1K: p.promptUSDPer1K, completionUSDPer1K: p.completionUSDPer1K };
+  return {
+    promptUSDPer1K: p.promptUSDPer1K,
+    completionUSDPer1K: p.completionUSDPer1K,
+    cacheReadUSDPer1K: p.cacheReadUSDPer1K,
+    cacheWriteUSDPer1K: p.cacheWriteUSDPer1K,
+    cacheWriteLongTTLUSDPer1K: p.cacheWriteLongTTLUSDPer1K,
+  };
 }
 
 /**
@@ -122,18 +158,59 @@ export function estimateCostWith(
   promptTokens: number,
   completionTokens: number,
 ): number {
-  const price = pricing?.priceFor(model) ?? builtinPriceFor(model, promptTokens);
-  if (!price) return 0;
-  return (promptTokens / 1000) * price.promptUSDPer1K + (completionTokens / 1000) * price.completionUSDPer1K;
+  return estimateUsageCostWith(pricing, model, { inputTokens: promptTokens, outputTokens: completionTokens });
 }
 
 /**
  * Estimate USD cost from the built-in starter table (model-ID normalized, so
- * a dated snapshot matches its base entry). Unknown models return zero. For
- * custom/not-yet-tabled models, supply a PricingProvider (see StaticPricing).
+ * a dated snapshot matches its base entry), every prompt token at the input
+ * rate. Unknown models return zero. For a call with prompt caching use
+ * estimateUsageCost. For custom/not-yet-tabled models, supply a
+ * PricingProvider (see StaticPricing).
  */
 export function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
   return estimateCostWith(undefined, model, promptTokens, completionTokens);
+}
+
+/**
+ * Price a normalised TokenUsage from the built-in table, cache reads and
+ * writes at their own rates:
+ *
+ *   fresh = inputTokens - cacheReadTokens - cacheWriteTokens
+ *   cost  = fresh*input + cacheReadTokens*cacheRead
+ *         + (cacheWriteTokens - cacheWriteLongTTLTokens)*cacheWrite
+ *         + cacheWriteLongTTLTokens*cacheWriteLongTTL + outputTokens*output
+ *
+ * The long-context tier is chosen on inputTokens, the whole prompt (cache
+ * reads and writes count toward prompt length at every vendor). Same formula
+ * as Go's EstimateUsageCost.
+ */
+export function estimateUsageCost(model: string, usage: UsageForCost): number {
+  return estimateUsageCostWith(undefined, model, usage);
+}
+
+/** estimateUsageCost with a caller PricingProvider tried first. */
+export function estimateUsageCostWith(pricing: PricingProvider | undefined, model: string, usage: UsageForCost): number {
+  const price = pricing?.priceFor(model) ?? builtinPriceFor(model, usage.inputTokens);
+  if (!price) return 0;
+  const read = Math.max(usage.cacheReadTokens ?? 0, 0);
+  const write = Math.max(usage.cacheWriteTokens ?? 0, 0);
+  const writeLong = Math.min(Math.max(usage.cacheWriteLongTTLTokens ?? 0, 0), write);
+  const fresh = Math.max(usage.inputTokens - read - write, 0);
+  const readRate = orRate(price.cacheReadUSDPer1K, price.promptUSDPer1K);
+  const writeRate = orRate(price.cacheWriteUSDPer1K, price.promptUSDPer1K);
+  const writeLongRate = orRate(price.cacheWriteLongTTLUSDPer1K, writeRate);
+  return (
+    (fresh / 1000) * price.promptUSDPer1K +
+    (read / 1000) * readRate +
+    ((write - writeLong) / 1000) * writeRate +
+    (writeLong / 1000) * writeLongRate +
+    (usage.outputTokens / 1000) * price.completionUSDPer1K
+  );
+}
+
+function orRate(rate: number | undefined, fallback: number): number {
+  return rate !== undefined && rate > 0 ? rate : fallback;
 }
 
 /** Return all priced model names. */
@@ -182,6 +259,12 @@ export function genaiSpanEndAttributes(call: GenAICall, latencySeconds: number, 
     'rateguard.usage.cost_usd': call.estimatedCostUSD,
     'rateguard.request.is_stream': call.streaming,
   };
+  if (call.cacheReadTokens && call.cacheReadTokens > 0) {
+    attrs['gen_ai.usage.cache_read.input_tokens'] = call.cacheReadTokens;
+  }
+  if (call.cacheWriteTokens && call.cacheWriteTokens > 0) {
+    attrs['gen_ai.usage.cache_creation.input_tokens'] = call.cacheWriteTokens;
+  }
   if (call.streaming) {
     attrs['rateguard.stream.chunks'] = call.streamChunks;
   }

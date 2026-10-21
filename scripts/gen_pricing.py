@@ -62,6 +62,20 @@ def per_1k(per_1m: float) -> str:
     return s if "." in s else s + ".0"
 
 
+def cache_rates(tier: dict) -> tuple[str, str, str]:
+    """Per-1K cache read, default-TTL write and long-TTL write for one price
+    tier, with the vendor's billing for a missing column filled in: no
+    cacheRead means cached tokens bill at the input rate (OpenAI's "-" for the
+    pro models), no cacheWrite means writes bill at the input rate (no write
+    surcharge), no cacheWriteLongTTL means the long TTL is not sold and falls
+    back to the default write. The generated tables are therefore complete and
+    the SDKs never guess."""
+    read = tier.get("cacheRead", tier["input"])
+    write = tier.get("cacheWrite", tier["input"])
+    write_long = tier.get("cacheWriteLongTTL", write)
+    return per_1k(read), per_1k(write), per_1k(write_long)
+
+
 def rows() -> tuple[str, list[dict]]:
     doc = json.loads(SOURCE.read_text())
     out: dict[str, dict] = {}
@@ -70,14 +84,22 @@ def rows() -> tuple[str, list[dict]]:
         if key in out:
             raise SystemExit(f"gen_pricing: two rows share the key {key!r}")
         lc = m.get("longContext")
+        read, write, write_long = cache_rates(m)
+        lread, lwrite, lwrite_long = cache_rates(lc) if lc else ("0.0", "0.0", "0.0")
         out[key] = {
             "key": key,
             "id": m["id"],
             "prompt": per_1k(m["input"]),
             "completion": per_1k(m["output"]),
+            "cacheRead": read,
+            "cacheWrite": write,
+            "cacheWriteLongTTL": write_long,
             "longAbove": lc["aboveTokens"] if lc else 0,
             "longPrompt": per_1k(lc["input"]) if lc else "0.0",
             "longCompletion": per_1k(lc["output"]) if lc else "0.0",
+            "longCacheRead": lread,
+            "longCacheWrite": lwrite,
+            "longCacheWriteLongTTL": lwrite_long,
         }
     return doc["lastReviewed"], [out[k] for k in sorted(out)]
 
@@ -104,8 +126,12 @@ def render_go(reviewed: str, table: list[dict]) -> str:
     for r in table:
         lines.append(
             f'\t"{r["key"]}": {{PromptUSDPer1K: {r["prompt"]}, CompletionUSDPer1K: {r["completion"]}, '
+            f'CacheReadUSDPer1K: {r["cacheRead"]}, CacheWriteUSDPer1K: {r["cacheWrite"]}, '
+            f'CacheWriteLongTTLUSDPer1K: {r["cacheWriteLongTTL"]}, '
             f'LongAboveTokens: {r["longAbove"]}, LongPromptUSDPer1K: {r["longPrompt"]}, '
-            f'LongCompletionUSDPer1K: {r["longCompletion"]}}},'
+            f'LongCompletionUSDPer1K: {r["longCompletion"]}, LongCacheReadUSDPer1K: {r["longCacheRead"]}, '
+            f'LongCacheWriteUSDPer1K: {r["longCacheWrite"]}, '
+            f'LongCacheWriteLongTTLUSDPer1K: {r["longCacheWriteLongTTL"]}}},'
         )
     lines.append("}")
     return gofmt("\n".join(lines) + "\n")
@@ -116,10 +142,16 @@ def render_ts(reviewed: str, table: list[dict]) -> str:
              "export interface BuiltinPrice {",
              "  promptUSDPer1K: number;",
              "  completionUSDPer1K: number;",
+             "  cacheReadUSDPer1K: number;",
+             "  cacheWriteUSDPer1K: number;",
+             "  cacheWriteLongTTLUSDPer1K: number;",
              "  /** Prompts longer than this pay the long rates; 0 means no long tier. */",
              "  longAboveTokens: number;",
              "  longPromptUSDPer1K: number;",
              "  longCompletionUSDPer1K: number;",
+             "  longCacheReadUSDPer1K: number;",
+             "  longCacheWriteUSDPer1K: number;",
+             "  longCacheWriteLongTTLUSDPer1K: number;",
              "}", "",
              "/** The day the vendor pages behind the built-in price table were last read. */",
              f"export const BUILTIN_PRICING_REVIEWED = '{reviewed}';", "",
@@ -127,8 +159,12 @@ def render_ts(reviewed: str, table: list[dict]) -> str:
     for r in table:
         lines.append(
             f"  '{r['key']}': {{ promptUSDPer1K: {r['prompt']}, completionUSDPer1K: {r['completion']}, "
+            f"cacheReadUSDPer1K: {r['cacheRead']}, cacheWriteUSDPer1K: {r['cacheWrite']}, "
+            f"cacheWriteLongTTLUSDPer1K: {r['cacheWriteLongTTL']}, "
             f"longAboveTokens: {r['longAbove']}, longPromptUSDPer1K: {r['longPrompt']}, "
-            f"longCompletionUSDPer1K: {r['longCompletion']} }},"
+            f"longCompletionUSDPer1K: {r['longCompletion']}, longCacheReadUSDPer1K: {r['longCacheRead']}, "
+            f"longCacheWriteUSDPer1K: {r['longCacheWrite']}, "
+            f"longCacheWriteLongTTLUSDPer1K: {r['longCacheWriteLongTTL']} }},"
         )
     lines.append("};")
     return "\n".join(lines) + "\n"
@@ -138,13 +174,18 @@ def render_py(reviewed: str, table: list[dict]) -> str:
     lines = [f'"""{HEADER}"""', "", "from __future__ import annotations", "",
              "# The day the vendor pages behind the built-in price table were last read.",
              f'BUILTIN_PRICING_REVIEWED = "{reviewed}"', "",
-             "# key: (prompt_usd_per_1k, completion_usd_per_1k,",
-             "#       long_above_tokens, long_prompt_usd_per_1k, long_completion_usd_per_1k)",
-             "BUILTIN_PRICING: dict[str, tuple[float, float, int, float, float]] = {"]
+             "# key: (prompt, completion, cache_read, cache_write, cache_write_long_ttl,",
+             "#       long_above_tokens, long_prompt, long_completion, long_cache_read,",
+             "#       long_cache_write, long_cache_write_long_ttl) — USD per 1K tokens",
+             "BUILTIN_PRICING: dict[",
+             "    str, tuple[float, float, float, float, float, int, float, float, float, float, float]",
+             "] = {"]
     for r in table:
         lines.append(
-            f'    "{r["key"]}": ({r["prompt"]}, {r["completion"]}, {r["longAbove"]}, '
-            f'{r["longPrompt"]}, {r["longCompletion"]}),'
+            f'    "{r["key"]}": ({r["prompt"]}, {r["completion"]}, {r["cacheRead"]}, '
+            f'{r["cacheWrite"]}, {r["cacheWriteLongTTL"]}, {r["longAbove"]}, '
+            f'{r["longPrompt"]}, {r["longCompletion"]}, {r["longCacheRead"]}, '
+            f'{r["longCacheWrite"]}, {r["longCacheWriteLongTTL"]}),'
         )
     lines.append("}")
     return "\n".join(lines) + "\n"

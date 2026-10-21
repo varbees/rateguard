@@ -463,11 +463,14 @@ func (t *genaiTransport) finish(span *GenAISpan, breaker *circuitBreaker, budget
 		s.tokens.releaseReservation(budgetKey, reservationID)
 	}
 	span.End(GenAICall{
-		Model:            usage.Model,
-		Provider:         usage.Provider,
-		PromptTokens:     usage.InputTokens,
-		CompletionTokens: usage.OutputTokens,
-		TotalTokens:      usage.TotalTokens,
+		Model:                   usage.Model,
+		Provider:                usage.Provider,
+		PromptTokens:            usage.InputTokens,
+		CompletionTokens:        usage.OutputTokens,
+		TotalTokens:             usage.TotalTokens,
+		CacheReadTokens:         usage.CacheReadTokens,
+		CacheWriteTokens:        usage.CacheWriteTokens,
+		CacheWriteLongTTLTokens: usage.CacheWriteLongTTLTokens,
 	}, nil)
 }
 

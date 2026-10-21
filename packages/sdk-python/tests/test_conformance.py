@@ -171,3 +171,37 @@ def test_conformance_sse_usage(case: dict) -> None:
     assert usage.input_tokens == case["expect_input_tokens"], case["note"]
     assert usage.output_tokens == case["expect_output_tokens"], case["note"]
     assert usage.total_tokens == case["expect_total_tokens"], case["note"]
+
+
+# ── Prompt-cache usage and cost ──
+#
+# conformance/usage_cache_vectors.json: every SDK extracts the same normalised
+# prompt-cache usage from the same bytes and prices it to the same cost.
+
+USAGE_CACHE_VECTORS_PATH = Path(__file__).resolve().parents[3] / "conformance" / "usage_cache_vectors.json"
+_USAGE_CACHE_CASES = json.loads(USAGE_CACHE_VECTORS_PATH.read_text())["cases"]
+
+
+def test_usage_cache_vectors_present() -> None:
+    assert _USAGE_CACHE_CASES
+
+
+@pytest.mark.parametrize("case", _USAGE_CACHE_CASES, ids=lambda c: c["name"])
+def test_conformance_usage_cache(case: dict) -> None:
+    from rateguard import estimate_usage_cost
+    from rateguard.core.utils import extract_token_usage_from_text
+
+    # The same entry points the outbound transport uses for each body kind.
+    usage = _extract_sse_usage(case["body"]) if case["kind"] == "sse" else extract_token_usage_from_text(case["body"])
+    assert usage is not None, f"no usage extracted — {case['note']}"
+    got = {
+        "input_tokens": usage.input_tokens,
+        "output_tokens": usage.output_tokens,
+        "total_tokens": usage.total_tokens,
+        "cache_read_tokens": usage.cache_read_tokens,
+        "cache_write_tokens": usage.cache_write_tokens,
+        "cache_write_long_ttl_tokens": usage.cache_write_long_ttl_tokens,
+    }
+    assert got == case["expect"], case["note"]
+    cost = estimate_usage_cost(case["model"], usage)
+    assert abs(cost - case["expect_cost_usd"]) <= 1e-12 * max(1.0, case["expect_cost_usd"])

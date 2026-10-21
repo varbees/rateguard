@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Literal, Protocol
 from .pricing_table import BUILTIN_PRICING, BUILTIN_PRICING_REVIEWED  # noqa: F401  (re-exported)
+from ..types import TokenUsage
 
 if TYPE_CHECKING:
     from ..runtime import RateGuardRuntime
@@ -27,7 +28,7 @@ class GenAICall:
     operation: Literal["chat", "text_completion", "embedding"] = "chat"
     prompt_tokens: int = 0
     completion_tokens: int = 0
-    total_tokens: int = 0
+    total_tokens: int = 0  # prompt_tokens is the whole prompt, cached parts included
     streaming: bool = False
     stream_chunks: int = 0
     time_to_first_chunk_ms: int = 0    # TTFT — time to first token/chunk
@@ -39,6 +40,11 @@ class GenAICall:
     token_budget_applied: bool = False
     token_budget_remaining: int = 0
     circuit_breaker_state: str = "closed"
+    # Prompt-cache breakdown, subsets of prompt_tokens (see TokenUsage). They
+    # price cache hits and writes at their own rates.
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_write_long_ttl_tokens: int = 0
 
 
 # ── Model pricing ──
@@ -48,10 +54,18 @@ class GenAICall:
 
 @dataclass(slots=True)
 class ModelPrice:
-    """USD cost per 1,000 tokens for one model, prompt and completion."""
+    """USD cost per 1,000 tokens for one model, prompt and completion.
+
+    The cache rates are optional: 0 means unset, and cache reads and writes
+    then bill at prompt_usd_per_1k, long-TTL writes at the cache-write rate."""
 
     prompt_usd_per_1k: float
     completion_usd_per_1k: float
+    cache_read_usd_per_1k: float = 0.0
+    # Default-TTL cache writes (Anthropic 5m, OpenAI 30m).
+    cache_write_usd_per_1k: float = 0.0
+    # Long-TTL cache writes (Anthropic 1h, OpenAI 12h).
+    cache_write_long_ttl_usd_per_1k: float = 0.0
 
 
 class PricingProvider(Protocol):
@@ -111,10 +125,11 @@ def _builtin_price_for(model: str, prompt_tokens: int = 0) -> ModelPrice | None:
     p = BUILTIN_PRICING.get(model) or BUILTIN_PRICING.get(normalize_model_id(model))
     if p is None:
         return None
-    prompt, completion, long_above, long_prompt, long_completion = p
+    (prompt, completion, read, write, write_long,
+     long_above, long_prompt, long_completion, long_read, long_write, long_write_long) = p
     if long_above > 0 and prompt_tokens > long_above:
-        return ModelPrice(long_prompt, long_completion)
-    return ModelPrice(prompt, completion)
+        return ModelPrice(long_prompt, long_completion, long_read, long_write, long_write_long)
+    return ModelPrice(prompt, completion, read, write, write_long)
 
 
 def estimate_cost_with(
@@ -123,23 +138,66 @@ def estimate_cost_with(
     prompt_tokens: int,
     completion_tokens: int,
 ) -> float:
-    """Price a call: caller's PricingProvider first, then the built-in starter
-    table (normalized), then zero. Never fabricates a cost."""
-    price: ModelPrice | None = None
-    if pricing is not None:
-        price = pricing.price_for(model)
-    if price is None:
-        price = _builtin_price_for(model, prompt_tokens)
-    if price is None:
-        return 0.0
-    return (prompt_tokens / 1000) * price.prompt_usd_per_1k + (completion_tokens / 1000) * price.completion_usd_per_1k
+    """Price a call with no cache breakdown (every prompt token at the input
+    rate): caller's PricingProvider first, then the built-in starter table
+    (normalized), then zero. Never fabricates a cost."""
+    return estimate_usage_cost_with(
+        pricing, model, TokenUsage(input_tokens=prompt_tokens, output_tokens=completion_tokens)
+    )
 
 
 def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float:
     """Estimate USD cost from the built-in starter table (model-ID normalized,
-    so a dated snapshot matches its base entry). Unknown models return zero.
-    For custom/not-yet-tabled models, supply a PricingProvider (StaticPricing)."""
+    so a dated snapshot matches its base entry), every prompt token at the
+    input rate. Unknown models return zero. For a call with prompt caching use
+    estimate_usage_cost. For custom/not-yet-tabled models, supply a
+    PricingProvider (StaticPricing)."""
     return estimate_cost_with(None, model, prompt_tokens, completion_tokens)
+
+
+def estimate_usage_cost(model: str, usage: TokenUsage) -> float:
+    """Price a normalised TokenUsage from the built-in table, cache reads and
+    writes at their own rates::
+
+        fresh = input_tokens - cache_read_tokens - cache_write_tokens
+        cost  = fresh*input + cache_read_tokens*cache_read
+              + (cache_write_tokens - cache_write_long_ttl_tokens)*cache_write
+              + cache_write_long_ttl_tokens*cache_write_long_ttl
+              + output_tokens*output
+
+    The long-context tier is chosen on input_tokens, the whole prompt (cache
+    reads and writes count toward prompt length at every vendor). Same formula
+    as Go's EstimateUsageCost."""
+    return estimate_usage_cost_with(None, model, usage)
+
+
+def estimate_usage_cost_with(pricing: PricingProvider | None, model: str, usage: TokenUsage) -> float:
+    """estimate_usage_cost with a caller PricingProvider tried first."""
+    price: ModelPrice | None = None
+    if pricing is not None:
+        price = pricing.price_for(model)
+    if price is None:
+        price = _builtin_price_for(model, usage.input_tokens)
+    if price is None:
+        return 0.0
+    read = max(usage.cache_read_tokens, 0)
+    write = max(usage.cache_write_tokens, 0)
+    write_long = min(max(usage.cache_write_long_ttl_tokens, 0), write)
+    fresh = max(usage.input_tokens - read - write, 0)
+    read_rate = _or_rate(price.cache_read_usd_per_1k, price.prompt_usd_per_1k)
+    write_rate = _or_rate(price.cache_write_usd_per_1k, price.prompt_usd_per_1k)
+    write_long_rate = _or_rate(price.cache_write_long_ttl_usd_per_1k, write_rate)
+    return (
+        (fresh / 1000) * price.prompt_usd_per_1k
+        + (read / 1000) * read_rate
+        + ((write - write_long) / 1000) * write_rate
+        + (write_long / 1000) * write_long_rate
+        + (usage.output_tokens / 1000) * price.completion_usd_per_1k
+    )
+
+
+def _or_rate(rate: float, fallback: float) -> float:
+    return rate if rate > 0 else fallback
 
 
 def priced_models() -> list[str]:
@@ -191,6 +249,10 @@ def genai_span_end_attributes(call: GenAICall, latency_seconds: float, error: Ex
         "rateguard.usage.cost_usd": call.estimated_cost_usd,
         "rateguard.request.is_stream": call.streaming,
     }
+    if call.cache_read_tokens > 0:
+        attrs["gen_ai.usage.cache_read.input_tokens"] = call.cache_read_tokens
+    if call.cache_write_tokens > 0:
+        attrs["gen_ai.usage.cache_creation.input_tokens"] = call.cache_write_tokens
     if call.streaming:
         attrs["rateguard.stream.chunks"] = call.stream_chunks
     if call.streaming and call.time_to_first_chunk_ms > 0:
@@ -242,6 +304,12 @@ def _merge_genai_call(start_call: GenAICall, final: GenAICall | None) -> GenAICa
         call.completion_tokens = final.completion_tokens
     if final.total_tokens > 0:
         call.total_tokens = final.total_tokens
+    if final.cache_read_tokens > 0:
+        call.cache_read_tokens = final.cache_read_tokens
+    if final.cache_write_tokens > 0:
+        call.cache_write_tokens = final.cache_write_tokens
+    if final.cache_write_long_ttl_tokens > 0:
+        call.cache_write_long_ttl_tokens = final.cache_write_long_ttl_tokens
     if final.estimated_cost_usd > 0:
         call.estimated_cost_usd = final.estimated_cost_usd
     if final.response_id:
@@ -295,8 +363,16 @@ class GenAISpan:
         if call.total_tokens == 0:
             call.total_tokens = call.prompt_tokens + call.completion_tokens
         if call.estimated_cost_usd == 0:
-            call.estimated_cost_usd = estimate_cost_with(
-                self._pricing, call.model, call.prompt_tokens, call.completion_tokens
+            call.estimated_cost_usd = estimate_usage_cost_with(
+                self._pricing,
+                call.model,
+                TokenUsage(
+                    input_tokens=call.prompt_tokens,
+                    output_tokens=call.completion_tokens,
+                    cache_read_tokens=call.cache_read_tokens,
+                    cache_write_tokens=call.cache_write_tokens,
+                    cache_write_long_ttl_tokens=call.cache_write_long_ttl_tokens,
+                ),
             )
 
         latency_ms = max(0.0, self._clock.now() - self._start)

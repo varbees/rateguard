@@ -8,6 +8,7 @@ import { privateKeyFromRaw, signingPayload } from '../src/core/budget-attestatio
 import { EvidenceChain, GENESIS_PREV_HASH } from '../src/core/evidence-chain.js';
 import { issueSpendReceipt } from '../src/core/spend-receipt.js';
 import { extractTokenUsageFromText } from '../src/core/utils.js';
+import { estimateUsageCost } from '../src/core/genai.js';
 
 interface ConformanceVectors {
   policy: { requests_per_second: number; burst: number };
@@ -239,6 +240,55 @@ describe('Conformance: streaming usage extraction', () => {
       expect(usage!.inputTokens, c.note).toBe(c.expect_input_tokens);
       expect(usage!.outputTokens, c.note).toBe(c.expect_output_tokens);
       expect(usage!.totalTokens, c.note).toBe(c.expect_total_tokens);
+    });
+  }
+});
+
+interface UsageCacheVectors {
+  cases: Array<{
+    name: string;
+    note: string;
+    kind: 'json' | 'sse';
+    body: string;
+    model: string;
+    expect: {
+      input_tokens: number;
+      output_tokens: number;
+      total_tokens: number;
+      cache_read_tokens: number;
+      cache_write_tokens: number;
+      cache_write_long_ttl_tokens: number;
+    };
+    expect_cost_usd: number;
+  }>;
+}
+
+// conformance/usage_cache_vectors.json: every SDK extracts the same
+// normalised prompt-cache usage from the same bytes and prices it the same.
+describe('Conformance: prompt-cache usage and cost', () => {
+  const vectors: UsageCacheVectors = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../../../conformance/usage_cache_vectors.json', import.meta.url)), 'utf-8'),
+  );
+
+  it('has vectors', () => {
+    expect(vectors.cases.length).toBeGreaterThan(0);
+  });
+
+  for (const c of vectors.cases) {
+    it(c.name, () => {
+      const usage = extractTokenUsageFromText(c.body);
+      expect(usage, `no usage extracted — ${c.note}`).toBeDefined();
+      const got = {
+        input_tokens: usage!.inputTokens,
+        output_tokens: usage!.outputTokens,
+        total_tokens: usage!.totalTokens,
+        cache_read_tokens: usage!.cacheReadTokens ?? 0,
+        cache_write_tokens: usage!.cacheWriteTokens ?? 0,
+        cache_write_long_ttl_tokens: usage!.cacheWriteLongTTLTokens ?? 0,
+      };
+      expect(got, c.note).toEqual(c.expect);
+      const cost = estimateUsageCost(c.model, usage!);
+      expect(Math.abs(cost - c.expect_cost_usd)).toBeLessThanOrEqual(1e-12 * Math.max(1, c.expect_cost_usd));
     });
   }
 });

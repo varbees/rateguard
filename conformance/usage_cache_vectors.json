@@ -1,0 +1,229 @@
+{
+  "note": "Shared oracle for prompt-cache usage normalisation and cache-aware cost. Every SDK must extract the same normalised usage from the same bytes and price it to the same cost (within 1e-12 relative). input_tokens is the whole prompt as the vendor bills it; cache_read/cache_write/cache_write_long_ttl are subsets of it. Bodies are shaped after the vendor docs cited in each note (read 2026-10-21); they are not live captures. expect_cost_usd is computed from conformance/pricing.json by an independent Decimal implementation of: fresh*input + cache_read*cacheRead + (cache_write - long_ttl)*cacheWrite + long_ttl*cacheWriteLongTTL + output*output, tier chosen on the whole prompt.",
+  "cases": [
+    {
+      "name": "anthropic_json_cache_read_and_5m_write",
+      "note": "Anthropic input_tokens excludes cache reads and writes (platform.claude.com prompt-caching: total = cache_read + cache_creation + input). Before 0.5.3 the prompt read as 50 tokens and the 102,000 cached tokens priced at $0.",
+      "kind": "json",
+      "body": "{\"id\":\"msg_x\",\"type\":\"message\",\"model\":\"claude-sonnet-5-5\",\"content\":[],\"usage\":{\"input_tokens\":50,\"cache_creation_input_tokens\":2000,\"cache_read_input_tokens\":100000,\"cache_creation\":{\"ephemeral_5m_input_tokens\":2000,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":500}}",
+      "model": "claude-sonnet-5-5",
+      "expect": {
+        "input_tokens": 102050,
+        "output_tokens": 500,
+        "total_tokens": 102550,
+        "cache_read_tokens": 100000,
+        "cache_write_tokens": 2000,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.0201
+    },
+    {
+      "name": "anthropic_json_mixed_5m_and_1h_write",
+      "note": "Numbers from Anthropic's prompt-caching page: cache_creation_input_tokens equals the sum of the cache_creation object; 1h writes bill at 2x input, 5m at 1.25x.",
+      "kind": "json",
+      "body": "{\"type\":\"message\",\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":2048,\"cache_read_input_tokens\":1800,\"cache_creation_input_tokens\":248,\"output_tokens\":503,\"cache_creation\":{\"ephemeral_5m_input_tokens\":148,\"ephemeral_1h_input_tokens\":100}}}",
+      "model": "claude-opus-5-5",
+      "expect": {
+        "input_tokens": 4096,
+        "output_tokens": 503,
+        "total_tokens": 4599,
+        "cache_read_tokens": 1800,
+        "cache_write_tokens": 248,
+        "cache_write_long_ttl_tokens": 100
+      },
+      "expect_cost_usd": 0.020152
+    },
+    {
+      "name": "anthropic_sse_cache_in_message_start_crosses_long_tier",
+      "note": "Cache counters arrive in message_start, output in message_delta (MAX merge, rule 12). The whole prompt is 100,050 tokens, over Claude Haiku 5.5's 100,000-token threshold, so the long-prompt rates apply; uncached input alone (50) would have picked the short rates.",
+      "kind": "sse",
+      "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_x\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-haiku-5-5\",\"content\":[],\"usage\":{\"input_tokens\":50,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":100000,\"output_tokens\":1}}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":300}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+      "model": "claude-haiku-5-5",
+      "expect": {
+        "input_tokens": 100050,
+        "output_tokens": 300,
+        "total_tokens": 100350,
+        "cache_read_tokens": 100000,
+        "cache_write_tokens": 0,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.005775
+    },
+    {
+      "name": "anthropic_sse_cumulative_message_delta",
+      "note": "Newer streams repeat input and cache counters, cumulative, in message_delta. MAX-merge must not double them.",
+      "kind": "sse",
+      "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-5-5\",\"usage\":{\"input_tokens\":2679,\"cache_creation_input_tokens\":1024,\"cache_read_input_tokens\":8000,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":1024},\"output_tokens\":3}}}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":2679,\"cache_creation_input_tokens\":1024,\"cache_read_input_tokens\":8000,\"output_tokens\":510}}\n\n",
+      "model": "claude-opus-5-5",
+      "expect": {
+        "input_tokens": 11703,
+        "output_tokens": 510,
+        "total_tokens": 12213,
+        "cache_read_tokens": 8000,
+        "cache_write_tokens": 1024,
+        "cache_write_long_ttl_tokens": 1024
+      },
+      "expect_cost_usd": 0.030708
+    },
+    {
+      "name": "bedrock_converse_json_cache_details",
+      "note": "Bedrock Converse TokenUsage: inputTokens excludes cache reads and writes (Bedrock prompt-caching guide: total = inputTokens + cacheReadInputTokens + cacheWriteInputTokens); cacheDetails splits writes by ttl.",
+      "kind": "json",
+      "body": "{\"output\":{\"message\":{\"role\":\"assistant\",\"content\":[{\"text\":\"ok\"}]}},\"stopReason\":\"end_turn\",\"usage\":{\"inputTokens\":20,\"outputTokens\":100,\"totalTokens\":3620,\"cacheReadInputTokens\":3000,\"cacheWriteInputTokens\":500,\"cacheDetails\":[{\"inputTokens\":500,\"ttl\":\"1h\"}]}}",
+      "model": "claude-sonnet-4-6",
+      "expect": {
+        "input_tokens": 3520,
+        "output_tokens": 100,
+        "total_tokens": 3620,
+        "cache_read_tokens": 3000,
+        "cache_write_tokens": 500,
+        "cache_write_long_ttl_tokens": 500
+      },
+      "expect_cost_usd": 0.00546
+    },
+    {
+      "name": "openai_chat_json_cached_tokens",
+      "note": "OpenAI prompt_tokens is the whole prompt; prompt_tokens_details.cached_tokens is the part read from cache, billed at the cached-input price. Before 0.5.3 it billed at the full input price.",
+      "kind": "json",
+      "body": "{\"id\":\"chatcmpl-x\",\"object\":\"chat.completion\",\"model\":\"gpt-4o-2024-08-06\",\"choices\":[],\"usage\":{\"prompt_tokens\":2006,\"completion_tokens\":300,\"total_tokens\":2306,\"prompt_tokens_details\":{\"cached_tokens\":1920,\"audio_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}}}",
+      "model": "gpt-4o",
+      "expect": {
+        "input_tokens": 2006,
+        "output_tokens": 300,
+        "total_tokens": 2306,
+        "cache_read_tokens": 1920,
+        "cache_write_tokens": 0,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.005615
+    },
+    {
+      "name": "openai_chat_sse_usage_in_final_chunk",
+      "note": "Cached tokens arrive only in the final chunk (stream_options.include_usage); intermediates carry usage:null.",
+      "kind": "sse",
+      "body": "data: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-5.4-mini\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"a\"}}],\"usage\":null}\n\ndata: {\"id\":\"c\",\"object\":\"chat.completion.chunk\",\"model\":\"gpt-5.4-mini\",\"choices\":[],\"usage\":{\"prompt_tokens\":5000,\"completion_tokens\":40,\"total_tokens\":5040,\"prompt_tokens_details\":{\"cached_tokens\":4864}}}\n\ndata: [DONE]\n\n",
+      "model": "gpt-5.4-mini",
+      "expect": {
+        "input_tokens": 5000,
+        "output_tokens": 40,
+        "total_tokens": 5040,
+        "cache_read_tokens": 4864,
+        "cache_write_tokens": 0,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.0006468
+    },
+    {
+      "name": "openai_responses_json_cache_writes_by_ttl",
+      "note": "GPT-5.6+ Responses usage from OpenAI's prompt-caching guide: ordinary input = 12000 - 4000 - 7000; ttl_30m_tokens bill at the 30m write price, ttl_12h_tokens at the 12h price.",
+      "kind": "json",
+      "body": "{\"id\":\"resp_x\",\"object\":\"response\",\"model\":\"gpt-6.1-sol\",\"output\":[],\"usage\":{\"input_tokens\":12000,\"output_tokens\":500,\"total_tokens\":12500,\"input_tokens_details\":{\"cached_tokens\":4000,\"cache_write_tokens\":7000,\"cache_write_tokens_details\":{\"ttl_30m_tokens\":3000,\"ttl_12h_tokens\":4000}},\"output_tokens_details\":{\"reasoning_tokens\":0}}}",
+      "model": "gpt-6.1-sol",
+      "expect": {
+        "input_tokens": 12000,
+        "output_tokens": 500,
+        "total_tokens": 12500,
+        "cache_read_tokens": 4000,
+        "cache_write_tokens": 7000,
+        "cache_write_long_ttl_tokens": 4000
+      },
+      "expect_cost_usd": 0.0349
+    },
+    {
+      "name": "openai_responses_sse_response_completed",
+      "note": "Responses streams carry usage only in response.completed, nested under response.usage.",
+      "kind": "sse",
+      "body": "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_x\",\"model\":\"gpt-5.6-terra\",\"status\":\"in_progress\",\"usage\":null}}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"delta\":\"Hi\"}\n\nevent: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_x\",\"model\":\"gpt-5.6-terra\",\"status\":\"completed\",\"usage\":{\"input_tokens\":30000,\"output_tokens\":800,\"total_tokens\":30800,\"input_tokens_details\":{\"cached_tokens\":24000,\"cache_write_tokens\":5000,\"cache_write_tokens_details\":{\"ttl_30m_tokens\":5000,\"ttl_12h_tokens\":0}}}}}\n\n",
+      "model": "gpt-5.6-terra",
+      "expect": {
+        "input_tokens": 30000,
+        "output_tokens": 800,
+        "total_tokens": 30800,
+        "cache_read_tokens": 24000,
+        "cache_write_tokens": 5000,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.0289
+    },
+    {
+      "name": "deepseek_json_cache_hit_miss",
+      "note": "DeepSeek prompt_tokens = prompt_cache_hit_tokens + prompt_cache_miss_tokens (api-docs.deepseek.com); hits bill at the cache-hit price (peak rate stored).",
+      "kind": "json",
+      "body": "{\"id\":\"x\",\"object\":\"chat.completion\",\"model\":\"deepseek-v4-pro\",\"choices\":[],\"usage\":{\"completion_tokens\":100,\"prompt_tokens\":1000,\"total_tokens\":1100,\"prompt_tokens_details\":{\"cached_tokens\":800},\"prompt_cache_hit_tokens\":800,\"prompt_cache_miss_tokens\":200}}",
+      "model": "deepseek-v4-pro",
+      "expect": {
+        "input_tokens": 1000,
+        "output_tokens": 100,
+        "total_tokens": 1100,
+        "cache_read_tokens": 800,
+        "cache_write_tokens": 0,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.0006952
+    },
+    {
+      "name": "gemini_json_cached_content_long_tier",
+      "note": "Gemini promptTokenCount already includes cachedContentTokenCount (ai.google.dev UsageMetadata). 250,000 is over Gemini 2.5 Pro's 200,000 threshold: long rates, long cache rate.",
+      "kind": "json",
+      "body": "{\"candidates\":[],\"modelVersion\":\"gemini-2.5-pro\",\"usageMetadata\":{\"promptTokenCount\":250000,\"cachedContentTokenCount\":200000,\"candidatesTokenCount\":1000,\"totalTokenCount\":251000}}",
+      "model": "gemini-2.5-pro",
+      "expect": {
+        "input_tokens": 250000,
+        "output_tokens": 1000,
+        "total_tokens": 251000,
+        "cache_read_tokens": 200000,
+        "cache_write_tokens": 0,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.19
+    },
+    {
+      "name": "gemini_sse_usage_metadata_every_chunk",
+      "note": "Gemini streams repeat usageMetadata in each chunk; the last is complete.",
+      "kind": "sse",
+      "body": "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"a\"}]}}],\"usageMetadata\":{\"promptTokenCount\":9000,\"cachedContentTokenCount\":8192,\"totalTokenCount\":9000}}\n\ndata: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"b\"}]},\"finishReason\":\"STOP\"}],\"usageMetadata\":{\"promptTokenCount\":9000,\"cachedContentTokenCount\":8192,\"candidatesTokenCount\":120,\"totalTokenCount\":9120}}\n\n",
+      "model": "gemini-3-flash-preview",
+      "expect": {
+        "input_tokens": 9000,
+        "output_tokens": 120,
+        "total_tokens": 9120,
+        "cache_read_tokens": 8192,
+        "cache_write_tokens": 0,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.0011736
+    },
+    {
+      "name": "litellm_proxy_prompt_tokens_already_whole",
+      "note": "LiteLLM's proxy reports Anthropic usage as prompt_tokens (cache reads and writes already folded in) and repeats cache_read_input_tokens. prompt_tokens present means the prompt is already whole: do not add the cache counters again.",
+      "kind": "json",
+      "body": "{\"model\":\"claude-sonnet-4-6\",\"usage\":{\"prompt_tokens\":1100,\"completion_tokens\":50,\"total_tokens\":1150,\"cache_read_input_tokens\":1000,\"cache_creation_input_tokens\":0,\"prompt_tokens_details\":{\"cached_tokens\":1000}}}",
+      "model": "claude-sonnet-4-6",
+      "expect": {
+        "input_tokens": 1100,
+        "output_tokens": 50,
+        "total_tokens": 1150,
+        "cache_read_tokens": 1000,
+        "cache_write_tokens": 0,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.00135
+    },
+    {
+      "name": "hostile_cached_exceeds_prompt",
+      "note": "A body claiming more cached tokens than prompt tokens is clamped: cache counters are subsets of the prompt, never more.",
+      "kind": "json",
+      "body": "{\"model\":\"gpt-4o\",\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":10,\"total_tokens\":110,\"prompt_tokens_details\":{\"cached_tokens\":5000}}}",
+      "model": "gpt-4o",
+      "expect": {
+        "input_tokens": 100,
+        "output_tokens": 10,
+        "total_tokens": 110,
+        "cache_read_tokens": 100,
+        "cache_write_tokens": 0,
+        "cache_write_long_ttl_tokens": 0
+      },
+      "expect_cost_usd": 0.000225
+    }
+  ]
+}

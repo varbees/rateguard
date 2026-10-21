@@ -191,6 +191,11 @@ func mergeUsageCandidates(candidates [][]byte) (TokenUsage, bool) {
 		if usage.TotalTokens > merged.TotalTokens {
 			merged.TotalTokens = usage.TotalTokens
 		}
+		// Anthropic reports cache reads/writes in message_start; OpenAI in
+		// the final chunk. MAX per field, same as the counters above.
+		merged.CacheReadTokens = max(merged.CacheReadTokens, usage.CacheReadTokens)
+		merged.CacheWriteTokens = max(merged.CacheWriteTokens, usage.CacheWriteTokens)
+		merged.CacheWriteLongTTLTokens = max(merged.CacheWriteLongTTLTokens, usage.CacheWriteLongTTLTokens)
 		if usage.Model != "" {
 			merged.Model = usage.Model
 		}
@@ -199,7 +204,12 @@ func mergeUsageCandidates(candidates [][]byte) (TokenUsage, bool) {
 		}
 	}
 
-	if sum := merged.InputTokens + merged.OutputTokens; sum > merged.TotalTokens {
+	// Per-field maxima can come from different events; keep the cache
+	// counters subsets of the prompt.
+	merged.CacheReadTokens = min(merged.CacheReadTokens, merged.InputTokens)
+	merged.CacheWriteTokens = min(merged.CacheWriteTokens, merged.InputTokens-merged.CacheReadTokens)
+	merged.CacheWriteLongTTLTokens = min(merged.CacheWriteLongTTLTokens, merged.CacheWriteTokens)
+	if sum := saturatingAdd(merged.InputTokens, merged.OutputTokens); sum > merged.TotalTokens {
 		merged.TotalTokens = sum
 	}
 	return merged, found && merged.TotalTokens > 0
@@ -224,27 +234,38 @@ func partialUsageFromBody(body []byte) TokenUsage {
 		usage.Model = model
 	}
 
+	// Nested usage: Anthropic message_start carries message.usage; OpenAI
+	// Responses' response.completed carries response.usage.
 	sources := []tokenJSONPayload{payload}
-	if nested, ok := objectField(payload, "message"); ok {
-		sources = append(sources, nested)
-		if model, ok := stringField(nested, "model"); ok && usage.Model == "" {
-			usage.Model = model
+	for _, name := range []string{"message", "response"} {
+		if nested, ok := objectField(payload, name); ok {
+			sources = append(sources, nested)
+			if model, ok := stringField(nested, "model"); ok && usage.Model == "" {
+				usage.Model = model
+			}
 		}
 	}
 
 	for _, source := range sources {
-		if data, ok := objectField(source, "usage"); ok {
+		for _, field := range []string{"usage", "usageMetadata"} {
+			data, ok := objectField(source, field)
+			if !ok {
+				continue
+			}
+			c := readUsageCounters(data)
 			if usage.InputTokens == 0 {
-				usage.InputTokens = firstNumber(data, "prompt_tokens", "input_tokens", "inputTokens", "promptTokenCount")
+				usage.InputTokens = c.InputTokens
+				usage.CacheReadTokens = c.CacheReadTokens
+				usage.CacheWriteTokens = c.CacheWriteTokens
+				usage.CacheWriteLongTTLTokens = c.CacheWriteLongTTLTokens
 			}
 			if usage.OutputTokens == 0 {
-				usage.OutputTokens = firstNumber(data, "completion_tokens", "output_tokens", "outputTokens", "candidatesTokenCount")
+				usage.OutputTokens = c.OutputTokens
 			}
 			if usage.TotalTokens == 0 {
-				usage.TotalTokens = firstNumber(data, "total_tokens", "totalTokens", "totalTokenCount")
+				usage.TotalTokens = c.TotalTokens
 			}
 		}
 	}
-
 	return usage
 }

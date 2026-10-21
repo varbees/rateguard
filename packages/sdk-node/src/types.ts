@@ -261,6 +261,13 @@ export interface ResponseSnapshot {
 
 /**
  * Provider-derived token usage values.
+ *
+ * `inputTokens` is the whole prompt as the vendor bills it, normalised across
+ * providers: Anthropic and Bedrock report uncached input, cache reads and
+ * cache writes as three non-overlapping counters and `inputTokens` is their
+ * sum; OpenAI, DeepSeek and Gemini already report the whole prompt. The cache
+ * fields are subsets of `inputTokens`, never additions to it (the meaning OTel
+ * gives gen_ai.usage.input_tokens). Same contract as Go's TokenUsage.
  */
 export interface TokenUsage {
   provider: string | undefined;
@@ -268,6 +275,12 @@ export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
+  /** Part of inputTokens served from the provider's prompt cache. */
+  cacheReadTokens?: number;
+  /** Part of inputTokens written to the cache, across every TTL. */
+  cacheWriteTokens?: number;
+  /** Part of cacheWriteTokens written with the longer, dearer TTL (Anthropic/Bedrock 1h, OpenAI 12h). */
+  cacheWriteLongTTLTokens?: number;
 }
 
 /**

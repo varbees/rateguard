@@ -21,12 +21,32 @@ const (
 )
 
 // TokenUsage captures token counts detected from a provider response.
+//
+// InputTokens is the whole prompt as the vendor bills it, normalised across
+// providers: Anthropic and Bedrock report three non-overlapping counters
+// (uncached input, cache reads, cache writes) and InputTokens is their sum;
+// OpenAI, DeepSeek and Gemini already report the whole prompt. The cache
+// fields are subsets of InputTokens, never additions to it, so
+// InputTokens - CacheReadTokens - CacheWriteTokens is the uncached remainder.
+// This is the meaning OTel gives gen_ai.usage.input_tokens.
 type TokenUsage struct {
 	Provider     string `json:"provider,omitempty"`
 	Model        string `json:"model,omitempty"`
 	InputTokens  int64  `json:"input_tokens,omitempty"`
 	OutputTokens int64  `json:"output_tokens,omitempty"`
 	TotalTokens  int64  `json:"total_tokens"`
+	// CacheReadTokens is the part of InputTokens served from the provider's
+	// prompt cache (Anthropic cache_read_input_tokens, OpenAI cached_tokens,
+	// DeepSeek prompt_cache_hit_tokens, Gemini cachedContentTokenCount).
+	CacheReadTokens int64 `json:"cache_read_tokens,omitempty"`
+	// CacheWriteTokens is the part of InputTokens written to the cache
+	// (Anthropic cache_creation_input_tokens, Bedrock cacheWriteInputTokens,
+	// OpenAI GPT-5.6+ cache_write_tokens), across every TTL.
+	CacheWriteTokens int64 `json:"cache_write_tokens,omitempty"`
+	// CacheWriteLongTTLTokens is the part of CacheWriteTokens written with the
+	// vendor's longer, dearer TTL: Anthropic and Bedrock 1h (2x input),
+	// OpenAI 12h (2.5x input). The rest of CacheWriteTokens is the default TTL.
+	CacheWriteLongTTLTokens int64 `json:"cache_write_long_ttl_tokens,omitempty"`
 }
 
 // ResponseSnapshot captures the information needed to extract token usage.
@@ -127,21 +147,17 @@ func extractTokenUsageFromBody(body []byte) (TokenUsage, bool) {
 	// AWS Bedrock Converse (inputTokens/outputTokens — camelCase), and
 	// Google's *TokenCount names.
 	if data, ok := objectField(payload, "usage"); ok {
-		usage.InputTokens = firstNumber(data, "prompt_tokens", "input_tokens", "inputTokens", "promptTokenCount")
-		usage.OutputTokens = firstNumber(data, "completion_tokens", "output_tokens", "outputTokens", "candidatesTokenCount")
-		usage.TotalTokens = firstNumber(data, "total_tokens", "totalTokens", "totalTokenCount")
+		applyUsageCounters(&usage, data)
 	}
 
 	if usage.TotalTokens == 0 {
 		if data, ok := objectField(payload, "usageMetadata"); ok {
-			usage.InputTokens = firstNumber(data, "promptTokenCount", "input_tokens")
-			usage.OutputTokens = firstNumber(data, "candidatesTokenCount", "output_tokens")
-			usage.TotalTokens = firstNumber(data, "totalTokenCount", "total_tokens")
+			applyUsageCounters(&usage, data)
 		}
 	}
 
-	if usage.TotalTokens == 0 && (usage.InputTokens > 0 || usage.OutputTokens > 0) {
-		usage.TotalTokens = usage.InputTokens + usage.OutputTokens
+	if sum := saturatingAdd(usage.InputTokens, usage.OutputTokens); sum > usage.TotalTokens {
+		usage.TotalTokens = sum
 	}
 
 	if usage.TotalTokens == 0 {
@@ -149,6 +165,123 @@ func extractTokenUsageFromBody(body []byte) (TokenUsage, bool) {
 	}
 
 	return usage, true
+}
+
+// applyUsageCounters reads one provider usage object into usage, normalising
+// the prompt to its whole size (see TokenUsage). Mirrored by readObjectUsage
+// in Node and _usage_counters in Python; conformance/usage_cache_vectors.json
+// holds all three to the same answers.
+func applyUsageCounters(usage *TokenUsage, data tokenJSONPayload) {
+	c := readUsageCounters(data)
+	usage.InputTokens = c.InputTokens
+	usage.OutputTokens = c.OutputTokens
+	usage.TotalTokens = c.TotalTokens
+	usage.CacheReadTokens = c.CacheReadTokens
+	usage.CacheWriteTokens = c.CacheWriteTokens
+	usage.CacheWriteLongTTLTokens = c.CacheWriteLongTTLTokens
+}
+
+func readUsageCounters(data tokenJSONPayload) TokenUsage {
+	var u TokenUsage
+	u.InputTokens = firstNumber(data, "prompt_tokens", "input_tokens", "inputTokens", "promptTokenCount")
+	u.OutputTokens = firstNumber(data, "completion_tokens", "output_tokens", "outputTokens", "candidatesTokenCount")
+	u.TotalTokens = firstNumber(data, "total_tokens", "totalTokens", "totalTokenCount")
+
+	// Anthropic and Bedrock name their cache counters; OpenAI-shaped bodies
+	// carry them in a details object.
+	vendorRead := firstNumber(data, "cache_read_input_tokens", "cacheReadInputTokens")
+	vendorWrite := firstNumber(data, "cache_creation_input_tokens", "cacheWriteInputTokens")
+	read := vendorRead
+	if read == 0 {
+		read = firstNumber(data, "prompt_cache_hit_tokens", "cachedContentTokenCount")
+	}
+	write := vendorWrite
+	var details tokenJSONPayload
+	var write1hOpenAI int64
+	if d, ok := objectField(data, "input_tokens_details"); ok {
+		details = d
+	} else if d, ok := objectField(data, "prompt_tokens_details"); ok {
+		details = d
+	}
+	if details != nil {
+		if read == 0 {
+			read = firstNumber(details, "cached_tokens")
+		}
+		if write == 0 {
+			write = firstNumber(details, "cache_write_tokens")
+		}
+		// OpenAI Responses: cache_write_tokens_details.{ttl_30m_tokens,ttl_12h_tokens}.
+		if wd, ok := objectField(details, "cache_write_tokens_details"); ok {
+			write1hOpenAI = firstNumber(wd, "ttl_12h_tokens")
+		}
+	}
+
+	// Long-TTL writes: Anthropic usage.cache_creation.ephemeral_1h_input_tokens,
+	// Bedrock usage.cacheDetails[{ttl:"1h", inputTokens}], OpenAI (above)
+	// input_tokens_details.cache_write_tokens_details.ttl_12h_tokens.
+	var write1h, writeByTTL int64
+	if cc, ok := objectField(data, "cache_creation"); ok {
+		write1h = firstNumber(cc, "ephemeral_1h_input_tokens")
+		writeByTTL = saturatingAdd(firstNumber(cc, "ephemeral_5m_input_tokens"), write1h)
+	} else if raw, ok := data["cacheDetails"]; ok {
+		var list []tokenJSONPayload
+		if json.Unmarshal(raw, &list) == nil {
+			for _, d := range list {
+				n := firstNumber(d, "inputTokens")
+				writeByTTL = saturatingAdd(writeByTTL, n)
+				if ttl, _ := stringField(d, "ttl"); ttl == "1h" {
+					write1h = saturatingAdd(write1h, n)
+				}
+			}
+		}
+	}
+	write1h = max(write1h, write1hOpenAI)
+	if write == 0 {
+		write = writeByTTL
+		if writeByTTL > 0 {
+			vendorWrite = writeByTTL
+		}
+	}
+
+	// Additive shape: Anthropic/Bedrock input_tokens excludes cache reads and
+	// writes. A body that also carries prompt_tokens or promptTokenCount
+	// (OpenAI, LiteLLM's proxy, Gemini) already reports the whole prompt.
+	_, hasPrompt := numberField(data, "prompt_tokens")
+	_, hasPromptCount := numberField(data, "promptTokenCount")
+	if !hasPrompt && !hasPromptCount && (vendorRead > 0 || vendorWrite > 0) {
+		u.InputTokens = saturatingAdd(saturatingAdd(u.InputTokens, read), write)
+	} else {
+		// Subsets of the reported prompt: a hostile or malformed body must not
+		// claim more cached tokens than prompt tokens.
+		read = min(read, u.InputTokens)
+		write = min(write, u.InputTokens-read)
+	}
+	u.CacheReadTokens = read
+	u.CacheWriteTokens = write
+	u.CacheWriteLongTTLTokens = min(write1h, write)
+	return u
+}
+
+// numberField reports whether name holds a JSON number (null does not count).
+func numberField(payload tokenJSONPayload, name string) (json.Number, bool) {
+	raw, ok := payload[name]
+	if !ok || len(raw) == 0 || raw[0] == '"' {
+		return "", false
+	}
+	var n json.Number
+	if err := json.Unmarshal(raw, &n); err != nil {
+		return "", false
+	}
+	return n, true
+}
+
+// saturatingAdd adds two non-negative token counts without wrapping: a
+// hostile count near MaxInt64 must not turn the sum negative (a refund).
+func saturatingAdd(a, b int64) int64 {
+	if a > math.MaxInt64-b {
+		return math.MaxInt64
+	}
+	return a + b
 }
 
 func objectField(payload tokenJSONPayload, name string) (tokenJSONPayload, bool) {

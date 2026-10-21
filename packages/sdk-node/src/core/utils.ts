@@ -123,25 +123,96 @@ function readObjectUsage(source: JsonObject): TokenUsage | undefined {
     asRecord(nestedMessage?.usage) ??
     asRecord(source.usageMetadata) ??
     source;
-  // Aliases cover OpenAI (prompt/completion), Anthropic (input/output),
-  // AWS Bedrock Converse (inputTokens/outputTokens — camelCase), Google.
-  const inputTokens = firstNumber(usageSource, ['input_tokens', 'prompt_tokens', 'inputTokens', 'promptTokenCount']);
-  const outputTokens = firstNumber(usageSource, ['output_tokens', 'completion_tokens', 'outputTokens', 'candidatesTokenCount']);
-  const totalTokens = firstNumber(usageSource, ['total_tokens', 'totalTokens', 'totalTokenCount']);
+  const counters = readUsageCounters(usageSource);
 
   const provider = firstString(source, ['provider', 'x_provider', 'token_provider']);
   const model = firstString(source, ['model', 'x_model', 'token_model']) || (nestedMessage ? firstString(nestedMessage, ['model']) : '');
 
-  if (inputTokens === 0 && outputTokens === 0 && totalTokens === 0) {
+  if (counters.inputTokens === 0 && counters.outputTokens === 0 && counters.totalTokens === 0) {
     return undefined;
   }
 
   return {
     provider: provider || undefined,
     model: model || undefined,
+    ...counters,
+    totalTokens: Math.max(counters.totalTokens, counters.inputTokens + counters.outputTokens),
+  };
+}
+
+type UsageCounters = Required<Omit<TokenUsage, 'provider' | 'model'>>;
+
+/**
+ * Read one provider usage object, normalising the prompt to its whole size
+ * (see TokenUsage). Mirrors readUsageCounters in Go and _usage_counters in
+ * Python; conformance/usage_cache_vectors.json holds all three to the same
+ * answers.
+ */
+function readUsageCounters(usage: JsonObject): UsageCounters {
+  // Aliases cover OpenAI (prompt/completion), Anthropic (input/output),
+  // AWS Bedrock Converse (inputTokens/outputTokens — camelCase), Google.
+  let inputTokens = firstNumber(usage, ['input_tokens', 'prompt_tokens', 'inputTokens', 'promptTokenCount']);
+  const outputTokens = firstNumber(usage, ['output_tokens', 'completion_tokens', 'outputTokens', 'candidatesTokenCount']);
+  const totalTokens = firstNumber(usage, ['total_tokens', 'totalTokens', 'totalTokenCount']);
+
+  // Anthropic and Bedrock name their cache counters; OpenAI-shaped bodies
+  // carry them in a details object.
+  const vendorRead = firstNumber(usage, ['cache_read_input_tokens', 'cacheReadInputTokens']);
+  let vendorWrite = firstNumber(usage, ['cache_creation_input_tokens', 'cacheWriteInputTokens']);
+  let read = vendorRead || firstNumber(usage, ['prompt_cache_hit_tokens', 'cachedContentTokenCount']);
+  let write = vendorWrite;
+  let writeLongOpenAI = 0;
+  const details = asRecord(usage.input_tokens_details) ?? asRecord(usage.prompt_tokens_details);
+  if (details) {
+    if (read === 0) read = firstNumber(details, ['cached_tokens']);
+    if (write === 0) write = firstNumber(details, ['cache_write_tokens']);
+    // OpenAI Responses: cache_write_tokens_details.{ttl_30m_tokens,ttl_12h_tokens}.
+    const writeDetails = asRecord(details.cache_write_tokens_details);
+    if (writeDetails) writeLongOpenAI = firstNumber(writeDetails, ['ttl_12h_tokens']);
+  }
+
+  // Long-TTL writes: Anthropic usage.cache_creation.ephemeral_1h_input_tokens,
+  // Bedrock usage.cacheDetails[{ttl:"1h", inputTokens}], OpenAI above.
+  let writeLong = 0;
+  let writeByTTL = 0;
+  const creation = asRecord(usage.cache_creation);
+  if (creation) {
+    writeLong = firstNumber(creation, ['ephemeral_1h_input_tokens']);
+    writeByTTL = firstNumber(creation, ['ephemeral_5m_input_tokens']) + writeLong;
+  } else if (Array.isArray(usage.cacheDetails)) {
+    for (const item of usage.cacheDetails) {
+      const detail = asRecord(item);
+      if (!detail) continue;
+      const n = firstNumber(detail, ['inputTokens']);
+      writeByTTL += n;
+      if (detail.ttl === '1h') writeLong += n;
+    }
+  }
+  writeLong = Math.max(writeLong, writeLongOpenAI);
+  if (write === 0) {
+    write = writeByTTL;
+    if (writeByTTL > 0) vendorWrite = writeByTTL;
+  }
+
+  // Additive shape: Anthropic/Bedrock input_tokens excludes cache reads and
+  // writes. A body that also carries prompt_tokens or promptTokenCount
+  // (OpenAI, LiteLLM's proxy, Gemini) already reports the whole prompt.
+  const hasPrompt = typeof usage.prompt_tokens === 'number' || typeof usage.promptTokenCount === 'number';
+  if (!hasPrompt && (vendorRead > 0 || vendorWrite > 0)) {
+    inputTokens += read + write;
+  } else {
+    // Subsets of the reported prompt: a hostile or malformed body must not
+    // claim more cached tokens than prompt tokens.
+    read = Math.min(read, inputTokens);
+    write = Math.min(write, inputTokens - read);
+  }
+  return {
     inputTokens,
     outputTokens,
-    totalTokens: totalTokens || inputTokens + outputTokens,
+    totalTokens,
+    cacheReadTokens: read,
+    cacheWriteTokens: write,
+    cacheWriteLongTTLTokens: Math.min(writeLong, write),
   };
 }
 
@@ -190,14 +261,29 @@ function mergeUsage(base: TokenUsage, addition: TokenUsage): TokenUsage {
   // refine usage across events (Anthropic message_start reports
   // output_tokens:1, the final message_delta the real count). Summing
   // would double-count.
+  // Anthropic reports cache reads/writes in message_start, OpenAI in the
+  // final chunk: MAX per field, then keep the cache counters subsets of the
+  // prompt (per-field maxima can come from different events).
   const inputTokens = Math.max(base.inputTokens, addition.inputTokens);
   const outputTokens = Math.max(base.outputTokens, addition.outputTokens);
+  const cacheReadTokens = Math.min(Math.max(base.cacheReadTokens ?? 0, addition.cacheReadTokens ?? 0), inputTokens);
+  const cacheWriteTokens = Math.min(
+    Math.max(base.cacheWriteTokens ?? 0, addition.cacheWriteTokens ?? 0),
+    inputTokens - cacheReadTokens,
+  );
+  const cacheWriteLongTTLTokens = Math.min(
+    Math.max(base.cacheWriteLongTTLTokens ?? 0, addition.cacheWriteLongTTLTokens ?? 0),
+    cacheWriteTokens,
+  );
   return {
     provider: base.provider || addition.provider,
     model: base.model || addition.model,
     inputTokens,
     outputTokens,
     totalTokens: Math.max(base.totalTokens, addition.totalTokens, inputTokens + outputTokens),
+    cacheReadTokens,
+    cacheWriteTokens,
+    cacheWriteLongTTLTokens,
   };
 }
 

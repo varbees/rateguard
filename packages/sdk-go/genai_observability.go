@@ -42,10 +42,18 @@ type GenAICall struct {
 	Provider  string // e.g. "openai", "anthropic", "google"
 	Operation string // chat, text_completion, embedding
 
-	// Token counts (set after the LLM response)
+	// Token counts (set after the LLM response). PromptTokens is the whole
+	// prompt, cached parts included (OTel gen_ai.usage.input_tokens); the
+	// cache counts are subsets of it, as in TokenUsage.
 	PromptTokens     int64
 	CompletionTokens int64
 	TotalTokens      int64
+
+	// Prompt-cache breakdown (subsets of PromptTokens). They price cache hits
+	// and writes at their own rates; leave zero when the provider reports none.
+	CacheReadTokens         int64
+	CacheWriteTokens        int64
+	CacheWriteLongTTLTokens int64
 
 	// Streaming (set after stream completes)
 	Streaming    bool
@@ -247,6 +255,12 @@ func (o *genaiObserver) EndSpan(span trace.Span, call GenAICall, latency time.Du
 		attribute.Float64("rateguard.usage.cost_usd", call.EstimatedCostUSD),
 		attribute.Bool("rateguard.request.is_stream", call.Streaming),
 	}
+	if call.CacheReadTokens > 0 {
+		attrs = append(attrs, attribute.Int64("gen_ai.usage.cache_read.input_tokens", call.CacheReadTokens))
+	}
+	if call.CacheWriteTokens > 0 {
+		attrs = append(attrs, attribute.Int64("gen_ai.usage.cache_creation.input_tokens", call.CacheWriteTokens))
+	}
 	if call.Streaming {
 		attrs = append(attrs, attribute.Int64("rateguard.stream.chunks", call.StreamChunks))
 	}
@@ -395,6 +409,15 @@ func (g *GenAISpan) End(final GenAICall, err error) {
 	if final.TotalTokens > 0 {
 		call.TotalTokens = final.TotalTokens
 	}
+	if final.CacheReadTokens > 0 {
+		call.CacheReadTokens = final.CacheReadTokens
+	}
+	if final.CacheWriteTokens > 0 {
+		call.CacheWriteTokens = final.CacheWriteTokens
+	}
+	if final.CacheWriteLongTTLTokens > 0 {
+		call.CacheWriteLongTTLTokens = final.CacheWriteLongTTLTokens
+	}
 	if call.TotalTokens == 0 {
 		call.TotalTokens = call.PromptTokens + call.CompletionTokens
 	}
@@ -402,7 +425,13 @@ func (g *GenAISpan) End(final GenAICall, err error) {
 		call.EstimatedCostUSD = final.EstimatedCostUSD
 	}
 	if call.EstimatedCostUSD == 0 {
-		call.EstimatedCostUSD = estimateCostWith(g.pricing, call.Model, call.PromptTokens, call.CompletionTokens)
+		call.EstimatedCostUSD = estimateUsageCostWith(g.pricing, call.Model, TokenUsage{
+			InputTokens:             call.PromptTokens,
+			OutputTokens:            call.CompletionTokens,
+			CacheReadTokens:         call.CacheReadTokens,
+			CacheWriteTokens:        call.CacheWriteTokens,
+			CacheWriteLongTTLTokens: call.CacheWriteLongTTLTokens,
+		})
 	}
 	if final.ResponseID != "" {
 		call.ResponseID = final.ResponseID
@@ -433,7 +462,9 @@ func (g *GenAISpan) End(final GenAICall, err error) {
 }
 
 // EstimateCost calculates approximate USD cost for an LLM call from the
-// built-in starter table. Model IDs are normalized, so a provider-reported
+// built-in starter table, every prompt token at the input rate. For a call
+// with prompt caching use EstimateUsageCost, which prices cache reads and
+// writes at their own rates. Model IDs are normalized, so a provider-reported
 // dated snapshot ("gpt-4o-2024-08-06") matches its base entry. Unknown models
 // return zero — costs are never fabricated. For custom, fine-tuned, or
 // not-yet-tabled models, supply Config.PricingProvider (see StaticPricing).
