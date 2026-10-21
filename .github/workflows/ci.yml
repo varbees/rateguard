@@ -169,6 +169,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26.x'
+          # The runner image caches a Go patch release that can lag the newest
+          # one; without this, 1.26.x resolved to a cached 1.26.9 the day
+          # GO-2026-6809 shipped its fix in 1.26.10. A vulnerability gate must
+          # scan with the newest stdlib.
+          check-latest: true
           cache-dependency-path: packages/sdk-go/go.sum
       - uses: oven-sh/setup-bun@v2
         with:
