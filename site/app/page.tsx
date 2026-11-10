@@ -247,7 +247,7 @@ export default function Page() {
             deployer). RateGuard gives you verifiable inputs, not a certification.
           </p>
           <a
-            href="mailto:harshavar968@gmail.com?subject=RateGuard%20Enterprise%20%2F%20Compliance%20Evidence%20Pack"
+            href="mailto:hello@antharmaya.com?subject=RateGuard%20Enterprise%20%2F%20Compliance%20Evidence%20Pack"
             className="inline-flex items-center gap-2 px-5 py-3 border border-[var(--accent)] text-[var(--accent)] rounded-lg font-medium hover:bg-[var(--accent)] hover:text-[var(--bg)] transition-colors"
           >
             Talk to us about early access

@@ -34,7 +34,7 @@ function Sidebar() {
           GitHub ↗
         </a>
         <a
-          href="/llms.txt"
+          href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/llms.txt`}
           className="mt-2 block text-[13px] text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
         >
           llms.txt — docs for AI readers
