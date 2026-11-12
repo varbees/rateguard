@@ -32,6 +32,10 @@ versions may carry behaviour changes — they are called out explicitly below.
   mutants that the compiler, not a test, had been killing now compile; one survived, and
   `TestOutboundRateLimitErrorFailsOpenEvenIfLimiterSaysDeny` now holds the guard it removes.
 
+- Price rows for `claude-fable-5-2`, `claude-mythos-5-2` and `gpt-6.1-terra`, read off the
+  vendors' pages on 2026-11-12 (68 rows). The other Anthropic rows were re-checked against the
+  same page that day and match.
+
 ### Changed
 
 - Cost estimates drive enforcement **when a USD budget is set**, and only then.

@@ -39,7 +39,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Circuit breakers | ✅ | ✅ | ✅ | `circuit_breaker.go` |
 | GenAI OTel helpers (semconv span names, input/output tokens, error.type classes) | ✅ | ✅ | ✅ | `genai_observability.go` |
 | Public GenAI API (StartGenAICall/GenAISpan, TTFT/TPOT) | ✅ | ✅ | ✅ | Same file |
-| Pricing table (65 models, one source: `conformance/pricing.json`, generated per SDK by `scripts/gen_pricing.py`) | ✅ | ✅ | ✅ | `pricing_table_gen.go` |
+| Pricing table (68 models, one source: `conformance/pricing.json`, generated per SDK by `scripts/gen_pricing.py`) | ✅ | ✅ | ✅ | `pricing_table_gen.go` |
 | Prometheus exposition | ✅ endpoint | ✅ helpers | ✅ helpers | `prometheus.go` |
 | Provider chain (routing decisions) | ✅ | ✅ | ✅ | `provider_chain.go` |
 | Content guardrails (PII, injection) | ✅ | ✅ | ✅ | `guardrails.go` |
@@ -98,10 +98,10 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 # Go tests (277 test funcs, all with -race; counted 2026-11-12)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (484 passing, 6 skipped)
+# Node tests (490 passing, 6 skipped)
 cd packages/sdk-node && bun run test
 
-# Python tests (509 passing, 15 skipped)
+# Python tests (515 passing, 15 skipped)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Python strict typecheck (mypy --strict passes clean on all 55 source files)

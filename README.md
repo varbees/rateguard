@@ -96,7 +96,7 @@ Every call through the wrapped client is budgeted, breaker-protected per provide
 
 ### Dollar budgets (0.6, unreleased)
 
-Token budgets guess the exchange rate: one token costs anywhere from $0.05 to $600 per million across the 65-row price table. A USD budget states the bill instead. Each outbound call **reserves** its worst case before it is sent (the prompt at the dearest input rate it could be billed at, plus its declared output ceiling) and **settles** to the measured usage after. So a burst of concurrent calls cannot spend past the line by more than the error in their own estimates. Gateways that debit after the response (LiteLLM, Kong, Portkey) cannot say that.
+Token budgets guess the exchange rate: one token costs anywhere from $0.05 to $600 per million across the 68-row price table. A USD budget states the bill instead. Each outbound call **reserves** its worst case before it is sent (the prompt at the dearest input rate it could be billed at, plus its declared output ceiling) and **settles** to the measured usage after. So a burst of concurrent calls cannot spend past the line by more than the error in their own estimates. Gateways that debit after the response (LiteLLM, Kong, Portkey) cannot say that.
 
 ```go
 rg := rateguard.New(rateguard.Config{USDBudget: &rateguard.USDBudgetConfig{DayLimitUSD: 20}})
