@@ -564,8 +564,8 @@ CATALOGUE: list[Mutation] = [
     ),
     Mutation(
         id="go/usd-settles-the-estimate", sdk="go", path="packages/sdk-go/outbound.go",
-        find="s.usd.commitReservation(h.key, h.reservationID, CostMicroUSD(rates, usage))",
-        replace="_ = rates; s.usd.commitReservation(h.key, h.reservationID, h.reserved)",  # keeps it compiling: a test must catch it, not the compiler
+        find="cost := CostMicroUSD(rates, usage)",
+        replace="cost := h.reserved; _ = rates",  # keeps it compiling: a test must catch it, not the compiler
         models="measured usage ignored: the budget books the guess, not the bill",
         expect="TestUSDBudgetCommitsMeasuredCost",
     ),
@@ -583,8 +583,8 @@ CATALOGUE: list[Mutation] = [
     ),
     Mutation(
         id="node/usd-settles-the-estimate", sdk="node", path="packages/sdk-node/src/core/outbound.ts",
-        find="runtime.usdBudget.commitReservation(hold.key, hold.reservationId, costMicroUSD(rates, usage));",
-        replace="runtime.usdBudget.commitReservation(hold.key, hold.reservationId, hold.reserved);",
+        find="const cost = costMicroUSD(rates, usage);",
+        replace="const cost = hold.reserved; void rates;",
         models="measured usage ignored: the budget books the guess, not the bill",
         expect="usd-budget.test.ts commits the measured cost",
     ),
@@ -602,8 +602,8 @@ CATALOGUE: list[Mutation] = [
     ),
     Mutation(
         id="python/usd-settles-the-estimate", sdk="python", path="packages/sdk-python/rateguard/core/outbound.py",
-        find="manager.commit_reservation(hold.key, hold.reservation_id, cost_micro_usd(rates, usage))",
-        replace="manager.commit_reservation(hold.key, hold.reservation_id, hold.reserved)",
+        find="cost = cost_micro_usd(rates, usage)",
+        replace="cost = hold.reserved",
         models="measured usage ignored: the budget books the guess, not the bill",
         expect="test_usd_budget.py::test_commits_measured_cost",
     ),
