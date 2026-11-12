@@ -73,6 +73,8 @@ class RateGuardRuntime:
         # Counts integer micro-USD with the token budget's windows (0.6); used
         # only when config.usd_budget is set.
         usd = self.config.usd_budget
+        # Counters for Prometheus (prometheus_text's usd_budget_exhausted / usd_unpriced_calls).
+        self.usd_counters: dict[str, int] = {"exhausted": 0, "unpriced": 0, "spent_micro": 0}
         self.usd_budget: TokenBudgetManager | None = (
             TokenBudgetManager(
                 clock=self.config.clock,

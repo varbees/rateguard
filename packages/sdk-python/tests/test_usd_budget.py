@@ -233,3 +233,36 @@ def test_config():
                 USDBudgetOptions(day_limit_usd=1, scope="galaxy"), USDBudgetOptions(day_limit_usd=1, unpriced="maybe")):
         with pytest.raises(ValueError):
             RateGuard(usd_budget=bad)
+
+
+def _tool(rg: RateGuard, name: str):
+    return next(t for t in rg.mcp_tools() if t.name == name)
+
+
+def test_mcp_get_usd_budget_peeks_and_list_limits_carries_it():
+    rg = _rg(day_limit_usd=1)
+    client = httpx.Client(transport=create_httpx_transport(rg.runtime, transport=httpx.MockTransport(_handler())))
+    _call(client, "vec-full", "acme")
+    tool = _tool(rg, "get_usd_budget")
+    for _ in range(3):
+        tool.handler({"customer": "acme", "estimated_usd": 0.5})
+    got = tool.handler({"customer": "acme", "estimated_usd": 2})
+    assert got["remaining_micro_usd"] == 994_000 and got["would_fit"] is False and got["estimated"] is True and got["estimated_micro_usd"] == 2_000_000
+    limits = _tool(rg, "list_limits").handler({"key": "k", "customer": "acme"})
+    assert limits["usd_budget"]["remaining_micro_usd"] == 994_000
+    assert _tool(RateGuard(preset="dev"), "get_usd_budget").handler({})["applied"] is False
+
+
+def test_prometheus_counters():
+    from rateguard.core.prometheus import prometheus_text
+
+    rg = _rg(day_limit_usd=0.005)
+    client = httpx.Client(transport=create_httpx_transport(rg.runtime, transport=httpx.MockTransport(_handler())))
+    _call(client)
+    _call(client)
+    _call(client, "mystery-model-9")
+    assert rg.runtime.usd_counters == {"exhausted": 1, "unpriced": 1, "spent_micro": 6_000}
+    c = rg.runtime.usd_counters
+    text = prometheus_text(rg.runtime.config.preset, usd_budget_exhausted=c["exhausted"], usd_unpriced_calls=c["unpriced"], usd_spent_micro=c["spent_micro"])
+    assert "rateguard_usd_budget_exhausted_total 1\n" in text and "rateguard_usd_unpriced_calls_total 1\n" in text
+    assert "rateguard_usd_budget_spent_micro_usd_total 6000\n" in text

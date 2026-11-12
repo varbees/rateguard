@@ -38,7 +38,7 @@ async def test_admin_state_returns_list_limits_shape() -> None:
     # Same shape the list_limits MCP tool returns — unwrapped, no MCP
     # text-envelope.
     assert body["key"] == "agent-1"
-    assert set(body) == {"key", "rate_limit", "token_budget", "circuit_breaker", "preset", "loop_detector", "guardrails"}
+    assert set(body) == {"key", "rate_limit", "token_budget", "usd_budget", "circuit_breaker", "preset", "loop_detector", "guardrails"}
     assert body["rate_limit"]["allowed"] is True
     assert body["circuit_breaker"]["state"] == "closed"
     assert body["preset"]["name"] == "dev"

@@ -18,6 +18,7 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any, Callable
 
 from .bounded_cache import BoundedCache
+from .usd_budget import usd_to_micro
 
 if TYPE_CHECKING:
     from ..runtime import RateGuardRuntime
@@ -196,6 +197,32 @@ def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = N
             result["would_fit"] = decision.remaining >= int(estimated)
         return result
 
+    def get_usd_budget(args: dict[str, Any]) -> dict[str, Any]:
+        # Estimated-USD budget (0.6). Read-only (rule 10): never reserves.
+        def _s(v: Any) -> str | None:
+            return v if isinstance(v, str) and v else None
+
+        st = runtime.usd_budget_state(customer=_s(args.get("customer")), provider=_s(args.get("provider")) or "", model=_s(args.get("model")))
+        if not st.applied:
+            return {"allowed": True, "applied": False, "error": "no USD budget configured"}
+        result: dict[str, Any] = {
+            "key": st.key,
+            "applied": st.applied,
+            "allowed": st.allowed,
+            "limit_micro_usd": st.limit_micro_usd,
+            "remaining_micro_usd": st.remaining_micro_usd,
+            "window": st.window,
+            "retry_after_ms": st.retry_after_ms,
+            "warning": st.warning,
+            "estimated": True,
+        }
+        usd = args.get("estimated_usd")
+        if isinstance(usd, (int, float)) and not isinstance(usd, bool) and usd > 0:
+            micro = usd_to_micro(float(usd))
+            result["estimated_micro_usd"] = micro
+            result["would_fit"] = st.remaining_micro_usd >= micro
+        return result
+
     def get_circuit_breaker_state(args: dict[str, Any]) -> dict[str, Any]:
         state = runtime.circuit_breaker.get_state()
         result: dict[str, Any] = {"state": state, "allowed": state != "open"}
@@ -352,6 +379,7 @@ def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = N
             "key": key,
             "rate_limit": get_rate_limit_state({"key": key}),
             "token_budget": get_token_budget({"key": key}),
+            "usd_budget": get_usd_budget({"customer": args["customer"]} if isinstance(args.get("customer"), str) and args.get("customer") else {}),
             "circuit_breaker": get_circuit_breaker_state({}),
             "preset": {
                 "name": runtime.config.preset.name,
@@ -397,6 +425,25 @@ def create_mcp_tools(runtime: "RateGuardRuntime", loops: LoopDetector | None = N
                 "required": ["key"],
             },
             handler=get_token_budget,
+        ),
+        MCPTool(
+            name="get_usd_budget",
+            description=(
+                "Check the remaining estimated-USD budget before an expensive LLM call (0.6). "
+                "Returns integer micro-USD remaining and limit, the window, and whether the expected "
+                "spend fits. Estimates come from RateGuard's dated price table, not the provider's "
+                "invoice. Read-only: never reserves."
+            ),
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "customer": {"type": "string", "description": "End customer the call is attributed to (the X-RateGuard-Customer value); omit for the tenant budget"},
+                    "provider": {"type": "string", "description": "Provider, only needed when the budget is scoped per model"},
+                    "model": {"type": "string", "description": "Model, only needed when the budget is scoped per model"},
+                    "estimated_usd": {"type": "number", "description": "Dollars the agent expects the call to cost"},
+                },
+            },
+            handler=get_usd_budget,
         ),
         MCPTool(
             name="get_circuit_breaker_state",

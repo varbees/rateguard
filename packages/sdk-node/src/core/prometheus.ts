@@ -17,6 +17,12 @@ export function prometheusText(policy: PolicyPreset, state: {
   circuitBreakerState: 0 | 1 | 2;  // 0=closed, 1=open, 2=half-open
   /** Sourced from `runtime.guardrailLog.stats().total` when guardrails are wired. */
   guardrailViolations?: number;
+  /** Outbound calls denied by the estimated-USD budget: `runtime.usdCounters.exhausted`. */
+  usdBudgetExhausted?: number;
+  /** Calls under a USD budget whose model had no price: `runtime.usdCounters.unpriced`. */
+  usdUnpricedCalls?: number;
+  /** Estimated micro-USD committed to USD budgets: `runtime.usdCounters.spentMicro`. */
+  usdSpentMicro?: number;
 }): string {
   const lines: string[] = [];
 
@@ -59,6 +65,16 @@ export function prometheusText(policy: PolicyPreset, state: {
   lines.push('# HELP rateguard_guardrail_violations_total Content guardrail violations (PII, prompt injection, length)');
   lines.push('# TYPE rateguard_guardrail_violations_total counter');
   lines.push(`rateguard_guardrail_violations_total ${state.guardrailViolations ?? 0}`);
+
+  lines.push('# HELP rateguard_usd_budget_exhausted_total Outbound calls denied by the estimated-USD budget');
+  lines.push('# TYPE rateguard_usd_budget_exhausted_total counter');
+  lines.push(`rateguard_usd_budget_exhausted_total ${state.usdBudgetExhausted ?? 0}`);
+  lines.push('# HELP rateguard_usd_unpriced_calls_total Outbound calls under a USD budget whose model had no known price (denied or allowed uncounted)');
+  lines.push('# TYPE rateguard_usd_unpriced_calls_total counter');
+  lines.push(`rateguard_usd_unpriced_calls_total ${state.usdUnpricedCalls ?? 0}`);
+  lines.push('# HELP rateguard_usd_budget_spent_micro_usd_total Estimated spend committed to USD budgets, in micro-USD (from the price table, not the invoice)');
+  lines.push('# TYPE rateguard_usd_budget_spent_micro_usd_total counter');
+  lines.push(`rateguard_usd_budget_spent_micro_usd_total ${state.usdSpentMicro ?? 0}`);
 
   // SDK info
   const version = process.env.RATEGUARD_VERSION || 'dev';

@@ -24,7 +24,7 @@ func TestAdminHandlerGetState(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("invalid JSON response: %v", err)
 	}
-	for _, field := range []string{"key", "rate_limit", "token_budget", "circuit_breaker", "preset", "loop_detector"} {
+	for _, field := range []string{"key", "rate_limit", "token_budget", "usd_budget", "circuit_breaker", "preset", "loop_detector"} {
 		if _, ok := body[field]; !ok {
 			t.Errorf("response missing field %q: %v", field, body)
 		}

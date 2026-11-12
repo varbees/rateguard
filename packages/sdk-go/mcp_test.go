@@ -10,13 +10,14 @@ func TestMCPTools(t *testing.T) {
 	sdk := New(Config{Preset: "dev"})
 
 	tools := sdk.MCPTools()
-	if len(tools) != 7 {
-		t.Fatalf("expected 7 MCP tools, got %d", len(tools))
+	if len(tools) != 8 {
+		t.Fatalf("expected 8 MCP tools, got %d", len(tools))
 	}
 
 	expected := map[string]bool{
 		"get_rate_limit_state":      false,
 		"get_token_budget":          false,
+		"get_usd_budget":            false,
 		"get_circuit_breaker_state": false,
 		"check_loop":                false,
 		"list_limits":               false,

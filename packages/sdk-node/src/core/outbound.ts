@@ -286,6 +286,7 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     const parts = deriveEstimate ? estimateRequestParts(body) : undefined;
     const price = priceForCall(runtime.config.pricingProvider, call.model, parts?.promptTokens ?? 0);
     if (!price) {
+      runtime.usdCounters.unpriced += 1;
       if (cfg.unpriced === 'deny') {
         return {
           hold: { key, model: call.model, reserved: 0, uncounted: true },
@@ -346,9 +347,12 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
       // threshold is billed at the long rate even if its estimate was not.
       const price = priceForCall(runtime.config.pricingProvider, usage.model || hold.model, usage.inputTokens);
       const rates = price ? microRates(price) : hold.rates;
-      runtime.usdBudget.commitReservation(hold.key, hold.reservationId, costMicroUSD(rates, usage));
+      const cost = costMicroUSD(rates, usage);
+      runtime.usdBudget.commitReservation(hold.key, hold.reservationId, cost);
+      runtime.usdCounters.spentMicro += cost;
     } else if (hold.reserved > 0) {
       runtime.usdBudget.commitReservation(hold.key, hold.reservationId, hold.reserved);
+      runtime.usdCounters.spentMicro += hold.reserved;
     } else {
       usdRelease(hold);
     }
@@ -487,6 +491,7 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     }
 
     const { hold: usd, block: usdBlock } = usdReserve(call, body);
+    if (usdBlock?.code === 'usd_budget_exceeded') runtime.usdCounters.exhausted += 1;
     if (usdBlock && enforce) {
       runtime.tokenBudget.releaseReservation(budgetKey, reservation.reservationId);
       usdRelease(usd);

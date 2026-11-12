@@ -8,6 +8,7 @@
  * All pre-flight tools use peek semantics — querying never consumes budget.
  */
 
+import { usdToMicro } from './usd-budget.js';
 import { createHash } from 'node:crypto';
 
 import { BoundedCache } from './bounded-cache.js';
@@ -196,6 +197,37 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector, 
     return result;
   };
 
+  // Estimated-USD budget (0.6). Read-only (rule 10): never reserves.
+  const getUSDBudget = async (args: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+    const st = runtime.usdBudgetState({
+      ...(str(args.customer) ? { customer: str(args.customer)! } : {}),
+      ...(str(args.provider) ? { provider: str(args.provider)! } : {}),
+      ...(str(args.model) ? { model: str(args.model)! } : {}),
+    });
+    if (!st.applied) {
+      return { allowed: true, applied: false, error: 'no USD budget configured' };
+    }
+    const result: Record<string, unknown> = {
+      key: st.key,
+      applied: st.applied,
+      allowed: st.allowed,
+      limit_micro_usd: st.limitMicroUSD,
+      remaining_micro_usd: st.remainingMicroUSD,
+      window: st.window,
+      retry_after_ms: st.retryAfterMs,
+      warning: st.warning,
+      estimated: true,
+    };
+    const usd = typeof args.estimated_usd === 'number' ? args.estimated_usd : 0;
+    if (usd > 0 && Number.isFinite(usd)) {
+      const micro = usdToMicro(usd);
+      result.estimated_micro_usd = micro;
+      result.would_fit = st.remainingMicroUSD >= micro;
+    }
+    return result;
+  };
+
   const getCircuitBreakerState = async (args: Record<string, unknown>): Promise<Record<string, unknown>> => {
     const state = runtime.circuitBreaker.getState();
     const result: Record<string, unknown> = {
@@ -369,6 +401,7 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector, 
       key,
       rate_limit: await getRateLimitState({ key }),
       token_budget: await getTokenBudget({ key }),
+      usd_budget: await getUSDBudget(typeof args.customer === 'string' && args.customer ? { customer: args.customer } : {}),
       circuit_breaker: await getCircuitBreakerState({}),
       preset: {
         name: runtime.config.preset.name,
@@ -409,6 +442,21 @@ export function createMCPTools(runtime: RateGuardRuntime, loops?: LoopDetector, 
         required: ['key'],
       },
       handler: getTokenBudget,
+    },
+    {
+      name: 'get_usd_budget',
+      description:
+        "Check the remaining estimated-USD budget before an expensive LLM call (0.6). Returns integer micro-USD remaining and limit, the window, and whether the expected spend fits. Estimates come from RateGuard's dated price table, not the provider's invoice. Read-only: never reserves.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          customer: { type: 'string', description: 'End customer the call is attributed to (the X-RateGuard-Customer value); omit for the tenant budget' },
+          provider: { type: 'string', description: 'Provider, only needed when the budget is scoped per model' },
+          model: { type: 'string', description: 'Model, only needed when the budget is scoped per model' },
+          estimated_usd: { type: 'number', description: 'Dollars the agent expects the call to cost' },
+        },
+      },
+      handler: getUSDBudget,
     },
     {
       name: 'get_circuit_breaker_state',

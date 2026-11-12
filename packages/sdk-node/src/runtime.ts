@@ -65,6 +65,8 @@ export class RateGuardRuntime {
   readonly tokenBudget: TokenBudgetManager;
   /** Counts integer micro-USD; same rolling windows as the token budget. Used only when config.usdBudget is set. */
   readonly usdBudget: TokenBudgetManager;
+  /** Counters for Prometheus (prometheusText's usdBudgetExhausted / usdUnpricedCalls). */
+  readonly usdCounters = { exhausted: 0, unpriced: 0, spentMicro: 0 };
   readonly circuitBreaker: CircuitBreaker;
   readonly eventEmitter: ReturnType<typeof createEventEmitter>;
   readonly loopDetector: LoopDetector;

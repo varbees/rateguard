@@ -93,7 +93,7 @@ import { RateGuard } from '../src/index.js';
 import { createMCPTools, mcpCall } from '../src/core/mcp.js';
 
 describe('MCP tools', () => {
-  it('exposes all 7 tools matching the Go SDK', () => {
+  it('exposes all 8 tools matching the Go SDK', () => {
     const rg = new RateGuard({ preset: 'dev' });
     const tools = rg.mcpTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
@@ -102,6 +102,7 @@ describe('MCP tools', () => {
       'get_circuit_breaker_state',
       'get_rate_limit_state',
       'get_token_budget',
+      'get_usd_budget',
       'list_limits',
       'verify_budget',
     ]);

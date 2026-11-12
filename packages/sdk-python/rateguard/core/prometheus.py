@@ -22,6 +22,9 @@ def prometheus_text(
     circuit_breaker_state: int = 0,  # 0=closed, 1=open, 2=half-open
     guardrail_violations: int = 0,
     version: str = "dev",
+    usd_budget_exhausted: int = 0,
+    usd_unpriced_calls: int = 0,
+    usd_spent_micro: int = 0,
 ) -> str:
     """Generate Prometheus exposition format text for RateGuard metrics."""
 
@@ -70,6 +73,16 @@ def prometheus_text(
     lines.append("# HELP rateguard_guardrail_violations_total Content guardrail violations (PII, prompt injection, length)")
     lines.append("# TYPE rateguard_guardrail_violations_total counter")
     lines.append(f"rateguard_guardrail_violations_total {guardrail_violations}")
+
+    lines.append("# HELP rateguard_usd_budget_exhausted_total Outbound calls denied by the estimated-USD budget")
+    lines.append("# TYPE rateguard_usd_budget_exhausted_total counter")
+    lines.append(f"rateguard_usd_budget_exhausted_total {usd_budget_exhausted}")
+    lines.append("# HELP rateguard_usd_unpriced_calls_total Outbound calls under a USD budget whose model had no known price (denied or allowed uncounted)")
+    lines.append("# TYPE rateguard_usd_unpriced_calls_total counter")
+    lines.append(f"rateguard_usd_unpriced_calls_total {usd_unpriced_calls}")
+    lines.append("# HELP rateguard_usd_budget_spent_micro_usd_total Estimated spend committed to USD budgets, in micro-USD (from the price table, not the invoice)")
+    lines.append("# TYPE rateguard_usd_budget_spent_micro_usd_total counter")
+    lines.append(f"rateguard_usd_budget_spent_micro_usd_total {usd_spent_micro}")
 
     # SDK info
     lines.append("# HELP rateguard_sdk_info SDK version and build info")

@@ -116,6 +116,9 @@ type atomicMetrics struct {
 	totalRequests        atomic.Int64
 	rateLimitHits        atomic.Int64
 	tokenBudgetExhausted atomic.Int64
+	usdBudgetExhausted   atomic.Int64
+	usdUnpricedCalls     atomic.Int64
+	usdSpentMicro        atomic.Int64
 	circuitBreakerTrips  atomic.Int64
 	tokensConsumed       atomic.Int64
 	tokensEstimated      atomic.Int64
@@ -138,6 +141,15 @@ func (m *atomicMetrics) prometheusText() string {
 			"# HELP rateguard_token_budget_exhausted_total Token budget exhaustion events\n"+
 			"# TYPE rateguard_token_budget_exhausted_total counter\n"+
 			"rateguard_token_budget_exhausted_total %d\n"+
+			"# HELP rateguard_usd_budget_exhausted_total Outbound calls denied by the estimated-USD budget\n"+
+			"# TYPE rateguard_usd_budget_exhausted_total counter\n"+
+			"rateguard_usd_budget_exhausted_total %d\n"+
+			"# HELP rateguard_usd_unpriced_calls_total Outbound calls under a USD budget whose model had no known price (denied or allowed uncounted)\n"+
+			"# TYPE rateguard_usd_unpriced_calls_total counter\n"+
+			"rateguard_usd_unpriced_calls_total %d\n"+
+			"# HELP rateguard_usd_budget_spent_micro_usd_total Estimated spend committed to USD budgets, in micro-USD (from the price table, not the invoice)\n"+
+			"# TYPE rateguard_usd_budget_spent_micro_usd_total counter\n"+
+			"rateguard_usd_budget_spent_micro_usd_total %d\n"+
 			"# HELP rateguard_circuit_breaker_trips_total Circuit breaker trip events\n"+
 			"# TYPE rateguard_circuit_breaker_trips_total counter\n"+
 			"rateguard_circuit_breaker_trips_total %d\n"+
@@ -168,6 +180,9 @@ func (m *atomicMetrics) prometheusText() string {
 		m.totalRequests.Load(),
 		m.rateLimitHits.Load(),
 		m.tokenBudgetExhausted.Load(),
+		m.usdBudgetExhausted.Load(),
+		m.usdUnpricedCalls.Load(),
+		m.usdSpentMicro.Load(),
 		m.circuitBreakerTrips.Load(),
 		m.tokensConsumed.Load(),
 		m.tokensEstimated.Load(),

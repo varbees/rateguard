@@ -327,3 +327,57 @@ func TestUSDBudgetConfig(t *testing.T) {
 		}()
 	}
 }
+
+func TestUSDBudgetMCPToolPeeksAndListLimitsCarriesIt(t *testing.T) {
+	sdk, client, _ := usdSDK(t, USDBudgetConfig{DayLimitUSD: 1}, http.StatusOK)
+	usdCall(t, client, "vec-full", "acme")
+	call := func(name string, args map[string]any) map[string]any {
+		t.Helper()
+		for _, tool := range sdk.MCPTools() {
+			if tool.Name == name {
+				out, err := tool.Handler(args)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return out
+			}
+		}
+		t.Fatalf("no tool %s", name)
+		return nil
+	}
+	for i := 0; i < 3; i++ { // peeking never reserves
+		call("get_usd_budget", map[string]any{"customer": "acme", "estimated_usd": 0.5})
+	}
+	got := call("get_usd_budget", map[string]any{"customer": "acme", "estimated_usd": 2.0})
+	if got["remaining_micro_usd"] != int64(994_000) || got["would_fit"] != false || got["estimated"] != true || got["estimated_micro_usd"] != int64(2_000_000) {
+		t.Fatalf("get_usd_budget = %+v", got)
+	}
+	limits := call("list_limits", map[string]any{"key": "k", "customer": "acme"})
+	usd, ok := limits["usd_budget"].(map[string]any)
+	if !ok || usd["remaining_micro_usd"] != int64(994_000) {
+		t.Fatalf("list_limits usd_budget = %+v", limits["usd_budget"])
+	}
+	off := New(Config{Preset: "dev"})
+	for _, tool := range off.MCPTools() {
+		if tool.Name == "get_usd_budget" {
+			out, _ := tool.Handler(map[string]any{})
+			if out["applied"] != false {
+				t.Fatalf("unconfigured = %+v", out)
+			}
+		}
+	}
+}
+
+func TestUSDBudgetPrometheusCounters(t *testing.T) {
+	sdk, client, _ := usdSDK(t, USDBudgetConfig{DayLimitUSD: 0.005}, http.StatusOK)
+	usdCall(t, client, "vec-full", "")
+	usdCall(t, client, "vec-full", "")
+	usdCall(t, client, "mystery-model-9", "")
+	text := sdk.metrics.prometheusText()
+	// call 1 settles 6,000 micro; call 2 is denied; call 3 is unpriced
+	for _, want := range []string{"rateguard_usd_budget_exhausted_total 1\n", "rateguard_usd_unpriced_calls_total 1\n", "rateguard_usd_budget_spent_micro_usd_total 6000\n"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("metrics missing %q", want)
+		}
+	}
+}

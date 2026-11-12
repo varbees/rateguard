@@ -318,6 +318,7 @@ class _OutboundCore:
         parts = estimate_request_parts(body) if self.derive_estimate else None
         price = price_for_call(self.runtime.config.pricing_provider, call.model or "", parts[0] if parts else 0)
         if price is None:
+            self.runtime.usd_counters["unpriced"] += 1
             hold = _USDHold(key, call.model or "", None, None, 0)
             if cfg.unpriced == "deny":
                 name = call.model or "(none)"
@@ -342,6 +343,7 @@ class _OutboundCore:
         r = manager.reserve(key, None, estimate)
         hold = _USDHold(key, call.model or "", rates, r.reservation_id, r.reserved)
         if r.decision.applied and not r.decision.allowed:
+            self.runtime.usd_counters["exhausted"] += 1
             who = f"customer {call.customer}" if call.customer else f"tenant {self.runtime.config.tenant_id}"
             return hold, _USDBlock(
                 "usd_budget_exceeded",
@@ -368,9 +370,12 @@ class _OutboundCore:
             # threshold is billed at the long rate even if its estimate was not.
             price = price_for_call(self.runtime.config.pricing_provider, usage.model or hold.model, usage.input_tokens)
             rates = micro_rates(price) if price is not None else hold.rates
-            manager.commit_reservation(hold.key, hold.reservation_id, cost_micro_usd(rates, usage))
+            cost = cost_micro_usd(rates, usage)
+            manager.commit_reservation(hold.key, hold.reservation_id, cost)
+            self.runtime.usd_counters["spent_micro"] += cost
         elif hold.reserved > 0:
             manager.commit_reservation(hold.key, hold.reservation_id, hold.reserved)
+            self.runtime.usd_counters["spent_micro"] += hold.reserved
         else:
             self.usd_release(hold)
 

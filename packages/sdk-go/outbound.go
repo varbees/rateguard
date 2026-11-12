@@ -394,6 +394,9 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 	}
 
 	usd, usdDenied := t.usdReserve(call, body)
+	if usdDenied != nil && usdDenied.code == "usd_budget_exceeded" {
+		s.metrics.usdBudgetExhausted.Add(1)
+	}
 	if usdDenied != nil && enforce {
 		s.tokens.releaseReservation(budgetKey, reservation.reservationID)
 		t.usdRelease(usd)
@@ -855,6 +858,7 @@ func (t *genaiTransport) usdReserve(call *outboundCall, body []byte) (*usdHold, 
 	}
 	price, ok := priceForCall(s.pricing, call.Model, prompt)
 	if !ok {
+		s.metrics.usdUnpricedCalls.Add(1)
 		hold := &usdHold{key: key, model: call.Model}
 		if cfg.unpriced == "deny" {
 			name := call.Model
@@ -919,9 +923,12 @@ func (t *genaiTransport) usdSettle(h *usdHold, usage TokenUsage, ok bool) {
 		if price, found := priceForCall(s.pricing, nonEmpty(usage.Model, h.model), usage.InputTokens); found {
 			rates = MicroRatesFor(price)
 		}
-		s.usd.commitReservation(h.key, h.reservationID, CostMicroUSD(rates, usage))
+		cost := CostMicroUSD(rates, usage)
+		s.usd.commitReservation(h.key, h.reservationID, cost)
+		s.metrics.usdSpentMicro.Add(cost)
 	case h.reserved > 0:
 		s.usd.commitReservation(h.key, h.reservationID, h.reserved)
+		s.metrics.usdSpentMicro.Add(h.reserved)
 	default:
 		t.usdRelease(h)
 	}

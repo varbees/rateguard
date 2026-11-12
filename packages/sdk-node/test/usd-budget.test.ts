@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { RateGuard, StaticPricing, type RateGuardOptions } from '../src/index.js';
+import { RateGuard, StaticPricing, prometheusText, type RateGuardOptions } from '../src/index.js';
 
 // USD budgets (0.6) through the public surface: wrapFetch + usdBudgetState.
 // Prices are a caller PricingProvider so no test depends on the shipped table.
@@ -157,5 +157,35 @@ describe('USD budget config', () => {
     expect(() => new RateGuard({ usdBudget: { dayLimitUSD: Number.NaN } })).toThrow('USD amount');
     expect(() => new RateGuard({ usdBudget: { dayLimitUSD: 1, scope: 'galaxy' as 'tenant' } })).toThrow('scope');
     expect(() => new RateGuard({ usdBudget: { dayLimitUSD: 1, unpriced: 'maybe' as 'deny' } })).toThrow('unpriced');
+  });
+});
+
+describe('USD budget on the agent and ops surfaces', () => {
+  it('get_usd_budget peeks, says estimated, and answers would_fit; list_limits carries it', async () => {
+    const { rg, call } = setup({ dayLimitUSD: 1 });
+    await call('vec-full', 'acme');
+    const parse = (r: { content: Array<{ text: string }> }) => JSON.parse(r.content[0]!.text) as Record<string, unknown>;
+    for (let i = 0; i < 3; i += 1) await rg.mcpCall('get_usd_budget', { customer: 'acme', estimated_usd: 0.5 });
+    const got = parse(await rg.mcpCall('get_usd_budget', { customer: 'acme', estimated_usd: 2 }));
+    expect(got).toMatchObject({ remaining_micro_usd: 994_000, would_fit: false, estimated: true, estimated_micro_usd: 2_000_000 });
+    const limits = parse(await rg.mcpCall('list_limits', { key: 'k', customer: 'acme' }));
+    expect((limits.usd_budget as Record<string, unknown>).remaining_micro_usd).toBe(994_000);
+    const off = new RateGuard({ preset: 'dev' });
+    expect(parse(await off.mcpCall('get_usd_budget', {})).applied).toBe(false);
+  });
+
+  it('counts denials and unpriced calls for Prometheus', async () => {
+    const { rg, call } = setup({ dayLimitUSD: 0.005 });
+    await call();
+    await call();
+    await call('mystery-model-9');
+    expect(rg.runtime.usdCounters).toEqual({ exhausted: 1, unpriced: 1, spentMicro: 6_000 });
+    const text = prometheusText(rg.policy(), {
+      totalRequests: 0, rateLimitHits: 0, tokenBudgetExhausted: 0, circuitBreakerTrips: 0, tokensConsumed: 0, circuitBreakerState: 0,
+      usdBudgetExhausted: rg.runtime.usdCounters.exhausted, usdUnpricedCalls: rg.runtime.usdCounters.unpriced, usdSpentMicro: rg.runtime.usdCounters.spentMicro,
+    });
+    expect(text).toContain('rateguard_usd_budget_exhausted_total 1\n');
+    expect(text).toContain('rateguard_usd_unpriced_calls_total 1\n');
+    expect(text).toContain('rateguard_usd_budget_spent_micro_usd_total 6000\n');
   });
 });

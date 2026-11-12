@@ -78,6 +78,32 @@ func (s *SDK) MCPTools() []MCPTool {
 			Handler: s.mcpGetTokenBudget,
 		},
 		{
+			Name:        "get_usd_budget",
+			Description: "Check the remaining estimated-USD budget before an expensive LLM call (0.6). Returns integer micro-USD remaining and limit, the window, and whether the expected spend fits. Estimates come from RateGuard's dated price table, not the provider's invoice. Read-only: never reserves.",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"customer": map[string]any{
+						"type":        "string",
+						"description": "End customer the call is attributed to (the X-RateGuard-Customer value); omit for the tenant budget",
+					},
+					"provider": map[string]any{
+						"type":        "string",
+						"description": "Provider, only needed when the budget is scoped per model",
+					},
+					"model": map[string]any{
+						"type":        "string",
+						"description": "Model, only needed when the budget is scoped per model",
+					},
+					"estimated_usd": map[string]any{
+						"type":        "number",
+						"description": "Dollars the agent expects the call to cost",
+					},
+				},
+			},
+			Handler: s.mcpGetUSDBudget,
+		},
+		{
 			Name:        "get_circuit_breaker_state",
 			Description: "Check circuit breaker health for upstream providers before attempting calls. Returns state (closed/open/half-open), failure rate, and retry timing.",
 			InputSchema: map[string]any{
@@ -386,6 +412,15 @@ func (s *SDK) mcpListLimits(args map[string]any) (map[string]any, error) {
 		result["token_budget"] = budgetState
 	}
 
+	// Estimated-USD budget (0.6), for the customer when one is named.
+	usdArgs := map[string]any{}
+	if c, ok := args["customer"].(string); ok && c != "" {
+		usdArgs["customer"] = c
+	}
+	if usdState, _ := s.mcpGetUSDBudget(usdArgs); usdState != nil {
+		result["usd_budget"] = usdState
+	}
+
 	// Circuit breaker state
 	cbState, _ := s.mcpGetCircuitBreakerState(map[string]any{})
 	if cbState != nil {
@@ -591,4 +626,33 @@ func (s *SDK) MCPCall(toolName string, args map[string]any) (*MCPToolResult, err
 		}
 	}
 	return nil, fmt.Errorf("mcp: unknown tool %q — available: get_rate_limit_state, get_token_budget, get_circuit_breaker_state, check_loop, list_limits, attest_budget, verify_budget", toolName)
+}
+
+// mcpGetUSDBudget peeks the estimated-USD budget (0.6). Read-only (rule 10).
+func (s *SDK) mcpGetUSDBudget(args map[string]any) (map[string]any, error) {
+	customer, _ := args["customer"].(string)
+	provider, _ := args["provider"].(string)
+	model, _ := args["model"].(string)
+	st := s.USDBudgetState(customer, provider, model)
+	if !st.Applied {
+		return map[string]any{"allowed": true, "applied": false, "error": "no USD budget configured"}, nil
+	}
+	result := map[string]any{
+		"key":                 st.Key,
+		"applied":             st.Applied,
+		"allowed":             st.Allowed,
+		"limit_micro_usd":     st.LimitMicroUSD,
+		"remaining_micro_usd": st.RemainingMicroUSD,
+		"window":              st.Window,
+		"retry_after_ms":      st.RetryAfter.Milliseconds(),
+		"warning":             st.Warning,
+		"estimated":           true,
+	}
+	if usd, ok := args["estimated_usd"].(float64); ok && usd > 0 {
+		if micro, err := USDToMicro(usd); err == nil {
+			result["estimated_micro_usd"] = micro
+			result["would_fit"] = st.RemainingMicroUSD >= micro
+		}
+	}
+	return result, nil
 }

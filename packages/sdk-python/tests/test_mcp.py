@@ -80,12 +80,12 @@ class TestLoopDetector:
         assert allowed is True
 
 
-# ── MCP tools (parity with Go's mcp.go: 7 tools) ──
+# ── MCP tools (parity with Go's mcp.go: 8 tools) ──
 
 from rateguard import RateGuard, create_mcp_tools, mcp_call
 
 
-def test_mcp_tools_expose_all_seven_tools_matching_go():
+def test_mcp_tools_expose_all_eight_tools_matching_go():
     rg = RateGuard(preset="dev")
     names = sorted(tool.name for tool in rg.mcp_tools())
     assert names == [
@@ -94,6 +94,7 @@ def test_mcp_tools_expose_all_seven_tools_matching_go():
         "get_circuit_breaker_state",
         "get_rate_limit_state",
         "get_token_budget",
+        "get_usd_budget",
         "list_limits",
         "verify_budget",
     ]
