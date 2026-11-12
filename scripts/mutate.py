@@ -565,7 +565,7 @@ CATALOGUE: list[Mutation] = [
     Mutation(
         id="go/usd-settles-the-estimate", sdk="go", path="packages/sdk-go/outbound.go",
         find="s.usd.commitReservation(h.key, h.reservationID, CostMicroUSD(rates, usage))",
-        replace="s.usd.commitReservation(h.key, h.reservationID, h.reserved)",
+        replace="_ = rates; s.usd.commitReservation(h.key, h.reservationID, h.reserved)",  # keeps it compiling: a test must catch it, not the compiler
         models="measured usage ignored: the budget books the guess, not the bill",
         expect="TestUSDBudgetCommitsMeasuredCost",
     ),
