@@ -80,7 +80,7 @@ Every limiter also implements Peek — a non-consuming pre-flight query.
 - Dashboard (packages/dashboard): self-hosted control center, six sections (Overview, Analytics, Agents, Controls, MCP Console, Settings) behind a persistent sidebar — live budget/rate-limit/circuit-breaker/loop/guardrail state, live time-series traffic charts, an interactive MCP tool console, a policy tweak panel. `docker compose up` for a one-command demo against a synthetic-traffic instance (Go), `--profile node-demo` / `--profile python-demo` for the other two — each demo run end-to-end through the real dashboard.
 
 ## Tests
-All 3 SDKs green — 1,200+ total: `go test ./...` (274 test funcs, all with -race), `bun run test` (482 passing), `pytest -q` (507 passing). `mypy --strict` passes clean on all 55 Python source files. But test count measures effort, not detection, so two stronger numbers back it:
+All 3 SDKs green — 1,200+ total: `go test ./...` (277 test funcs, all with -race), `bun run test` (484 passing), `pytest -q` (509 passing). `mypy --strict` passes clean on all 55 Python source files. But test count measures effort, not detection, so two stronger numbers back it:
 
 Mutation score — 100% (21/21). Inject a defect into a money path, run the suite, check whether anything fails. Every mutation reproduces a bug this codebase actually shipped (MAX→SUM usage merge, measured→constant reservation, estimate→zero on unmeasurable streams, peek→record on pre-flight, CJK chars/4). `python3 scripts/mutate.py`. Honest scope: 100% means "the 21 defects we know about, we detect" — the catalogue is hand-picked, not exhaustive.
 

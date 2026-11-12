@@ -95,13 +95,13 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (274 test funcs, all with -race; counted 2026-11-12)
+# Go tests (277 test funcs, all with -race; counted 2026-11-12)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (482 passing, 6 skipped)
+# Node tests (484 passing, 6 skipped)
 cd packages/sdk-node && bun run test
 
-# Python tests (507 passing, 15 skipped)
+# Python tests (509 passing, 15 skipped)
 cd packages/sdk-python && python3 -m pytest -q
 
 # Python strict typecheck (mypy --strict passes clean on all 55 source files)
