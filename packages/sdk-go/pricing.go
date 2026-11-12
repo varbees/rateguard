@@ -31,8 +31,9 @@ type ModelPrice struct {
 //
 // This is the same optional-interface pattern as Embedder and EventEmitter:
 // bring your own implementation, or use the StaticPricing helper. Costs are
-// display/observability estimates only — they never drive enforcement (the
-// token budget is token-count based) and never claim to be invoice truth.
+// estimates from a dated price table and never claim to be invoice truth. They
+// drive enforcement only when Config.USDBudget is set (0.6), and every surface
+// then says "estimated".
 type PricingProvider interface {
 	PriceFor(model string) (price ModelPrice, ok bool)
 }

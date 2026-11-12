@@ -72,8 +72,10 @@ class PricingProvider(Protocol):
     """Resolves a per-1K-token price for a model. Return None to fall through
     to the built-in starter table (then to zero — costs are never fabricated).
     Same optional-interface pattern as the embedder/event-emitter hooks; bring
-    your own, or use StaticPricing. Costs are observability estimates only —
-    they never drive enforcement (the token budget is token-count based)."""
+    your own, or use StaticPricing. Costs are estimates from a dated price
+    table, never the provider's invoice. They drive enforcement only when a
+    USD budget is configured (usd_budget, 0.6), and every surface then says
+    "estimated"."""
 
     def price_for(self, model: str) -> ModelPrice | None: ...
 
