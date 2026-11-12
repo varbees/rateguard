@@ -35,7 +35,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Store primitives (Get/Increment(n)/Reset — variable-cost consumption, key clearing) | ✅ | ✅ | ✅ | `limiter.go`, `sharded_limiter.go`, `redis_limiter.go` |
 | LLM token budgets (hr/day/mo) | ✅ | ✅ | ✅ | `token_budget.go` |
 | Estimate-based budget reservations | ✅ | ✅ | ✅ | `token_budget.go` |
-| Estimated-USD budgets (0.6: reserve at the dearest input rate, settle to measured usage, integer micro-USD, per-customer key, unpriced denied; `conformance/usd_budget_vectors.json`; no MCP/admin/Prometheus surface yet) | ✅ | ✅ | ✅ | `usd_budget.go` |
+| Estimated-USD budgets (0.6: reserve at the dearest input rate, settle to measured usage, integer micro-USD, per-customer key, unpriced denied; `conformance/usd_budget_vectors.json`; MCP `get_usd_budget`, `usd_budget` in list_limits and admin state, Prometheus `rateguard_usd_budget_exhausted_total` / `_unpriced_calls_total` / `_spent_micro_usd_total`) | ✅ | ✅ | ✅ | `usd_budget.go` |
 | Circuit breakers | ✅ | ✅ | ✅ | `circuit_breaker.go` |
 | GenAI OTel helpers (semconv span names, input/output tokens, error.type classes) | ✅ | ✅ | ✅ | `genai_observability.go` |
 | Public GenAI API (StartGenAICall/GenAISpan, TTFT/TPOT) | ✅ | ✅ | ✅ | Same file |
@@ -47,7 +47,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | 8 presets | ✅ | ✅ | ✅ | `presets.go` |
 | Redis distributed limiter (atomic Lua GCRA) | ✅ | ✅ | ✅ | `redis_limiter.go` |
 | Events/webhooks (endpoint config → async by default: bounded queue, non-blocking emit, drop-with-counter on overflow, drained by Shutdown/shutdown) | ✅ | ✅ | ✅ | `events.go`, `events_async.go` |
-| MCP tools (7: rate limit, budget, breaker, loop, list, attest, verify) | ✅ | ✅ | ✅ | `mcp.go` |
+| MCP tools (8: rate limit, token budget, USD budget, breaker, loop, list, attest, verify) | ✅ | ✅ | ✅ | `mcp.go` |
 | Lock-free sharded limiter (64-way, atomic CAS) | ✅ | ✅ | ✅ | `sharded_limiter.go` |
 | Adaptive rate limiting (AIMD controller) | ✅ | ✅ | ✅ | `adaptive.go` |
 | Semantic response caching (pluggable Embedder) | ✅ | ✅ | ✅ | `semantic_cache.go` |

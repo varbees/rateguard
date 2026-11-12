@@ -207,7 +207,8 @@ Semantics:
 - **Keys.** `customer`: `{tenant}[:customer=X]:usd` (dollars are comparable across models, so one budget covers them all); `tenant`: `{tenant}:usd`; `model`: `{tenant}[:customer=X]:{provider}:{model}:usd`.
 - **Denials.** HTTP 429, provider-native body, codes `usd_budget_exceeded` (with `Retry-After` from the window) and `usd_price_unknown`. Both land in `enforcementEvents()`; an `allow-uncounted` call logs `usd_unpriced_call` every time.
 - **Observe mode** never denies and still meters. **Soft-stop** never denies and sets `warning` past `softStopAt`.
-- **Not yet (0.6.x):** an MCP `get_usd_budget` tool, admin-API state, Prometheus counters, a span attribute, a Redis-backed store. The budget is per process.
+- **Agents and operators:** MCP tool `get_usd_budget` (`customer`, `provider`, `model`, `estimated_usd` → the state above plus `estimated: true` and `would_fit`; read-only). `list_limits` and `GET /admin/state` include `usd_budget` (pass `customer` to `list_limits`). Prometheus: `rateguard_usd_budget_exhausted_total`, `rateguard_usd_unpriced_calls_total` and `rateguard_usd_budget_spent_micro_usd_total` (estimated) (Go's `/metrics` serves them live; in Node and Python pass `runtime.usdCounters` / `runtime.usd_counters` to `prometheusText` / `prometheus_text`).
+- **Not yet (0.6.x):** a span attribute, committing realtime sessions, a Redis-backed store. The budget is per process.
 
 ## Semantic Caching (Go)
 

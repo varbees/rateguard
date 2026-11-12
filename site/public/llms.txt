@@ -23,14 +23,14 @@ _ = rg.ServeMCP(ctx, os.Stdin, os.Stdout)
 ```ts
 import { RateGuard } from '@varbees/rateguard-node';
 const rg = new RateGuard({ preset: 'streaming-llm' });
-const tools = rg.mcpTools(); // 7 MCP tools, peek semantics
+const tools = rg.mcpTools(); // 8 MCP tools, peek semantics
 ```
 
 ### Python
 ```python
 from rateguard import RateGuard
 rg = RateGuard(preset="streaming-llm")
-tools = rg.mcp_tools()  # 7 MCP tools, peek semantics
+tools = rg.mcp_tools()  # 8 MCP tools, peek semantics
 ```
 
 ## Architecture
@@ -53,7 +53,7 @@ Every limiter also implements Peek — a non-consuming pre-flight query.
 | strict-upstream-protection | 50 | 5K | hard-stop |
 
 ## Features
-- MCP tools (7, all 3 SDKs): get_rate_limit_state, get_token_budget, get_circuit_breaker_state, check_loop, list_limits, attest_budget, verify_budget — peek semantics, querying never consumes budget
+- MCP tools (8, all 3 SDKs): get_rate_limit_state, get_token_budget, get_usd_budget, get_circuit_breaker_state, check_loop, list_limits, attest_budget, verify_budget — peek semantics, querying never consumes budget
 - MCP stdio server (all 3 SDKs): zero-dependency JSON-RPC 2.0, plugs into any MCP client config
 - Loop detection: SHA-256 payload fingerprinting + max sequence depth, LRU-bounded; wired into middleware via X-Sequence-Depth header (429 loop_detected) in all 3 SDKs
 - Estimated-USD budgets (0.6, unreleased; all 3 SDKs): reserve each call's worst case before it is sent, settle to measured usage, integer micro-USD, one budget per customer by default, unpriced models denied unless allow-uncounted; enforces on the dated price table, not the invoice

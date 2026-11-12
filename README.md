@@ -50,7 +50,7 @@ see [Overhead](#overhead).
 | **Provider fallback** | Automatic failover across OpenAI-compatible providers (DeepSeek, Groq, Cerebras, vLLM, ...) on 429/5xx/breaker-open, with credential isolation. Honest scope: cross-schema fallback is impossible at the transport layer and not claimed. |
 | **Rate limiting** | Token bucket algorithm (RFC standard). Configurable per-tenant, per-route, per-provider. |
 | **Pre-flight queries** | `Peek` semantics everywhere: agents ask "can I make this call?" without consuming budget. |
-| **MCP tools** | 7 tools, identical across Go/Node/Python (`attest_budget`/`verify_budget` included). Each SDK also ships a zero-dependency stdio JSON-RPC server (`ServeMCP`/`serveMCP`/`serve_mcp`). |
+| **MCP tools** | 8 tools, identical across Go/Node/Python (`attest_budget`/`verify_budget` included). Each SDK also ships a zero-dependency stdio JSON-RPC server (`ServeMCP`/`serveMCP`/`serve_mcp`). |
 | **Loop detection** | SHA-256 payload fingerprinting halts runaway agent loops. The primitive ships in all SDKs; middleware in all 3 languages can enforce it via `X-Sequence-Depth`. |
 | **Token budgets** | Hourly, daily, monthly limits on LLM token consumption. Hard-stop or soft-stop (queue). Estimate-based reservations keep concurrency high — all 3 languages. |
 | **Circuit breakers** | Per-provider on outbound, per-upstream on inbound. Closed → Open → Half-Open state machine. |
@@ -108,9 +108,9 @@ const rg = new RateGuard({ usdBudget: { dayLimitUSD: 20 } });
 rg = RateGuard(usd_budget=USDBudgetOptions(day_limit_usd=20))
 ```
 
-Read it before it bites, without reserving anything: `rg.USDBudgetState(customer, provider, model)` / `rg.usdBudgetState({ customer })` / `rg.usd_budget_state(customer=...)`. Over the line you get a provider-native 429, code `usd_budget_exceeded`.
+Read it before it bites, without reserving anything: `rg.USDBudgetState(customer, provider, model)` / `rg.usdBudgetState({ customer })` / `rg.usd_budget_state(customer=...)`, or let the agent ask itself with the MCP tool `get_usd_budget` (pass `estimated_usd` and it answers `would_fit`). `/admin/state` and `list_limits` carry it as `usd_budget`. Over the line you get a provider-native 429, code `usd_budget_exceeded`.
 
-**What it is not.** It enforces on RateGuard's price table, dated and sourced per row, not on your provider's invoice. The table is the standard tier: **priority or provisioned tiers are under-counted**, so supply a `PricingProvider` with your rates. A model with no price is denied (`usd_price_unknown`) unless you set `unpriced: 'allow-uncounted'`. The budget lives in one process, like the token budget. Money is integer micro-USD in all three SDKs, pinned by `conformance/usd_budget_vectors.json`. Spec: [`docs/specs/0.6-usd-budgets.md`](docs/specs/0.6-usd-budgets.md).
+**What it is not.** It enforces on RateGuard's price table, dated and sourced per row, not on your provider's invoice. The table is the standard tier: **priority or provisioned tiers are under-counted**, so supply a `PricingProvider` with your rates. A model with no price is denied (`usd_price_unknown`) unless you set `unpriced: 'allow-uncounted'`. The budget lives in one process, like the token budget (a Redis-backed store is next). Money is integer micro-USD in all three SDKs, pinned by `conformance/usd_budget_vectors.json`. Spec: [`docs/specs/0.6-usd-budgets.md`](docs/specs/0.6-usd-budgets.md).
 
 ## Quick Start
 
@@ -178,7 +178,7 @@ await serve_mcp(rg)
 { "mcpServers": { "rateguard": { "command": "your-app", "args": ["mcp"] } } }
 ```
 
-Seven tools, identical across Go/Node/Python: `get_rate_limit_state`, `get_token_budget`, `get_circuit_breaker_state`, `check_loop`, `list_limits`, `attest_budget`, `verify_budget` — the last two for cryptographic budget delegation between agents, see [Budget Attestation](docs/API_REFERENCE.md#budget-attestation).
+Eight tools, identical across Go/Node/Python: `get_rate_limit_state`, `get_token_budget`, `get_usd_budget`, `get_circuit_breaker_state`, `check_loop`, `list_limits`, `attest_budget`, `verify_budget` — the last two for cryptographic budget delegation between agents, see [Budget Attestation](docs/API_REFERENCE.md#budget-attestation).
 
 ```go
 // Track any LLM call with OTel GenAI spans + automatic cost estimation
@@ -208,7 +208,7 @@ runs inside it.
 | Shape | In-process library | In-process library | Proxy you deploy | Gateway you operate |
 | Embeddable in | Go · Node · Python | Node only | Python¹ | — |
 | Meters outbound LLM spend inside your process | ✅ | ❌ | at the proxy hop | at the gateway hop |
-| Agent queries its own limit pre-flight (MCP, no 429) | ✅ 7 tools | ❌ | ❌ | ❌ |
+| Agent queries its own limit pre-flight (MCP, no 429) | ✅ 8 tools | ❌ | ❌ | ❌ |
 | Cryptographic budget delegation (Ed25519) | ✅ | ❌ | ❌ | ❌ |
 | API keys never leave your app | ✅ | n/a | ❌ terminate at proxy | ❌ terminate at gateway |
 | Open source | MIT | MIT | MIT | OSS core + Enterprise |

@@ -25,7 +25,12 @@ versions may carry behaviour changes — they are called out explicitly below.
   `scripts/gen_usd_budget_vectors.py`), replayed by all three SDKs.
 - `EstimateRequestParts` / `estimateRequestParts` / `estimate_request_parts`:
   the request estimate split into prompt and declared output ceiling.
-- Nine money-path mutants for the USD path; the mutation score stays 100% (50/50).
+- MCP tool `get_usd_budget` (8 tools now), `usd_budget` in `list_limits` and `/admin/state`,
+  and Prometheus `rateguard_usd_budget_exhausted_total`, `rateguard_usd_unpriced_calls_total` and
+  `rateguard_usd_budget_spent_micro_usd_total` (estimated spend).
+- Nine money-path mutants for the USD path; the mutation score stays 100% (50/50). Two Go
+  mutants that the compiler, not a test, had been killing now compile; one survived, and
+  `TestOutboundRateLimitErrorFailsOpenEvenIfLimiterSaysDeny` now holds the guard it removes.
 
 ### Changed
 
@@ -36,8 +41,8 @@ versions may carry behaviour changes — they are called out explicitly below.
 
 - The table is the standard tier: priority and provisioned tiers are
   under-counted. Supply a `PricingProvider` with your rates.
-- Per process, like the token budget. No MCP tool, admin state or Prometheus
-  counters for it yet.
+- Per process, like the token budget. No Redis store, span attribute or realtime
+  commit for it yet.
 
 ## [0.5.3] — unreleased
 
