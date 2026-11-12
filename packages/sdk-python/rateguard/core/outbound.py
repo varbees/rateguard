@@ -30,13 +30,15 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
 
 from .circuit_breaker import CircuitBreaker
-from .request_estimate import estimate_request_tokens
+from .genai import price_for_call
+from .request_estimate import estimate_request_parts, estimate_request_tokens
+from .usd_budget import MicroRates, cost_micro_usd, micro_rates, reserve_micro_usd, usd_budget_key
 from .semantic_cache import CachedResponse, SemanticCache, SemanticCacheOptions, is_streaming_request_body, prompt_text_from_request_body
 from .utils import extract_token_usage_from_text, format_retry_after_ms
 
 if TYPE_CHECKING:
     from ..runtime import RateGuardRuntime
-    from ..types import TokenUsage
+    from ..types import TokenBudgetDecision, TokenUsage
 
 _MAX_EXTRACT_BYTES = 1 << 20  # 1 MiB cap on JSON usage extraction
 _MAX_SSE_CANDIDATES = 8
@@ -209,6 +211,34 @@ def _extract_sse_usage(text: str) -> "TokenUsage | None":
     return extract_token_usage_from_text("\n".join(f"data: {c}" for c in candidates))
 
 
+@dataclass(slots=True)
+class _USDHold:
+    key: str
+    model: str
+    rates: MicroRates | None  # None: the model has no price (allow-uncounted)
+    reservation_id: str | None
+    reserved: int
+
+
+@dataclass(slots=True)
+class _USDBlock:
+    code: str
+    message: str
+    retry_after_ms: int
+    detail: str
+
+
+@dataclass(slots=True)
+class _Reservation:
+    """The token reservation plus, when a USD budget is set, the USD hold."""
+
+    decision: TokenBudgetDecision
+    reservation_id: str | None
+    reserved: int
+    usd: _USDHold | None = None
+    usd_block: _USDBlock | None = None
+
+
 class _OutboundCore:
     """Transport-agnostic outbound logic shared by sync and async wrappers."""
 
@@ -261,16 +291,88 @@ class _OutboundCore:
         prefix = f"{tenant}:customer={call.customer}" if call.customer else tenant
         return f"{prefix}:{call.provider}:{model}:outbound"
 
-    def reserve(self, call: OutboundCall, body: bytes | None = None) -> Any:
+    def reserve(self, call: OutboundCall, body: bytes | None = None) -> "_Reservation":
         # Measure the reservation from THIS request rather than a constant: a
         # 100K-token context reserves ~100K, not a flat 4096 it would overshoot
         # by ~25x under concurrency.
         estimate = (
             estimate_request_tokens(body) if self.derive_estimate else self.estimated_tokens
         )
-        return self.runtime.token_budget.reserve(
+        r = self.runtime.token_budget.reserve(
             self.budget_key(call), self.runtime.config.token_budget, estimate
         )
+        usd, block = self.usd_reserve(call, body)
+        return _Reservation(r.decision, r.reservation_id, r.reserved, usd, block)
+
+    # ── USD budget (0.6): reserve before the call, settle to measured usage ──
+    # Off unless runtime.config.usd_budget is set. Same reserve/commit/release
+    # discipline as the token budget, in integer micro-USD, against one key per
+    # customer (default) because dollars are comparable across models.
+
+    def usd_reserve(self, call: OutboundCall, body: bytes | None) -> "tuple[_USDHold | None, _USDBlock | None]":
+        cfg = self.runtime.config.usd_budget
+        manager = self.runtime.usd_budget
+        if cfg is None or manager is None:
+            return None, None
+        key = usd_budget_key(cfg.scope, self.runtime.config.tenant_id, call.customer, call.provider, call.model)
+        parts = estimate_request_parts(body) if self.derive_estimate else None
+        price = price_for_call(self.runtime.config.pricing_provider, call.model or "", parts[0] if parts else 0)
+        if price is None:
+            hold = _USDHold(key, call.model or "", None, None, 0)
+            if cfg.unpriced == "deny":
+                name = call.model or "(none)"
+                return hold, _USDBlock(
+                    "usd_price_unknown",
+                    f'rateguard: no price is known for model "{name}", so a USD budget cannot count it. '
+                    "Price it with pricing_provider, or set usd_budget.unpriced to 'allow-uncounted'",
+                    0,
+                    call.model or "",
+                )
+            self.runtime.enforcement_log.record("usd_unpriced_call", customer=call.customer, provider=call.provider, model=call.model)
+            return hold, None
+        rates = micro_rates(price)
+        # 0 = reserve the whole remaining budget (strict mode, or a body too big to read).
+        estimate = 0
+        if parts is not None:
+            estimate = max(1, reserve_micro_usd(rates, parts[0], parts[1]))
+        elif self.estimated_tokens > 0:
+            # A pinned token estimate has no prompt/output split: price it at the dearer side.
+            n = self.estimated_tokens
+            estimate = max(1, reserve_micro_usd(rates, n, 0), reserve_micro_usd(rates, 0, n))
+        r = manager.reserve(key, None, estimate)
+        hold = _USDHold(key, call.model or "", rates, r.reservation_id, r.reserved)
+        if r.decision.applied and not r.decision.allowed:
+            who = f"customer {call.customer}" if call.customer else f"tenant {self.runtime.config.tenant_id}"
+            return hold, _USDBlock(
+                "usd_budget_exceeded",
+                f"rateguard: estimated USD budget exhausted for {who} ({r.decision.window} window)",
+                r.decision.retry_after_ms,
+                r.decision.window,
+            )
+        return hold, None
+
+    def usd_release(self, hold: "_USDHold | None") -> None:
+        manager = self.runtime.usd_budget
+        if hold is not None and hold.reservation_id is not None and manager is not None:
+            manager.release_reservation(hold.key, hold.reservation_id)
+
+    def usd_settle(self, hold: "_USDHold | None", usage: "TokenUsage | None") -> None:
+        manager = self.runtime.usd_budget
+        if hold is None or manager is None:
+            return
+        if hold.rates is None:
+            self.usd_release(hold)
+            return
+        if usage is not None and usage.total_tokens > 0:
+            # Re-price at the measured prompt size: a call that crossed a long-context
+            # threshold is billed at the long rate even if its estimate was not.
+            price = price_for_call(self.runtime.config.pricing_provider, usage.model or hold.model, usage.input_tokens)
+            rates = micro_rates(price) if price is not None else hold.rates
+            manager.commit_reservation(hold.key, hold.reservation_id, cost_micro_usd(rates, usage))
+        elif hold.reserved > 0:
+            manager.commit_reservation(hold.key, hold.reservation_id, hold.reserved)
+        else:
+            self.usd_release(hold)
 
     def finish(
         self,
@@ -278,7 +380,9 @@ class _OutboundCore:
         reservation_id: str | None,
         usage: "TokenUsage | None",
         reserved_estimate: int = 0,
+        usd: "_USDHold | None" = None,
     ) -> None:
+        self.usd_settle(usd, usage)
         # reserved_estimate is committed when real usage can't be measured (a
         # stream without include_usage, an over-cap body, an unrecognized
         # provider schema). Recording zero would let a runaway agent spend
@@ -529,6 +633,12 @@ def create_httpx_transport(
                     return synthesized(request, 429, "token_budget_exceeded",
                                        f"rateguard: outbound token budget exhausted for {call.provider}",
                                        reservation.decision.retry_after_ms)
+                if reservation.usd_block is not None and core.enforce:
+                    core.runtime.token_budget.release_reservation(core.budget_key(call), reservation.reservation_id)
+                    core.usd_release(reservation.usd)
+                    blk = reservation.usd_block
+                    core.runtime.enforcement_log.record(blk.code, customer=call.customer, provider=call.provider, model=call.model, detail=blk.detail)
+                    return synthesized(request, 429, blk.code, blk.message, blk.retry_after_ms)
 
                 probe_consumed = True
                 try:
@@ -536,6 +646,7 @@ def create_httpx_transport(
                 except Exception:
                     breaker.record_outcome(False)
                     core.finish(call, reservation.reservation_id, None)
+                    core.usd_release(reservation.usd)
                     target = core.fallback_target(call, depth, body)
                     if target is not None:
                         return self._retarget(request, body, call, target, depth)
@@ -544,6 +655,7 @@ def create_httpx_transport(
                 if core.is_provider_failure(response.status_code):
                     breaker.record_outcome(False)
                     core.finish(call, reservation.reservation_id, None)
+                    core.usd_release(reservation.usd)
                     target = core.fallback_target(call, depth, body)
                     if target is not None:
                         response.close()
@@ -561,7 +673,7 @@ def create_httpx_transport(
                 # bytes with no buffering delay; usage is merged at EOF.
                 scanning = _ScanningByteStream(
                     response.stream,
-                    lambda usage: core.finish(call, reservation.reservation_id, usage, reservation.reserved),
+                    lambda usage: core.finish(call, reservation.reservation_id, usage, reservation.reserved, usd=reservation.usd),
                 )
                 return httpx.Response(
                     response.status_code,
@@ -575,7 +687,7 @@ def create_httpx_transport(
             usage: "TokenUsage | None" = None
             if len(content) <= _MAX_EXTRACT_BYTES:
                 usage = extract_token_usage_from_text(content.decode("utf-8", errors="replace"))
-            core.finish(call, reservation.reservation_id, usage, reservation.reserved)
+            core.finish(call, reservation.reservation_id, usage, reservation.reserved, usd=reservation.usd)
             return response
 
         def _retarget(self, request: Any, body: bytes, call: OutboundCall, target: FallbackProvider, depth: int) -> Any:
@@ -795,6 +907,12 @@ def create_httpx_async_transport(
                     return synthesized(request, 429, "token_budget_exceeded",
                                        f"rateguard: outbound token budget exhausted for {call.provider}",
                                        reservation.decision.retry_after_ms)
+                if reservation.usd_block is not None and core.enforce:
+                    core.runtime.token_budget.release_reservation(core.budget_key(call), reservation.reservation_id)
+                    core.usd_release(reservation.usd)
+                    blk = reservation.usd_block
+                    core.runtime.enforcement_log.record(blk.code, customer=call.customer, provider=call.provider, model=call.model, detail=blk.detail)
+                    return synthesized(request, 429, blk.code, blk.message, blk.retry_after_ms)
 
                 probe_consumed = True
                 try:
@@ -802,6 +920,7 @@ def create_httpx_async_transport(
                 except Exception:
                     breaker.record_outcome(False)
                     core.finish(call, reservation.reservation_id, None)
+                    core.usd_release(reservation.usd)
                     target = core.fallback_target(call, depth, body)
                     if target is not None:
                         return await self._retarget(request, body, call, target, depth)
@@ -810,6 +929,7 @@ def create_httpx_async_transport(
                 if core.is_provider_failure(response.status_code):
                     breaker.record_outcome(False)
                     core.finish(call, reservation.reservation_id, None)
+                    core.usd_release(reservation.usd)
                     target = core.fallback_target(call, depth, body)
                     if target is not None:
                         await response.aclose()
@@ -825,7 +945,7 @@ def create_httpx_async_transport(
             if content_type.startswith("text/event-stream"):
                 scanning = _AsyncScanningByteStream(
                     response.stream,
-                    lambda usage: core.finish(call, reservation.reservation_id, usage, reservation.reserved),
+                    lambda usage: core.finish(call, reservation.reservation_id, usage, reservation.reserved, usd=reservation.usd),
                 )
                 return httpx.Response(
                     response.status_code,
@@ -839,7 +959,7 @@ def create_httpx_async_transport(
             usage: "TokenUsage | None" = None
             if len(content) <= _MAX_EXTRACT_BYTES:
                 usage = extract_token_usage_from_text(content.decode("utf-8", errors="replace"))
-            core.finish(call, reservation.reservation_id, usage, reservation.reserved)
+            core.finish(call, reservation.reservation_id, usage, reservation.reserved, usd=reservation.usd)
             return response
 
         async def _retarget(self, request: Any, body: bytes, call: OutboundCall, target: FallbackProvider, depth: int) -> Any:

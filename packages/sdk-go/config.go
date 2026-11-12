@@ -93,8 +93,14 @@ type Config struct {
 	// PricingProvider supplies USD-per-1K-token prices for cost estimates,
 	// checked before the built-in starter table. Bring your own, or use
 	// StaticPricing for a map of custom/fine-tuned/not-yet-tabled models.
-	// Cost is an observability estimate only — it never drives enforcement.
+	// Cost is an estimate from a dated price table, never the provider's
+	// invoice; it drives enforcement only when USDBudget is set.
 	PricingProvider PricingProvider
+
+	// USDBudget is the estimated-USD budget for outbound LLM calls (0.6). Nil
+	// or all-zero limits leave it off. New panics on an invalid config; call
+	// USDBudget.Validate() first to check. See docs/specs/0.6-usd-budgets.md.
+	USDBudget *USDBudgetConfig
 
 	// EventEndpoint enables webhook event delivery. The HTTP emitter it
 	// creates is wrapped in an AsyncEventEmitter so delivery never blocks

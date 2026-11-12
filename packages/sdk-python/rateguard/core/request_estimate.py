@@ -67,14 +67,14 @@ def _content_text(raw: Any) -> str:
     return "\n".join(out)
 
 
-def _whole_body_upper_bound(text: str, tokenizer: Tokenizer | None) -> int:
+def _whole_body_parts(text: str, tokenizer: Tokenizer | None) -> tuple[int, int]:
     """Bound an unrecognized request by its own size.
 
     The prompt is necessarily a subset of the body, so counting every byte as
     prompt text cannot under-count. It over-counts by the JSON scaffolding,
     which is the direction that protects the budget.
     """
-    return estimate_with(tokenizer, text) + DEFAULT_OUTPUT_ALLOWANCE
+    return estimate_with(tokenizer, text), DEFAULT_OUTPUT_ALLOWANCE
 
 
 def _ceiling(value: Any) -> int | None:
@@ -82,7 +82,19 @@ def _ceiling(value: Any) -> int | None:
 
 
 def estimate_request_tokens(body: bytes | None, tokenizer: Tokenizer | None = None) -> int:
-    """Derive a budget reservation from the request itself.
+    """Derive a budget reservation from the request itself: measured prompt
+    tokens plus the declared output ceiling (see estimate_request_parts).
+    Returns 0 ("reserve the entire remaining budget") only for an empty body
+    or one too large to walk."""
+    parts = estimate_request_parts(body, tokenizer)
+    return 0 if parts is None else parts[0] + parts[1]
+
+
+def estimate_request_parts(body: bytes | None, tokenizer: Tokenizer | None = None) -> tuple[int, int] | None:
+    """(prompt tokens, declared output ceiling) for a request; None where
+    estimate_request_tokens returns 0. USD budgets price the halves differently.
+
+    Derive a budget reservation from the request itself.
 
     Measured prompt tokens plus the output ceiling the request declares.
 
@@ -99,20 +111,20 @@ def estimate_request_tokens(body: bytes | None, tokenizer: Tokenizer | None = No
     ``estimated_tokens`` explicitly.
     """
     if not body or len(body) > MAX_ESTIMATE_BODY_BYTES:
-        return 0
+        return None
 
     try:
         text = body.decode("utf-8", errors="replace")
     except Exception:  # pragma: no cover - decode with errors="replace" cannot raise
-        return 0
+        return None
 
     try:
         payload = json.loads(text)
     except (ValueError, TypeError):
-        return _whole_body_upper_bound(text, tokenizer)
+        return _whole_body_parts(text, tokenizer)
 
     if not isinstance(payload, dict):
-        return _whole_body_upper_bound(text, tokenizer)
+        return _whole_body_parts(text, tokenizer)
 
     chunks: list[str] = []
 
@@ -150,7 +162,7 @@ def estimate_request_tokens(body: bytes | None, tokenizer: Tokenizer | None = No
         # Valid JSON carrying no field we recognize as a prompt: a newer API
         # shape, or a provider we have not taught this. Bound it by size rather
         # than serialize the caller.
-        return _whole_body_upper_bound(text, tokenizer)
+        return _whole_body_parts(text, tokenizer)
 
     input_tokens = estimate_with(tokenizer, prompt_text)
 
@@ -167,4 +179,4 @@ def estimate_request_tokens(body: bytes | None, tokenizer: Tokenizer | None = No
         or DEFAULT_OUTPUT_ALLOWANCE
     )
 
-    return input_tokens + output_tokens
+    return input_tokens, output_tokens

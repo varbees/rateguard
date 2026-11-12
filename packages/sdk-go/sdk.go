@@ -29,11 +29,14 @@ type SDK struct {
 	adaptive *AdaptiveLimiter
 	breaker  *circuitBreaker
 	tokens   *tokenBudgetManager
-	extract  TokenUsageExtractor
-	waiter   BudgetWaiter
-	otel     *observability
-	pricing  PricingProvider
-	emitter  EventEmitter
+	// usd counts integer micro-USD with the token budget's windows; used only when usdCfg is set.
+	usd     *tokenBudgetManager
+	usdCfg  *resolvedUSDBudget
+	extract TokenUsageExtractor
+	waiter  BudgetWaiter
+	otel    *observability
+	pricing PricingProvider
+	emitter EventEmitter
 	// asyncEmitter is set only when the SDK created the async wrapper
 	// itself (EventEndpoint config) — Shutdown drains it.
 	asyncEmitter *AsyncEventEmitter
@@ -132,6 +135,17 @@ func New(cfg Config) *SDK {
 		otel = &observability{}
 	}
 
+	// A money limit that is silently off is the worst failure, so an invalid
+	// USD budget stops construction loudly (like regexp.MustCompile). Callers
+	// can check with cfg.USDBudget.Validate() first.
+	var usdCfg *resolvedUSDBudget
+	if cfg.USDBudget != nil {
+		usdCfg, err = cfg.USDBudget.resolve()
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	return &SDK{
 		cfg:          cfg,
 		policy:       policy,
@@ -139,6 +153,8 @@ func New(cfg Config) *SDK {
 		adaptive:     adaptive,
 		breaker:      newCircuitBreaker(clock, cfg.CircuitBreaker),
 		tokens:       newTokenBudgetManager(clock),
+		usd:          newTokenBudgetManager(clock),
+		usdCfg:       usdCfg,
 		extract:      extractor,
 		waiter:       waiter,
 		otel:         otel,

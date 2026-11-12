@@ -18,6 +18,7 @@ from .core.mcp import LoopDetector
 from .core.rate_limiter import RateLimiter
 from .core.redis_limiter import RedisEvalError, RedisGCRALimiter
 from .core.token_budget import TokenBudgetManager
+from .core.usd_budget import USDBudgetState, usd_budget_key
 from .core.utils import read_first_header
 from .types import CircuitBreakerState, CompletionObservation, PreflightDecision, RateGuardEventPayload, RateGuardEventType, RateGuardOptions, RateLimitDecision, RequestBodyRejection, RequestContext, TokenBudgetDecision, TokenUsage
 
@@ -69,10 +70,37 @@ class RateGuardRuntime:
         self.guardrail_log = GuardrailLog()
         self.freeze = FreezeController()
         self.enforcement_log = EnforcementLog(self.config.clock)
+        # Counts integer micro-USD with the token budget's windows (0.6); used
+        # only when config.usd_budget is set.
+        usd = self.config.usd_budget
+        self.usd_budget: TokenBudgetManager | None = (
+            TokenBudgetManager(
+                clock=self.config.clock,
+                hour_limit=usd.hour_limit,
+                day_limit=usd.day_limit,
+                month_limit=usd.month_limit,
+                mode=usd.mode,
+                soft_stop_at=usd.soft_stop_at,
+                capacity=50_000,
+            )
+            if usd is not None
+            else None
+        )
         # Serializes policy mutation (set_policy) so a multi-field patch
         # applies atomically even under multi-threaded WSGI servers —
         # mirrors Go's sdk.go policyMu.
         self._policy_lock = Lock()
+
+    def usd_budget_state(self, *, customer: str | None = None, provider: str = "", model: str | None = None) -> "USDBudgetState":
+        """The estimated-USD budget a call would draw from, read without
+        reserving anything (a pre-flight query never consumes). Amounts are
+        integer micro-USD. Mirrors Go's SDK.USDBudgetState."""
+        cfg = self.config.usd_budget
+        if cfg is None or self.usd_budget is None:
+            return USDBudgetState(False, True, "", 0, -1, "", 0, False)
+        key = usd_budget_key(cfg.scope, self.config.tenant_id, customer, provider, model)
+        d = self.usd_budget.check(key)
+        return USDBudgetState(d.applied, d.allowed, key, d.limit, d.remaining, d.window, d.retry_after_ms, d.warning)
 
     def wants_request_body(self, request: RequestContext) -> bool:
         """Whether this request needs its body read for loop detection or

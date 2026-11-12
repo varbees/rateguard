@@ -8,6 +8,7 @@ import { RateLimiter, type RateLimiterLike } from './core/rate-limiter.js';
 import { AdaptiveLimiter } from './core/adaptive.js';
 import { RedisGCRALimiter } from './core/redis-limiter.js';
 import { TokenBudgetManager } from './core/token-budget.js';
+import { usdBudgetKey } from './core/usd-budget.js';
 import { LoopDetector } from './core/mcp.js';
 import { GuardrailLog } from './core/guardrail-log.js';
 import { FreezeController } from './core/freeze.js';
@@ -42,6 +43,19 @@ export interface RequestBodyRejection {
   message: string;
 }
 
+/** A read of the estimated-USD budget. Amounts are integer micro-USD. */
+export interface USDBudgetState {
+  applied: boolean;
+  allowed: boolean;
+  key: string;
+  limitMicroUSD: number;
+  /** -1 when no budget applies. */
+  remainingMicroUSD: number;
+  window: 'hour' | 'day' | 'month' | '';
+  retryAfterMs: number;
+  warning: boolean;
+}
+
 /**
  * Shared runtime that powers all adapters.
  */
@@ -49,6 +63,8 @@ export class RateGuardRuntime {
   readonly config: ReturnType<typeof resolveRateGuardOptions>;
   readonly rateLimiter: RateLimiterLike;
   readonly tokenBudget: TokenBudgetManager;
+  /** Counts integer micro-USD; same rolling windows as the token budget. Used only when config.usdBudget is set. */
+  readonly usdBudget: TokenBudgetManager;
   readonly circuitBreaker: CircuitBreaker;
   readonly eventEmitter: ReturnType<typeof createEventEmitter>;
   readonly loopDetector: LoopDetector;
@@ -85,10 +101,35 @@ export class RateGuardRuntime {
     this.rateLimiter = rateLimiter;
 
     this.tokenBudget = new TokenBudgetManager({ clock: this.config.clock, capacity: 50_000 });
+    this.usdBudget = new TokenBudgetManager({ clock: this.config.clock, capacity: 50_000 });
     this.circuitBreaker = new CircuitBreaker(this.config.clock, this.config.circuitBreaker);
     this.eventEmitter = createEventEmitter(this.config);
     this.loopDetector = new LoopDetector();
     this.guardrailLog = new GuardrailLog();
+  }
+
+  /**
+   * The estimated-USD budget a call would draw from, read without reserving
+   * anything (a pre-flight query never consumes). Amounts are integer
+   * micro-USD. `applied` is false when no USD budget is configured.
+   */
+  usdBudgetState(scope: { customer?: string; provider?: string; model?: string } = {}): USDBudgetState {
+    const cfg = this.config.usdBudget;
+    if (!cfg) {
+      return { applied: false, allowed: true, key: '', limitMicroUSD: 0, remainingMicroUSD: -1, window: '', retryAfterMs: 0, warning: false };
+    }
+    const key = usdBudgetKey(cfg.scope, this.config.tenantId, scope.customer, scope.provider ?? '', scope.model);
+    const d = this.usdBudget.check(key, cfg);
+    return {
+      applied: d.applied,
+      allowed: d.allowed,
+      key,
+      limitMicroUSD: d.limit,
+      remainingMicroUSD: d.remaining,
+      window: d.window,
+      retryAfterMs: d.retryAfterMs,
+      warning: d.warning,
+    };
   }
 
   /**

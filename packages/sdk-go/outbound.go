@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ── Outbound GenAI transport ──
@@ -392,6 +393,14 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 			fmt.Sprintf("rateguard: outbound token budget exhausted for %s", call.Provider), reservation.RetryAfter), nil
 	}
 
+	usd, usdDenied := t.usdReserve(call, body)
+	if usdDenied != nil && enforce {
+		s.tokens.releaseReservation(budgetKey, reservation.reservationID)
+		t.usdRelease(usd)
+		s.enforceLog.record(EnforcementEvent{Type: usdDenied.code, Customer: call.Customer, Provider: call.Provider, Model: nonEmpty(call.Model, "default"), Detail: usdDenied.detail})
+		return synthesizedResponse(req, http.StatusTooManyRequests, usdDenied.code, usdDenied.message, usdDenied.retryAfter), nil
+	}
+
 	ctx, span := s.StartGenAICall(req.Context(), GenAICall{
 		Provider:            call.Provider,
 		Model:               call.Model,
@@ -408,6 +417,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 	if err != nil || isProviderFailure(resp.StatusCode) {
 		breaker.RecordOutcome(false)
 		s.tokens.releaseReservation(budgetKey, reservation.reservationID)
+		t.usdRelease(usd)
 
 		if next, ok := t.nextProvider(call, depth); ok {
 			if resp != nil {
@@ -423,7 +433,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 
 	if isSSEResponse(resp) {
 		resp.Body = newStreamUsageBody(resp.Body, func(usage TokenUsage, chunks int64, ok bool) {
-			t.finish(span, breaker, budgetKey, reservation.reservationID, usage, ok, reservation.reserved)
+			t.finish(span, breaker, budgetKey, reservation.reservationID, usage, ok, reservation.reserved, usd)
 		}, span)
 		return resp, nil
 	}
@@ -432,7 +442,7 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 	// hand the caller an identical replacement body.
 	usage, restored := t.extractJSONUsage(resp)
 	resp.Body = restored
-	t.finish(span, breaker, budgetKey, reservation.reservationID, usage, usage.TotalTokens > 0, reservation.reserved)
+	t.finish(span, breaker, budgetKey, reservation.reservationID, usage, usage.TotalTokens > 0, reservation.reserved, usd)
 	return resp, nil
 }
 
@@ -449,9 +459,10 @@ func (t *genaiTransport) execute(req *http.Request, body []byte, call *outboundC
 // not tokensConsumed) so it never masquerades as measured truth — set the
 // provider's usage emission (e.g. stream_options.include_usage) for exact
 // accounting.
-func (t *genaiTransport) finish(span *GenAISpan, breaker *circuitBreaker, budgetKey, reservationID string, usage TokenUsage, ok bool, reservedEstimate int64) {
+func (t *genaiTransport) finish(span *GenAISpan, breaker *circuitBreaker, budgetKey, reservationID string, usage TokenUsage, ok bool, reservedEstimate int64, usd *usdHold) {
 	s := t.sdk
 	breaker.RecordOutcome(true)
+	t.usdSettle(usd, usage, ok)
 	switch {
 	case ok && usage.TotalTokens > 0:
 		s.tokens.commitReservation(budgetKey, reservationID, usage.TotalTokens)
@@ -810,4 +821,108 @@ func synthesizedResponse(req *http.Request, statusCode int, code, message string
 type readCloser struct {
 	io.Reader
 	io.Closer
+}
+
+// ── USD budget (0.6): reserve before the call, settle to measured usage ──
+// Off unless Config.USDBudget is set. Same reserve/commit/release discipline as
+// the token budget, in integer micro-USD, against one key per customer (default)
+// because dollars are comparable across models.
+
+type usdHold struct {
+	key, model    string
+	rates         MicroRates
+	priced        bool
+	reservationID string
+	reserved      int64
+}
+
+type usdDenial struct {
+	code, message, detail string
+	retryAfter            time.Duration
+}
+
+func (t *genaiTransport) usdReserve(call *outboundCall, body []byte) (*usdHold, *usdDenial) {
+	s := t.sdk
+	cfg := s.usdCfg
+	if cfg == nil {
+		return nil, nil
+	}
+	key := USDBudgetKey(cfg.scope, s.tenantID(), call.Customer, call.Provider, call.Model)
+	var prompt, output int64
+	var parts bool
+	if t.deriveEstimate {
+		prompt, output, parts = EstimateRequestParts(body, nil)
+	}
+	price, ok := priceForCall(s.pricing, call.Model, prompt)
+	if !ok {
+		hold := &usdHold{key: key, model: call.Model}
+		if cfg.unpriced == "deny" {
+			name := call.Model
+			if name == "" {
+				name = "(none)"
+			}
+			return hold, &usdDenial{
+				code:    "usd_price_unknown",
+				message: fmt.Sprintf("rateguard: no price is known for model %q, so a USD budget cannot count it. Price it with PricingProvider, or set USDBudget.Unpriced to \"allow-uncounted\"", name),
+				detail:  call.Model,
+			}
+		}
+		s.enforceLog.record(EnforcementEvent{Type: "usd_unpriced_call", Customer: call.Customer, Provider: call.Provider, Model: nonEmpty(call.Model, "default")})
+		return hold, nil
+	}
+	rates := MicroRatesFor(price)
+	// 0 = reserve the whole remaining budget (strict mode, or a body too big to read).
+	var estimate int64
+	switch {
+	case parts:
+		estimate = max(1, ReserveMicroUSD(rates, prompt, output))
+	case t.opts.EstimatedTokens > 0:
+		// A pinned token estimate has no prompt/output split: price it at the dearer side.
+		n := t.opts.EstimatedTokens
+		estimate = max(1, ReserveMicroUSD(rates, n, 0), ReserveMicroUSD(rates, 0, n))
+	}
+	d := s.usd.reserveWithEstimate(key, cfg.policy(), cfg.mode, estimate)
+	hold := &usdHold{key: key, model: call.Model, rates: rates, priced: true, reservationID: d.reservationID, reserved: d.reserved}
+	if d.Applied && !d.Allowed && cfg.mode == TokenBudgetModeHardStop {
+		who := "tenant " + s.tenantID()
+		if call.Customer != "" {
+			who = "customer " + call.Customer
+		}
+		return hold, &usdDenial{
+			code:       "usd_budget_exceeded",
+			message:    fmt.Sprintf("rateguard: estimated USD budget exhausted for %s (%s window)", who, d.Window),
+			detail:     d.Window,
+			retryAfter: d.RetryAfter,
+		}
+	}
+	return hold, nil
+}
+
+func (t *genaiTransport) usdRelease(h *usdHold) {
+	if h != nil && h.reservationID != "" {
+		t.sdk.usd.releaseReservation(h.key, h.reservationID)
+	}
+}
+
+func (t *genaiTransport) usdSettle(h *usdHold, usage TokenUsage, ok bool) {
+	if h == nil {
+		return
+	}
+	s := t.sdk
+	switch {
+	case !h.priced:
+		t.usdRelease(h)
+	case ok && usage.TotalTokens > 0:
+		// Re-price at the measured prompt size: a call that crossed a long-context
+		// threshold is billed at the long rate even if its estimate was not.
+		rates := h.rates
+		if price, found := priceForCall(s.pricing, nonEmpty(usage.Model, h.model), usage.InputTokens); found {
+			rates = MicroRatesFor(price)
+		}
+		s.usd.commitReservation(h.key, h.reservationID, CostMicroUSD(rates, usage))
+	case h.reserved > 0:
+		s.usd.commitReservation(h.key, h.reservationID, h.reserved)
+	default:
+		t.usdRelease(h)
+	}
 }

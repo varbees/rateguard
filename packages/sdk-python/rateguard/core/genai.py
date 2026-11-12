@@ -118,6 +118,17 @@ def normalize_model_id(model: str) -> str:
             return m
 
 
+def price_for_call(pricing: "PricingProvider | None", model: str, prompt_tokens: int = 0) -> ModelPrice | None:
+    """The price one call is billed at: the caller's PricingProvider first, then
+    the built-in table at the long-context rate when ``prompt_tokens`` is past
+    the model's threshold. None when neither knows the model."""
+    if pricing is not None:
+        price = pricing.price_for(model)
+        if price is not None:
+            return price
+    return _builtin_price_for(model, prompt_tokens)
+
+
 def _builtin_price_for(model: str, prompt_tokens: int = 0) -> ModelPrice | None:
     """The rate a request with ``prompt_tokens`` of input is billed at: the
     vendor's long-context rate when the prompt is past its threshold (applied

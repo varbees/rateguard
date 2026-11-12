@@ -7,7 +7,10 @@ import {
   type RateGuardOptions,
   type ResolvedRateGuardOptions,
   type TokenBudgetMode,
+  type USDBudgetOptions,
+  type ResolvedUSDBudget,
 } from './types.js';
+import { usdToMicro } from './core/usd-budget.js';
 
 const defaultClock: Clock = {
   now: () => Date.now(),
@@ -267,7 +270,27 @@ export function resolveRateGuardOptions(options: RateGuardOptions = {}): Resolve
     adaptiveRateLimit: options.adaptiveRateLimit ?? false,
     adaptive: normalizeAdaptiveOptions(options.adaptive),
     redisClient: options.redisClient,
+    usdBudget: normalizeUSDBudget(options.usdBudget),
   };
+}
+
+/** Dollars to integer micro-USD, once, at config load. Mirrors Go's USDBudgetConfig.resolve. */
+export function normalizeUSDBudget(options: USDBudgetOptions | undefined): ResolvedUSDBudget | undefined {
+  if (!options) return undefined;
+  const scope = options.scope ?? 'customer';
+  if (!['tenant', 'customer', 'model'].includes(scope)) throw new Error(`rateguard: usdBudget.scope must be tenant, customer or model, got ${scope}`);
+  const unpriced = options.unpriced ?? 'deny';
+  if (!['deny', 'allow-uncounted'].includes(unpriced)) throw new Error(`rateguard: usdBudget.unpriced must be deny or allow-uncounted, got ${unpriced}`);
+  const resolved: ResolvedUSDBudget = {
+    hourLimit: usdToMicro(options.hourLimitUSD ?? 0),
+    dayLimit: usdToMicro(options.dayLimitUSD ?? 0),
+    monthLimit: usdToMicro(options.monthLimitUSD ?? 0),
+    mode: normalizeTokenBudgetMode(options.mode ?? 'hard-stop'),
+    softStopAt: options.softStopAt ?? 0.8,
+    scope,
+    unpriced,
+  };
+  return resolved.hourLimit > 0 || resolved.dayLimit > 0 || resolved.monthLimit > 0 ? resolved : undefined;
 }
 
 /**

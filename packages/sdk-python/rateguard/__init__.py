@@ -82,6 +82,7 @@ from .core.rate_limiter import RateLimiter
 from .core.request_estimate import (
     DEFAULT_OUTPUT_ALLOWANCE,
     MAX_ESTIMATE_BODY_BYTES,
+    estimate_request_parts,
     estimate_request_tokens,
 )
 from .core.redis_limiter import (
@@ -159,6 +160,16 @@ from .types import (
     TokenBudgetMode,
     TokenBudgetOptions,
     TokenUsage,
+    USDBudgetOptions,
+)
+from .core.usd_budget import (
+    MicroRates,
+    USDBudgetState,
+    cost_micro_usd,
+    micro_rates,
+    reserve_micro_usd,
+    usd_budget_key,
+    usd_to_micro,
 )
 
 TokenBudget = TokenBudgetManager
@@ -249,7 +260,16 @@ __all__ = [
     "estimate_tokens",
     "estimate_with",
     # Per-request budget estimation (measured, not a constant)
+    "estimate_request_parts",
     "estimate_request_tokens",
+    "USDBudgetOptions",
+    "USDBudgetState",
+    "MicroRates",
+    "usd_to_micro",
+    "micro_rates",
+    "reserve_micro_usd",
+    "cost_micro_usd",
+    "usd_budget_key",
     "DEFAULT_OUTPUT_ALLOWANCE",
     "MAX_ESTIMATE_BODY_BYTES",
     # Guardrail violation tracking

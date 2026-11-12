@@ -150,6 +150,40 @@ class RateGuardOptions:
     # the admin API then only answers same-origin requests. Mirrors Go's
     # cfg.AdminCORSOrigin.
     admin_cors_origin: str | None = None
+    # Estimated-USD budget for outbound LLM calls (0.6). Off unless a limit
+    # is set. Limits are dollars, converted once to integer micro-USD.
+    # Mirrors Go's cfg.USDBudget and Node's usdBudget.
+    usd_budget: "USDBudgetOptions | None" = None
+
+
+@dataclass(slots=True)
+class USDBudgetOptions:
+    """Estimated-USD budget for outbound LLM calls (docs/specs/0.6-usd-budgets.md)."""
+
+    hour_limit_usd: float = 0.0
+    day_limit_usd: float = 0.0
+    month_limit_usd: float = 0.0
+    # "hard-stop" (default) denies; "soft-stop" only warns.
+    mode: "TokenBudgetMode | None" = None
+    # Soft-stop warning threshold, a fraction of the limit (default 0.8).
+    soft_stop_at: float = 0.8
+    # "customer" (default; tenant without a customer header), "tenant" or "model".
+    scope: str = "customer"
+    # A model with no known price: "deny" (default) or "allow-uncounted".
+    unpriced: str = "deny"
+
+
+@dataclass(slots=True)
+class ResolvedUSDBudget:
+    """USDBudgetOptions resolved: limits in integer micro-USD."""
+
+    hour_limit: int
+    day_limit: int
+    month_limit: int
+    mode: "TokenBudgetMode"
+    soft_stop_at: float
+    scope: str
+    unpriced: str
 
 
 @dataclass(slots=True)
@@ -181,6 +215,7 @@ class ResolvedRateGuardOptions:
     redis_client: "RedisLimiterClient | None"
     redis_async_client: "AsyncRedisLimiterClient | None"
     admin_cors_origin: str | None
+    usd_budget: "ResolvedUSDBudget | None" = None
 
 
 @dataclass(slots=True)

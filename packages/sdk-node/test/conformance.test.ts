@@ -9,6 +9,9 @@ import { EvidenceChain, GENESIS_PREV_HASH } from '../src/core/evidence-chain.js'
 import { issueSpendReceipt } from '../src/core/spend-receipt.js';
 import { extractTokenUsageFromText } from '../src/core/utils.js';
 import { estimateUsageCost } from '../src/core/genai.js';
+import type { ModelPrice, UsageForCost } from '../src/core/genai.js';
+import { TokenBudgetManager } from '../src/core/token-budget.js';
+import { costMicroUSD, microRates, reserveMicroUSD, usdBudgetKey, usdToMicro, type MicroRates, type USDBudgetScope } from '../src/core/usd-budget.js';
 
 interface ConformanceVectors {
   policy: { requests_per_second: number; burst: number };
@@ -291,4 +294,63 @@ describe('Conformance: prompt-cache usage and cost', () => {
       expect(Math.abs(cost - c.expect_cost_usd)).toBeLessThanOrEqual(1e-12 * Math.max(1, c.expect_cost_usd));
     });
   }
+});
+
+describe('Conformance: USD budgets', () => {
+  // conformance/usd_budget_vectors.json — the same file Go and Python replay.
+  const v = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../../../conformance/usd_budget_vectors.json', import.meta.url)), 'utf-8'),
+  ) as {
+    prices: Record<string, ModelPrice>;
+    usd_to_micro: Array<{ usd: number; micro: number }>;
+    micro_rates: Array<{ price: string; rates: MicroRates }>;
+    reserve: Array<{ price: string; promptTokens: number; outputTokens: number; micro: number }>;
+    cost: Array<{ price: string; usage: UsageForCost; micro: number }>;
+    keys: Array<{ scope: USDBudgetScope; tenant: string; customer: string; provider: string; model: string; key: string }>;
+    sequence: { dayLimitMicro: number; steps: Array<Record<string, unknown>> };
+  };
+
+  it('converts dollars to micro-USD', () => {
+    for (const c of v.usd_to_micro) expect(usdToMicro(c.usd), String(c.usd)).toBe(c.micro);
+  });
+  it('turns prices into integer rates', () => {
+    for (const c of v.micro_rates) expect(microRates(v.prices[c.price]!), c.price).toEqual(c.rates);
+  });
+  it('reserves', () => {
+    for (const c of v.reserve) {
+      expect(reserveMicroUSD(microRates(v.prices[c.price]!), c.promptTokens, c.outputTokens), JSON.stringify(c)).toBe(c.micro);
+    }
+  });
+  it('settles', () => {
+    for (const c of v.cost) expect(costMicroUSD(microRates(v.prices[c.price]!), c.usage), JSON.stringify(c)).toBe(c.micro);
+  });
+  it('keys', () => {
+    for (const c of v.keys) expect(usdBudgetKey(c.scope, c.tenant, c.customer || undefined, c.provider, c.model || undefined)).toBe(c.key);
+  });
+  it('follows the hard-stop sequence', () => {
+    const { clock } = fakeClock(1_700_000_000_000);
+    const m = new TokenBudgetManager({ clock });
+    const opts = { hourLimit: 0, dayLimit: v.sequence.dayLimitMicro, monthLimit: 0, mode: 'hard-stop' as const, softStopAt: 0.8 };
+    const ids = new Map<string, string | undefined>();
+    for (const s of v.sequence.steps) {
+      const note = JSON.stringify(s);
+      if (s.op === 'reserve') {
+        const r = m.reserve('k', opts, s.estimate as number);
+        expect(r.decision.allowed, note).toBe(s.allowed);
+        if (s.allowed) {
+          expect(r.reserved, note).toBe(s.reserved);
+          expect(r.decision.remaining, note).toBe(s.remaining);
+        }
+        ids.set(s.id as string, r.reservationId);
+      } else if (s.op === 'commit') {
+        m.commitReservation('k', s.id ? ids.get(s.id as string) : undefined, s.micro as number);
+      } else if (s.op === 'release') {
+        m.releaseReservation('k', ids.get(s.id as string));
+      } else if (s.op === 'check') {
+        const d = m.check('k', opts);
+        expect(d.remaining, note).toBe(s.remaining);
+        if ('allowed' in s) expect(d.allowed, note).toBe(s.allowed);
+      }
+    }
+  });
 });

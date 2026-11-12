@@ -12,6 +12,8 @@ from .types import (
     RateGuardOptions,
     RateLimitOptions,
     ResolvedRateGuardOptions,
+    ResolvedUSDBudget,
+    USDBudgetOptions,
     TokenBudgetMode,
     TokenBudgetOptions,
 )
@@ -134,7 +136,33 @@ def resolve_rateguard_options(options: RateGuardOptions) -> ResolvedRateGuardOpt
         redis_client=options.redis_client,
         redis_async_client=options.redis_async_client,
         admin_cors_origin=options.admin_cors_origin,
+        usd_budget=normalize_usd_budget(options.usd_budget),
     )
+
+
+def normalize_usd_budget(options: USDBudgetOptions | None) -> ResolvedUSDBudget | None:
+    """Dollars to integer micro-USD, once, at config load. Raises ValueError on
+    an invalid config. Mirrors Go's USDBudgetConfig.resolve."""
+    if options is None:
+        return None
+    from .core.usd_budget import usd_to_micro
+
+    if options.scope not in ("tenant", "customer", "model"):
+        raise ValueError(f"rateguard: usd_budget.scope must be tenant, customer or model, got {options.scope!r}")
+    if options.unpriced not in ("deny", "allow-uncounted"):
+        raise ValueError(f"rateguard: usd_budget.unpriced must be deny or allow-uncounted, got {options.unpriced!r}")
+    resolved = ResolvedUSDBudget(
+        hour_limit=usd_to_micro(options.hour_limit_usd),
+        day_limit=usd_to_micro(options.day_limit_usd),
+        month_limit=usd_to_micro(options.month_limit_usd),
+        mode=normalize_token_budget_mode(options.mode or "hard-stop"),
+        soft_stop_at=options.soft_stop_at if options.soft_stop_at is not None else 0.8,
+        scope=options.scope,
+        unpriced=options.unpriced,
+    )
+    if resolved.hour_limit <= 0 and resolved.day_limit <= 0 and resolved.month_limit <= 0:
+        return None
+    return resolved
 
 
 def normalize_circuit_breaker_options(options: CircuitBreakerOptions | None) -> CircuitBreakerOptions:

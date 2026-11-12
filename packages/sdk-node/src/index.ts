@@ -28,6 +28,7 @@ export * from './core/focus-export.js';
 export * from './core/realtime.js';
 export * from './core/static-embedder.js';
 export * from './core/prometheus.js';
+export * from './core/usd-budget.js';
 export * from './core/outbound.js';
 export {
   ProviderChain,
@@ -41,7 +42,7 @@ export * from './adapters/fastify.js';
 export * from './adapters/hono.js';
 export * from './adapters/next.js';
 
-import { RateGuardRuntime } from './runtime.js';
+import { RateGuardRuntime, type USDBudgetState } from './runtime.js';
 import { createMCPTools, mcpCall, type LoopDetector, type MCPTool, type MCPToolResult } from './core/mcp.js';
 import type { GuardrailLog } from './core/guardrail-log.js';
 import { wrapFetch, type WrapFetchOptions } from './core/outbound.js';
@@ -146,6 +147,16 @@ export class RateGuard {
    */
   enforcementEvents(limit = 0): EnforcementEvent[] {
     return this.runtime.enforcementLog.recent(limit);
+  }
+
+  /**
+   * The estimated-USD budget a call would draw from (0.6), in integer
+   * micro-USD, read without reserving anything. Pass the customer (and, under
+   * scope 'model', provider and model) a call would carry. Mirrors Go's
+   * SDK.USDBudgetState.
+   */
+  usdBudgetState(scope: { customer?: string; provider?: string; model?: string } = {}): USDBudgetState {
+    return this.runtime.usdBudgetState(scope);
   }
 
   /**

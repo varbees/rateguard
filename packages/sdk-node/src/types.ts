@@ -196,6 +196,38 @@ export interface RateGuardOptions {
    * Redis runtime dependency of its own.
    */
   redisClient?: RedisLimiterClient;
+  /**
+   * Estimated-USD budget for outbound LLM calls (0.6). Off unless set. Limits
+   * are dollars; RateGuard converts them once to integer micro-USD. See
+   * docs/specs/0.6-usd-budgets.md. Mirrors Go's cfg.USDBudget.
+   */
+  usdBudget?: USDBudgetOptions;
+}
+
+/** Estimated-USD budget for outbound LLM calls. */
+export interface USDBudgetOptions {
+  hourLimitUSD?: number;
+  dayLimitUSD?: number;
+  monthLimitUSD?: number;
+  /** 'hard-stop' (default) denies; 'soft-stop' only warns. */
+  mode?: TokenBudgetMode;
+  /** Soft-stop warning threshold, as a fraction of the limit (default 0.8). */
+  softStopAt?: number;
+  /** Who shares one budget: 'customer' (default; tenant without a customer header), 'tenant', or 'model'. */
+  scope?: 'tenant' | 'customer' | 'model';
+  /** A model no price is known for: 'deny' (default) or 'allow-uncounted' (sent, counted as zero, logged). */
+  unpriced?: 'deny' | 'allow-uncounted';
+}
+
+/** USDBudgetOptions resolved: limits in integer micro-USD. */
+export interface ResolvedUSDBudget {
+  hourLimit: number;
+  dayLimit: number;
+  monthLimit: number;
+  mode: TokenBudgetMode;
+  softStopAt: number;
+  scope: 'tenant' | 'customer' | 'model';
+  unpriced: 'deny' | 'allow-uncounted';
 }
 
 /**
@@ -227,6 +259,7 @@ export interface ResolvedRateGuardOptions {
   adaptiveRateLimit: boolean;
   adaptive: Required<AdaptiveOptions>;
   redisClient: RedisLimiterClient | undefined;
+  usdBudget: ResolvedUSDBudget | undefined;
 }
 
 /**

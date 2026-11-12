@@ -75,8 +75,9 @@ export interface UsageForCost {
  * Resolves a per-1K-token price for a model. Return undefined to fall through
  * to the built-in starter table (then to zero — costs are never fabricated).
  * Same optional-interface pattern as Embedder/EventEmitter: bring your own, or
- * use StaticPricing. Costs are observability estimates only; they never drive
- * enforcement (the token budget is token-count based).
+ * use StaticPricing. Costs are estimates from a dated price table, never the
+ * provider's invoice. They drive enforcement only when a USD budget is
+ * configured (usdBudget, 0.6), and every surface then says "estimated".
  */
 export interface PricingProvider {
   priceFor(model: string): ModelPrice | undefined;
@@ -127,6 +128,15 @@ function lookupBuiltin(model: string): BuiltinPrice | undefined {
  * long-context rate when the prompt is past its threshold (applied to the whole
  * request, as the vendors bill it), the base rate otherwise.
  */
+/**
+ * The price one call is billed at: the caller's PricingProvider first, then the
+ * built-in table at the long-context rate when `promptTokens` is past the
+ * model's threshold. Undefined when neither knows the model.
+ */
+export function priceForCall(pricing: PricingProvider | undefined, model: string, promptTokens = 0): ModelPrice | undefined {
+  return pricing?.priceFor(model) ?? builtinPriceFor(model, promptTokens);
+}
+
 function builtinPriceFor(model: string, promptTokens = 0): ModelPrice | undefined {
   const p = lookupBuiltin(model);
   if (!p) return undefined;

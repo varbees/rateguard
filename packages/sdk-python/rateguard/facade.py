@@ -24,6 +24,8 @@ if TYPE_CHECKING:
     from .core.adaptive import AdaptiveLimiter, AdaptiveOptions
     from .core.admin import AdminApp
     from .core.enforcement_log import EnforcementEvent
+    from .core.usd_budget import USDBudgetState
+    from .types import USDBudgetOptions
     from .core.genai import GenAICall, GenAISpan
     from .core.guardrail_log import GuardrailLog
     from .core.genai import PricingProvider
@@ -105,6 +107,7 @@ class RateGuard:
         redis_client: object | None = None,
         redis_async_client: object | None = None,
         admin_cors_origin: str | None = None,
+        usd_budget: "USDBudgetOptions | None" = None,
     ) -> None:
         self.options = RateGuardOptions(
             api_key=api_key,
@@ -134,6 +137,7 @@ class RateGuard:
             redis_client=redis_client,  # type: ignore[arg-type]
             redis_async_client=redis_async_client,  # type: ignore[arg-type]
             admin_cors_origin=admin_cors_origin,
+            usd_budget=usd_budget,
         )
         self.runtime = RateGuardRuntime(self.options)
         self._mcp_tools: list["MCPTool"] | None = None
@@ -291,6 +295,13 @@ class RateGuard:
     def frozen_scopes(self) -> list[str]:
         """Active freezes: ``*`` for a global freeze, ``customer=<id>`` per customer."""
         return self.runtime.freeze.frozen_scopes()
+
+    def usd_budget_state(self, *, customer: str | None = None, provider: str = "", model: str | None = None) -> "USDBudgetState":
+        """The estimated-USD budget a call would draw from (0.6), in integer
+        micro-USD, read without reserving anything. Pass the customer (and,
+        under scope "model", provider and model) a call would carry. Mirrors
+        Go's SDK.USDBudgetState and Node's usdBudgetState."""
+        return self.runtime.usd_budget_state(customer=customer, provider=provider, model=model)
 
     def enforcement_events(self, limit: int = 0) -> list["EnforcementEvent"]:
         """Recent enforcement events (budget stops, rate limits, freezes),

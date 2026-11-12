@@ -69,8 +69,14 @@ function contentText(raw: unknown): string {
  * It over-counts by the JSON scaffolding, which is the direction that protects
  * the budget.
  */
-function wholeBodyUpperBound(body: string, tokenizer?: Tokenizer): number {
-  return estimateWith(tokenizer, body) + DEFAULT_OUTPUT_ALLOWANCE;
+function wholeBodyUpperBound(body: string, tokenizer?: Tokenizer): RequestEstimateParts {
+  return { promptTokens: estimateWith(tokenizer, body), outputTokens: DEFAULT_OUTPUT_ALLOWANCE };
+}
+
+/** The two halves of a request estimate. USD budgets price them at different rates. */
+export interface RequestEstimateParts {
+  promptTokens: number;
+  outputTokens: number;
 }
 
 /**
@@ -86,8 +92,18 @@ function wholeBodyUpperBound(body: string, tokenizer?: Tokenizer): number {
  * one too large to walk — both pathological for an LLM call.
  */
 export function estimateRequestTokens(body: string | undefined, tokenizer?: Tokenizer): number {
+  const parts = estimateRequestParts(body, tokenizer);
+  return parts ? parts.promptTokens + parts.outputTokens : 0;
+}
+
+/**
+ * estimateRequestTokens split into prompt and declared output ceiling.
+ * Undefined where estimateRequestTokens returns 0 (empty or over-cap body:
+ * reserve-all).
+ */
+export function estimateRequestParts(body: string | undefined, tokenizer?: Tokenizer): RequestEstimateParts | undefined {
   if (!body || body.length === 0 || body.length > MAX_ESTIMATE_BODY_BYTES) {
-    return 0;
+    return undefined;
   }
 
   let payload: Record<string, unknown>;
@@ -155,5 +171,5 @@ export function estimateRequestTokens(body: string | undefined, tokenizer?: Toke
     ceiling(generationConfig?.maxOutputTokens) ??
     DEFAULT_OUTPUT_ALLOWANCE;
 
-  return input + output;
+  return { promptTokens: input, outputTokens: output };
 }

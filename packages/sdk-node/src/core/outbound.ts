@@ -18,7 +18,9 @@
 
 import { CircuitBreaker } from './circuit-breaker.js';
 import { extractTokenUsageFromText } from './utils.js';
-import { estimateRequestTokens } from './request-estimate.js';
+import { estimateRequestParts, estimateRequestTokens } from './request-estimate.js';
+import { priceForCall } from './genai.js';
+import { costMicroUSD, microRates, reserveMicroUSD, usdBudgetKey, type MicroRates } from './usd-budget.js';
 import { SemanticCache, isStreamingRequestBody, promptTextFromRequestBody, type SemanticCacheOptions } from './semantic-cache.js';
 import type { ProviderEntry } from './provider-chain.js';
 import type { RateGuardRuntime } from '../runtime.js';
@@ -258,6 +260,100 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     return breaker;
   };
 
+  // ── USD budget (0.6): reserve before the call, settle to measured usage ──
+  // Off unless runtime.config.usdBudget is set. Same reserve/commit/release
+  // discipline as the token budget, in integer micro-USD, against one key per
+  // customer (default) because dollars are comparable across models.
+  interface USDHold {
+    key: string;
+    model: string;
+    rates?: MicroRates;
+    reservationId?: string;
+    reserved: number;
+    uncounted?: boolean;
+  }
+  interface USDBlock {
+    code: 'usd_budget_exceeded' | 'usd_price_unknown';
+    message: string;
+    retryAfterMs: number;
+    detail: string;
+  }
+
+  const usdReserve = (call: OutboundCall, body: string | undefined): { hold?: USDHold; block?: USDBlock } => {
+    const cfg = runtime.config.usdBudget;
+    if (!cfg) return {};
+    const key = usdBudgetKey(cfg.scope, runtime.config.tenantId, call.customer, call.provider, call.model);
+    const parts = deriveEstimate ? estimateRequestParts(body) : undefined;
+    const price = priceForCall(runtime.config.pricingProvider, call.model, parts?.promptTokens ?? 0);
+    if (!price) {
+      if (cfg.unpriced === 'deny') {
+        return {
+          hold: { key, model: call.model, reserved: 0, uncounted: true },
+          block: {
+            code: 'usd_price_unknown',
+            message: `rateguard: no price is known for model "${call.model || '(none)'}", so a USD budget cannot count it. Price it with pricingProvider, or set usdBudget.unpriced to 'allow-uncounted'`,
+            retryAfterMs: 0,
+            detail: call.model,
+          },
+        };
+      }
+      runtime.enforcementLog.record({
+        type: 'usd_unpriced_call',
+        provider: call.provider,
+        ...(call.customer ? { customer: call.customer } : {}),
+        ...(call.model ? { model: call.model } : {}),
+      });
+      return { hold: { key, model: call.model, reserved: 0, uncounted: true } };
+    }
+    const rates = microRates(price);
+    // 0 = reserve the whole remaining budget (strict mode, or a body too big to read).
+    let estimate = 0;
+    if (parts) {
+      estimate = Math.max(1, reserveMicroUSD(rates, parts.promptTokens, parts.outputTokens));
+    } else if (estimatedTokens > 0) {
+      // A pinned token estimate has no prompt/output split: price it at the dearer side.
+      estimate = Math.max(1, reserveMicroUSD(rates, estimatedTokens, 0), reserveMicroUSD(rates, 0, estimatedTokens));
+    }
+    const r = runtime.usdBudget.reserve(key, cfg, estimate);
+    const hold: USDHold = { key, model: call.model, rates, reserved: r.reserved ?? 0, ...(r.reservationId ? { reservationId: r.reservationId } : {}) };
+    if (r.decision.applied && !r.decision.allowed) {
+      const who = call.customer ? `customer ${call.customer}` : `tenant ${runtime.config.tenantId}`;
+      return {
+        hold,
+        block: {
+          code: 'usd_budget_exceeded',
+          message: `rateguard: estimated USD budget exhausted for ${who} (${r.decision.window} window)`,
+          retryAfterMs: r.decision.retryAfterMs,
+          detail: r.decision.window,
+        },
+      };
+    }
+    return { hold };
+  };
+
+  const usdRelease = (hold: USDHold | undefined): void => {
+    if (hold?.reservationId) runtime.usdBudget.releaseReservation(hold.key, hold.reservationId);
+  };
+
+  const usdSettle = (hold: USDHold | undefined, usage: TokenUsage | undefined): void => {
+    if (!hold) return;
+    if (hold.uncounted || !hold.rates) {
+      usdRelease(hold);
+      return;
+    }
+    if (usage && usage.totalTokens > 0) {
+      // Re-price at the measured prompt size: a call that crossed a long-context
+      // threshold is billed at the long rate even if its estimate was not.
+      const price = priceForCall(runtime.config.pricingProvider, usage.model || hold.model, usage.inputTokens);
+      const rates = price ? microRates(price) : hold.rates;
+      runtime.usdBudget.commitReservation(hold.key, hold.reservationId, costMicroUSD(rates, usage));
+    } else if (hold.reserved > 0) {
+      runtime.usdBudget.commitReservation(hold.key, hold.reservationId, hold.reserved);
+    } else {
+      usdRelease(hold);
+    }
+  };
+
   // reservedEstimate is committed when real usage can't be measured (a stream
   // without include_usage, an over-cap body, an unrecognized provider schema).
   // Recording zero would let a runaway agent spend without ever touching its
@@ -269,7 +365,9 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     reservationId: string | undefined,
     usage: TokenUsage | undefined,
     reservedEstimate = 0,
+    usd?: USDHold,
   ): void => {
+    usdSettle(usd, usage);
     if (usage && usage.totalTokens > 0) {
       runtime.tokenBudget.commitReservation(budgetKey, reservationId, usage.totalTokens);
     } else if (reservedEstimate > 0) {
@@ -388,12 +486,27 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
       return synthesizedResponse(429, 'token_budget_exceeded', `rateguard: outbound token budget exhausted for ${call.provider}`, reservation.decision.retryAfterMs);
     }
 
+    const { hold: usd, block: usdBlock } = usdReserve(call, body);
+    if (usdBlock && enforce) {
+      runtime.tokenBudget.releaseReservation(budgetKey, reservation.reservationId);
+      usdRelease(usd);
+      runtime.enforcementLog.record({
+        type: usdBlock.code,
+        provider: call.provider,
+        ...(call.customer ? { customer: call.customer } : {}),
+        ...(call.model ? { model: call.model } : {}),
+        ...(usdBlock.detail ? { detail: usdBlock.detail } : {}),
+      });
+      return synthesizedResponse(429, usdBlock.code, usdBlock.message, usdBlock.retryAfterMs);
+    }
+
     let response: Response;
     try {
       response = await baseFetch(url, init);
     } catch (error) {
       breaker.recordOutcome(false);
       runtime.tokenBudget.releaseReservation(budgetKey, reservation.reservationId);
+      usdRelease(usd);
       const target = fallbackTarget();
       if (target) return retarget(target);
       throw error;
@@ -402,6 +515,7 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     if (isProviderFailure(response.status)) {
       breaker.recordOutcome(false);
       runtime.tokenBudget.releaseReservation(budgetKey, reservation.reservationId);
+      usdRelease(usd);
       const target = fallbackTarget();
       if (target) return retarget(target);
       return response;
@@ -413,23 +527,23 @@ export function wrapFetch(runtime: RateGuardRuntime, options: WrapFetchOptions =
     if (contentType.startsWith('text/event-stream') && response.body) {
       const [forCaller, forScan] = response.body.tee();
       void scanSSEStream(forScan)
-        .then((usage) => finish(budgetKey, reservation.reservationId, usage, reservation.reserved))
-        .catch(() => finish(budgetKey, reservation.reservationId, undefined, reservation.reserved));
+        .then((usage) => finish(budgetKey, reservation.reservationId, usage, reservation.reserved, usd))
+        .catch(() => finish(budgetKey, reservation.reservationId, undefined, reservation.reserved, usd));
       return new Response(forCaller, response);
     }
 
     const declaredLength = Number(response.headers.get('content-length') ?? '0');
     if (declaredLength > MAX_EXTRACT_BYTES) {
-      finish(budgetKey, reservation.reservationId, undefined, reservation.reserved);
+      finish(budgetKey, reservation.reservationId, undefined, reservation.reserved, usd);
       return response;
     }
 
     try {
       const text = await response.clone().text();
       const usage = text.length <= MAX_EXTRACT_BYTES ? extractTokenUsageFromText(text) : undefined;
-      finish(budgetKey, reservation.reservationId, usage, reservation.reserved);
+      finish(budgetKey, reservation.reservationId, usage, reservation.reserved, usd);
     } catch {
-      finish(budgetKey, reservation.reservationId, undefined, reservation.reserved);
+      finish(budgetKey, reservation.reservationId, undefined, reservation.reserved, usd);
     }
     return response;
   };

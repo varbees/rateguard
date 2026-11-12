@@ -116,12 +116,12 @@ func countContent(raw json.RawMessage, tokenizer Tokenizer) int64 {
 	return total
 }
 
-// wholeBodyUpperBound estimates an unrecognized request by treating every byte
+// wholeBodyParts estimates an unrecognized request by treating every byte
 // as prompt text. The real prompt is a subset of the body, so this cannot
 // under-count what the model will read — it over-counts by the JSON structure
 // around it, which is the direction that protects the budget.
-func wholeBodyUpperBound(body []byte, tokenizer Tokenizer) int64 {
-	return int64(EstimateWith(tokenizer, string(body))) + DefaultOutputAllowance
+func wholeBodyParts(body []byte, tokenizer Tokenizer) (int64, int64, bool) {
+	return int64(EstimateWith(tokenizer, string(body))), DefaultOutputAllowance, true
 }
 
 // EstimateRequestTokens derives a budget reservation from the request itself:
@@ -146,13 +146,24 @@ func wholeBodyUpperBound(body []byte, tokenizer Tokenizer) int64 {
 // derivable from the request bytes. For those workloads set EstimatedTokens
 // explicitly.
 func EstimateRequestTokens(body []byte, tokenizer Tokenizer) int64 {
-	if len(body) == 0 || len(body) > MaxEstimateBodyBytes {
+	prompt, output, ok := EstimateRequestParts(body, tokenizer)
+	if !ok {
 		return 0
+	}
+	return prompt + output
+}
+
+// EstimateRequestParts is EstimateRequestTokens split into the prompt and the
+// declared output ceiling; USD budgets price them at different rates. ok is
+// false exactly where EstimateRequestTokens returns 0 (reserve-all).
+func EstimateRequestParts(body []byte, tokenizer Tokenizer) (promptTokens, outputTokens int64, ok bool) {
+	if len(body) == 0 || len(body) > MaxEstimateBodyBytes {
+		return 0, 0, false
 	}
 
 	var payload estimateRequestBody
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return wholeBodyUpperBound(body, tokenizer)
+		return wholeBodyParts(body, tokenizer)
 	}
 
 	var input int64
@@ -192,7 +203,7 @@ func EstimateRequestTokens(body []byte, tokenizer Tokenizer) int64 {
 		// Valid JSON carrying no field we recognize as a prompt: a newer API
 		// shape, or a provider we have not taught this. Bound it by size
 		// rather than serialize the caller.
-		return wholeBodyUpperBound(body, tokenizer)
+		return wholeBodyParts(body, tokenizer)
 	}
 
 	output := int64(DefaultOutputAllowance)
@@ -206,5 +217,5 @@ func EstimateRequestTokens(body []byte, tokenizer Tokenizer) int64 {
 		output = *payload.GenerationConfig.MaxOutputTokens
 	}
 
-	return input + output
+	return input, output, true
 }
