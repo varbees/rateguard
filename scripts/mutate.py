@@ -416,7 +416,7 @@ CATALOGUE: list[Mutation] = [
         find="if err == nil && decision.Applied && !decision.Allowed && enforce {",
         replace="if _ = err; decision.Applied && !decision.Allowed && enforce {",  # keeps it compiling: a test must catch it, not the compiler
         models="a Redis EVAL error is read as a real rate-limit decision → phantom 429s on outage",
-        expect="TestOutboundRateLimitFailsOpenWhenRedisIsDown",
+        expect="TestOutboundRateLimitErrorFailsOpenEvenIfLimiterSaysDeny",
     ),
     # ── Negative-usage clamp: a shipped cross-language DoW fix ──
     #

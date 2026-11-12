@@ -1,12 +1,15 @@
 package rateguard
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 // ── What happens when Redis dies ──
@@ -154,5 +157,43 @@ func TestOutboundBudgetStillCapsSpendWhenRedisIsDown(t *testing.T) {
 	}
 	if !sawBudget {
 		t.Fatalf("expected a token_budget event, got %+v", events)
+	}
+}
+
+// errorDenyLimiter is a broken limiter that reports an error AND a deny. The
+// outbound path must trust the error and fail open: a limiter that cannot
+// answer is not a limiter that said no. Today's Redis limiter already returns
+// Applied:false on error, so this test is what holds the outbound guard
+// (err == nil) in place on its own; scripts/mutate.py removes that guard.
+type errorDenyLimiter struct{}
+
+func (errorDenyLimiter) Allow(context.Context, string, PolicyPreset) (AdmissionDecision, error) {
+	return AdmissionDecision{Applied: true, Allowed: false, RetryAfter: time.Second}, errors.New("limiter backend unreachable")
+}
+
+func (errorDenyLimiter) Peek(ctx context.Context, key string, p PolicyPreset) (AdmissionDecision, error) {
+	return errorDenyLimiter{}.Allow(ctx, key, p)
+}
+
+func TestOutboundRateLimitErrorFailsOpenEvenIfLimiterSaysDeny(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"model":"gpt-4o","usage":{"prompt_tokens":5,"completion_tokens":5,"total_tokens":10}}`))
+	}))
+	defer upstream.Close()
+
+	sdk := New(Config{Preset: PresetDev})
+	sdk.limiter = errorDenyLimiter{}
+	client := wrapForHost(t, sdk, upstream)
+	req, _ := http.NewRequest(http.MethodPost, "https://api.openai.com/v1/chat/completions",
+		strings.NewReader(`{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}`))
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("a limiter error must fail open, got %d", resp.StatusCode)
 	}
 }
