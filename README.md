@@ -259,7 +259,7 @@ cd packages/sdk-node && bun run test
 cd packages/sdk-python && python3 -m pytest -q
 ```
 
-800+ tests. That number tells you almost nothing, so here are the two that do.
+1,200+ tests. That number tells you almost nothing, so here are the two that do.
 
 ### Would the tests notice if the code lied?
 
