@@ -185,6 +185,30 @@ Semantics:
 - Fallback: OpenAI-compatible endpoints only (same request schema). Credentials never transfer across providers; chain entries follow the OpenAI-SDK convention (baseURL owns the version prefix). Retargeted responses carry `X-RateGuard-Fallback: true`.
 - Streaming: SSE bytes pass through untouched; usage extracted from a bounded side-scan (OpenAI `usage:null` intermediates and Anthropic split usage handled).
 
+## USD Budgets (0.6, unreleased)
+
+An estimated-USD budget for outbound LLM calls, off unless a limit is set. Spec: `docs/specs/0.6-usd-budgets.md`.
+
+| | Go | Node | Python |
+|---|---|---|---|
+| Config | `Config.USDBudget *USDBudgetConfig` | `usdBudget` | `usd_budget=USDBudgetOptions(...)` |
+| Limits (dollars) | `HourLimitUSD`, `DayLimitUSD`, `MonthLimitUSD` | `hourLimitUSD`, `dayLimitUSD`, `monthLimitUSD` | `hour_limit_usd`, `day_limit_usd`, `month_limit_usd` |
+| Mode | `Mode` (hard-stop default, soft-stop) | `mode` | `mode` |
+| Soft-stop warning | `SoftStopAt` (0.8) | `softStopAt` | `soft_stop_at` |
+| Scope | `Scope`: `customer` (default), `tenant`, `model` | `scope` | `scope` |
+| Unpriced model | `Unpriced`: `deny` (default), `allow-uncounted` | `unpriced` | `unpriced` |
+| Invalid config | `New` panics; check first with `USDBudget.Validate()` | constructor throws | constructor raises `ValueError` |
+| Read without reserving | `rg.USDBudgetState(customer, provider, model)` | `rg.usdBudgetState({ customer, provider, model })` | `rg.usd_budget_state(customer=, provider=, model=)` |
+
+Semantics:
+- **Units.** Limits are converted once to integer micro-USD (`floor(usd*1e6 + 0.5)`); every stored and reported amount after that is an integer. Prices become integer micro-USD per 1M tokens (`floor(usdPer1K*1e9 + 0.5)`).
+- **Reserve** before the call: `ceil((prompt × max(input, cacheWrite, cacheWriteLongTTL) + outputCeiling × output) / 1e6)`, the prompt and ceiling measured from the request body as for token budgets. A pinned `estimatedTokens` is priced at the dearer side; a negative one reserves the whole remaining budget.
+- **Settle** after: `ceil((fresh×input + read×cacheRead + (write−writeLong)×cacheWrite + writeLong×cacheWriteLongTTL + output×output) / 1e6)`, priced at the measured prompt size (long-context rates when the prompt crossed the line). Unmeasurable usage commits the reservation; a provider failure releases it.
+- **Keys.** `customer`: `{tenant}[:customer=X]:usd` (dollars are comparable across models, so one budget covers them all); `tenant`: `{tenant}:usd`; `model`: `{tenant}[:customer=X]:{provider}:{model}:usd`.
+- **Denials.** HTTP 429, provider-native body, codes `usd_budget_exceeded` (with `Retry-After` from the window) and `usd_price_unknown`. Both land in `enforcementEvents()`; an `allow-uncounted` call logs `usd_unpriced_call` every time.
+- **Observe mode** never denies and still meters. **Soft-stop** never denies and sets `warning` past `softStopAt`.
+- **Not yet (0.6.x):** an MCP `get_usd_budget` tool, admin-API state, Prometheus counters, a span attribute, a Redis-backed store. The budget is per process.
+
 ## Semantic Caching (Go)
 
 Cache LLM responses by meaning, not exact text — a prompt that means the same thing as one already

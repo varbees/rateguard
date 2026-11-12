@@ -35,6 +35,7 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 | Store primitives (Get/Increment(n)/Reset — variable-cost consumption, key clearing) | ✅ | ✅ | ✅ | `limiter.go`, `sharded_limiter.go`, `redis_limiter.go` |
 | LLM token budgets (hr/day/mo) | ✅ | ✅ | ✅ | `token_budget.go` |
 | Estimate-based budget reservations | ✅ | ✅ | ✅ | `token_budget.go` |
+| Estimated-USD budgets (0.6: reserve at the dearest input rate, settle to measured usage, integer micro-USD, per-customer key, unpriced denied; `conformance/usd_budget_vectors.json`; no MCP/admin/Prometheus surface yet) | ✅ | ✅ | ✅ | `usd_budget.go` |
 | Circuit breakers | ✅ | ✅ | ✅ | `circuit_breaker.go` |
 | GenAI OTel helpers (semconv span names, input/output tokens, error.type classes) | ✅ | ✅ | ✅ | `genai_observability.go` |
 | Public GenAI API (StartGenAICall/GenAISpan, TTFT/TPOT) | ✅ | ✅ | ✅ | Same file |
@@ -94,16 +95,16 @@ Token Bucket (RFC standard, same as Kong/Envoy/AWS):
 ## Commands (copy-paste ready)
 
 ```bash
-# Go tests (265 test funcs, all with -race; counted 2026-11-12)
+# Go tests (274 test funcs, all with -race; counted 2026-11-12)
 cd packages/sdk-go && CC=/usr/bin/gcc GOWORK=off go test ./...
 
-# Node tests (463 passing, 6 skipped)
+# Node tests (482 passing, 6 skipped)
 cd packages/sdk-node && bun run test
 
-# Python tests (493 passing, 15 skipped)
+# Python tests (507 passing, 15 skipped)
 cd packages/sdk-python && python3 -m pytest -q
 
-# Python strict typecheck (mypy --strict passes clean on all 54 source files)
+# Python strict typecheck (mypy --strict passes clean on all 55 source files)
 cd packages/sdk-python && RATEGUARD_STRICT_TYPES=1 python3 scripts/typecheck.py
 
 # Cross-language conformance (shared oracle, all 3 SDKs replay the same

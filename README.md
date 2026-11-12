@@ -94,6 +94,24 @@ client = OpenAI(http_client=rg.wrap_httpx_client())
 
 Every call through the wrapped client is budgeted, breaker-protected per provider, and metered with **real** token usage — including streaming (OpenAI `usage:null` intermediates and Anthropic's split `message_start`/`message_delta` shapes are handled correctly). Go also emits GenAI OTel spans from the outbound wrapper; Node/Python expose the same usage extraction and GenAI attribute/cost helpers for app-level tracing. 26 hosts across 23 OpenAI-compatible providers detected out of the box, plus Anthropic, Gemini, Vertex, Azure OpenAI, and AWS Bedrock (28 providers total) — and any self-hosted OpenAI-compatible server.
 
+### Dollar budgets (0.6, unreleased)
+
+Token budgets guess the exchange rate: one token costs anywhere from $0.05 to $600 per million across the 65-row price table. A USD budget states the bill instead. Each outbound call **reserves** its worst case before it is sent (the prompt at the dearest input rate it could be billed at, plus its declared output ceiling) and **settles** to the measured usage after. So a burst of concurrent calls cannot spend past the line by more than the error in their own estimates. Gateways that debit after the response (LiteLLM, Kong, Portkey) cannot say that.
+
+```go
+rg := rateguard.New(rateguard.Config{USDBudget: &rateguard.USDBudgetConfig{DayLimitUSD: 20}})
+```
+```ts
+const rg = new RateGuard({ usdBudget: { dayLimitUSD: 20 } });
+```
+```python
+rg = RateGuard(usd_budget=USDBudgetOptions(day_limit_usd=20))
+```
+
+Read it before it bites, without reserving anything: `rg.USDBudgetState(customer, provider, model)` / `rg.usdBudgetState({ customer })` / `rg.usd_budget_state(customer=...)`. Over the line you get a provider-native 429, code `usd_budget_exceeded`.
+
+**What it is not.** It enforces on RateGuard's price table, dated and sourced per row, not on your provider's invoice. The table is the standard tier: **priority or provisioned tiers are under-counted**, so supply a `PricingProvider` with your rates. A model with no price is denied (`usd_price_unknown`) unless you set `unpriced: 'allow-uncounted'`. The budget lives in one process, like the token budget. Money is integer micro-USD in all three SDKs, pinned by `conformance/usd_budget_vectors.json`. Spec: [`docs/specs/0.6-usd-budgets.md`](docs/specs/0.6-usd-budgets.md).
+
 ## Quick Start
 
 ### Go

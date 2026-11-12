@@ -8,6 +8,37 @@ versions may carry behaviour changes — they are called out explicitly below.
 
 ---
 
+## [0.6.0] — unreleased
+
+**Dollar budgets.** Opt-in; nothing changes unless a USD budget is configured.
+
+### Added
+
+- **Estimated-USD budgets for outbound LLM calls** in all three SDKs (`USDBudget` /
+  `usdBudget` / `usd_budget`). Each call reserves its worst case before it is
+  sent and settles to measured usage after, in integer micro-USD. One budget per
+  customer by default. An unpriced model is denied (`usd_price_unknown`) unless
+  `allow-uncounted`. New 429 code `usd_budget_exceeded`. Read without reserving:
+  `USDBudgetState` / `usdBudgetState` / `usd_budget_state`. Spec:
+  `docs/specs/0.6-usd-budgets.md`.
+- `conformance/usd_budget_vectors.json` (from an independent oracle,
+  `scripts/gen_usd_budget_vectors.py`), replayed by all three SDKs.
+- `EstimateRequestParts` / `estimateRequestParts` / `estimate_request_parts`:
+  the request estimate split into prompt and declared output ceiling.
+- Nine money-path mutants for the USD path; the mutation score stays 100% (50/50).
+
+### Changed
+
+- Cost estimates drive enforcement **when a USD budget is set**, and only then.
+  They are still estimates from the dated price table, never invoice truth.
+
+### Honest limits
+
+- The table is the standard tier: priority and provisioned tiers are
+  under-counted. Supply a `PricingProvider` with your rates.
+- Per process, like the token budget. No MCP tool, admin state or Prometheus
+  counters for it yet.
+
 ## [0.5.3] — unreleased
 
 **Correct prices, clean dependencies.** 0.5.2 reached only the Go module proxy:
