@@ -1,0 +1,47 @@
+name: Price watch
+
+# Once a week, re-read the vendors' pricing pages and compare them with
+# conformance/pricing.json, using tokencost's tested checker
+# (github.com/antharmaya/tokencost). A moved price opens one issue here, where
+# the price lives. Never edits the table: a person reads the quoted line and
+# updates the row. Scope: the models tokencost models (~15 current rows); the
+# rest of the table is reviewed by hand and gated by CI's 90-day staleness check.
+
+on:
+  schedule:
+    - cron: '17 4 * * 1' # Mondays 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: price-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: antharmaya/tokencost
+          path: tc
+      - uses: oven-sh/setup-bun@v2
+      - name: Point tokencost's checker at this repo's table
+        working-directory: tc
+        run: |
+          bun install --frozen-lockfile
+          cp ../conformance/pricing.json vendor/rateguard-pricing.json
+          bun scripts/sync-prices.ts
+          bun test test/price-check.test.ts
+      - name: Check the vendor pages
+        working-directory: tc
+        run: bun scripts/check-prices.ts --json > ../check.json || [ $? -eq 1 ]
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/price_watch_issue.py check.json --github

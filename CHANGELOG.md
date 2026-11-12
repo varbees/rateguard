@@ -32,6 +32,9 @@ versions may carry behaviour changes — they are called out explicitly below.
   mutants that the compiler, not a test, had been killing now compile; one survived, and
   `TestOutboundRateLimitErrorFailsOpenEvenIfLimiterSaysDeny` now holds the guard it removes.
 
+- A weekly price watch (`.github/workflows/price-watch.yml`): tokencost's vendor-page checker
+  runs against `conformance/pricing.json` and a moved price opens one issue here. Covers the
+  ~15 current models tokencost models; the rest stay hand-reviewed under the 90-day CI gate.
 - Price rows for `claude-fable-5-2`, `claude-mythos-5-2` and `gpt-6.1-terra`, read off the
   vendors' pages on 2026-11-12 (68 rows). The other Anthropic rows were re-checked against the
   same page that day and match.
